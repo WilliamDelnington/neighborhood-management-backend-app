@@ -1,0 +1,719 @@
+/* eslint-disable no-console */
+import { config as loadEnv } from "dotenv";
+
+loadEnv({ path: ".env.local" });
+loadEnv();
+
+import mongoose from "mongoose";
+import { connectDB } from "@/lib/mongodb";
+import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
+import {
+    User,
+    Household,
+    Citizen,
+    Complaint,
+    ComplaintTimeline,
+    Announcement,
+    Meeting,
+    MeetingRegistration,
+    Survey,
+    SurveyResponse,
+    PcccCheck,
+    SecurityRecord,
+    FinanceTransaction,
+    FileAsset,
+    Notification,
+    NotificationDelivery,
+    Setting,
+} from "../src/models";
+
+async function clearDemoData() {
+    await Promise.all([
+        User.deleteMany({}),
+        Household.deleteMany({}),
+        Citizen.deleteMany({}),
+        Complaint.deleteMany({}),
+        ComplaintTimeline.deleteMany({}),
+        Announcement.deleteMany({}),
+        Meeting.deleteMany({}),
+        MeetingRegistration.deleteMany({}),
+        Survey.deleteMany({}),
+        SurveyResponse.deleteMany({}),
+        PcccCheck.deleteMany({}),
+        SecurityRecord.deleteMany({}),
+        FinanceTransaction.deleteMany({}),
+        FileAsset.deleteMany({}),
+        Notification.deleteMany({}),
+        NotificationDelivery.deleteMany({}),
+        Setting.deleteMany({}),
+    ]);
+}
+
+async function seedUsers() {
+    const admin = await User.create({
+        zaloUserId: "seed-admin",
+        displayName: "Quản trị viên Hòa Bình",
+        phone: "0900000001",
+        address: "Nhà văn hóa Tổ dân phố Hòa Bình",
+        roles: ["admin"],
+        primaryRole: "admin",
+        status: "active",
+        notificationPermission: true,
+    });
+
+    const leader = await User.create({
+        zaloUserId: "seed-leader",
+        displayName: "Nguyễn Văn Tổ Trưởng",
+        phone: "0900000002",
+        address: "Cụm 1, Tổ dân phố Hòa Bình",
+        roles: ["neighborhood_leader"],
+        primaryRole: "neighborhood_leader",
+        assignedClusters: ["Cụm 1", "Cụm 2"],
+        status: "active",
+        notificationPermission: true,
+    });
+
+    const secretary = await User.create({
+        zaloUserId: "seed-secretary",
+        displayName: "Trần Thị Bí Thư",
+        phone: "0900000003",
+        roles: ["secretary"],
+        primaryRole: "secretary",
+        status: "active",
+    });
+
+    const police = await User.create({
+        zaloUserId: "seed-police",
+        displayName: "Lê Văn Công An",
+        phone: "0900000004",
+        roles: ["regional_police"],
+        primaryRole: "regional_police",
+        status: "active",
+    });
+
+    const committee = await User.create({
+        zaloUserId: "seed-committee",
+        displayName: "Phạm Thị Cán Bộ UBND",
+        phone: "0900000005",
+        roles: ["people_committee_official"],
+        primaryRole: "people_committee_official",
+        status: "active",
+    });
+
+    const resident = await User.create({
+        zaloUserId: "seed-resident",
+        displayName: "Hoàng Văn Dân",
+        phone: "0900000006",
+        address: "Số 12, Cụm 1, Tổ dân phố Hòa Bình",
+        roles: ["resident"],
+        primaryRole: "resident",
+        status: "active",
+        notificationPermission: true,
+    });
+
+    return { admin, leader, secretary, police, committee, resident };
+}
+
+async function seedHouseholds(actorId: string) {
+    const data = [
+        {
+            cluster: "Cụm 1",
+            address: "Số 1, ngõ 12, Cụm 1",
+            headOfHousehold: "Nguyễn Văn An",
+            phone: "0911111111",
+            memberCount: 4,
+            ownershipType: "chinh_chu" as const,
+            needsSupport: false,
+        },
+        {
+            cluster: "Cụm 1",
+            address: "Số 3, ngõ 12, Cụm 1",
+            headOfHousehold: "Trần Thị Bình",
+            phone: "0911111112",
+            memberCount: 2,
+            ownershipType: "chinh_chu" as const,
+            needsSupport: true,
+            note: "Hộ neo đơn, người cao tuổi",
+        },
+        {
+            cluster: "Cụm 1",
+            address: "Số 5, ngõ 12, Cụm 1",
+            headOfHousehold: "Lê Văn Cường",
+            phone: "0911111113",
+            memberCount: 6,
+            ownershipType: "cho_thue" as const,
+            needsSupport: false,
+            note: "Nhà cho thuê trọ đông người",
+        },
+        {
+            cluster: "Cụm 2",
+            address: "Số 20, ngõ 8, Cụm 2",
+            headOfHousehold: "Phạm Thị Dung",
+            phone: "0911111114",
+            memberCount: 3,
+            ownershipType: "chinh_chu" as const,
+            needsSupport: false,
+        },
+        {
+            cluster: "Cụm 2",
+            address: "Số 22, ngõ 8, Cụm 2",
+            headOfHousehold: "Hoàng Văn Em",
+            phone: "0911111115",
+            memberCount: 5,
+            ownershipType: "cho_thue" as const,
+            needsSupport: false,
+        },
+    ];
+
+    const households = [];
+    for (const item of data) {
+        const code = await generateSequentialCode(Household, "HB", 3);
+        // eslint-disable-next-line no-await-in-loop
+        const household = await Household.create({
+            ...item,
+            code,
+            createdBy: actorId,
+        });
+        households.push(household);
+    }
+    return households;
+}
+
+async function seedCitizens(households: any[], actorId: string) {
+    const [h1, h2, h3, h4, h5] = households;
+
+    const citizensData = [
+        {
+            fullName: "Nguyễn Văn An",
+            householdId: h1._id,
+            gender: "nam",
+            relationToHead: "Chủ hộ",
+            cccd: "001090001111",
+            birthDate: new Date("1980-05-01"),
+        },
+        {
+            fullName: "Nguyễn Thị Lan",
+            householdId: h1._id,
+            gender: "nu",
+            relationToHead: "Vợ",
+            cccd: "001090001112",
+            birthDate: new Date("1982-08-10"),
+        },
+        {
+            fullName: "Nguyễn Văn Bảo",
+            householdId: h1._id,
+            gender: "nam",
+            relationToHead: "Con",
+            cccd: "001090001113",
+            birthDate: new Date("2012-02-14"),
+            isChild: true,
+        },
+        {
+            fullName: "Trần Thị Bình",
+            householdId: h2._id,
+            gender: "nu",
+            relationToHead: "Chủ hộ",
+            cccd: "001090002111",
+            birthDate: new Date("1950-01-01"),
+            isElderly: true,
+        },
+        {
+            fullName: "Trần Văn Cụ",
+            householdId: h2._id,
+            gender: "nam",
+            relationToHead: "Chồng",
+            cccd: "001090002112",
+            birthDate: new Date("1948-03-03"),
+            isElderly: true,
+            isDisabledOrSupportNeeded: true,
+        },
+        {
+            fullName: "Lê Văn Cường",
+            householdId: h3._id,
+            gender: "nam",
+            relationToHead: "Chủ hộ",
+            cccd: "001090003111",
+            birthDate: new Date("1975-06-06"),
+            isPartyMember: true,
+        },
+        {
+            fullName: "Lê Thị Dịu",
+            householdId: h3._id,
+            gender: "nu",
+            relationToHead: "Người thuê trọ",
+            residenceType: "tam_tru",
+            cccd: "001090003112",
+            birthDate: new Date("1995-09-09"),
+        },
+        {
+            fullName: "Phạm Thị Dung",
+            householdId: h4._id,
+            gender: "nu",
+            relationToHead: "Chủ hộ",
+            cccd: "001090004111",
+            birthDate: new Date("1988-04-04"),
+            isUnionMember: true,
+        },
+        {
+            fullName: "Phạm Văn Đức",
+            householdId: h4._id,
+            gender: "nam",
+            relationToHead: "Con",
+            cccd: "001090004112",
+            birthDate: new Date("2015-07-07"),
+            isChild: true,
+        },
+        {
+            fullName: "Hoàng Văn Dân",
+            householdId: h5._id,
+            gender: "nam",
+            relationToHead: "Chủ hộ",
+            cccd: "001090005111",
+            birthDate: new Date("1990-10-10"),
+        },
+    ];
+
+    const citizens = [];
+    for (const item of citizensData) {
+        // eslint-disable-next-line no-await-in-loop
+        const citizen = await Citizen.create({ ...item, createdBy: actorId });
+        citizens.push(citizen);
+    }
+
+    for (const household of households) {
+        // eslint-disable-next-line no-await-in-loop
+        const count = await Citizen.countDocuments({
+            householdId: household._id,
+        });
+        // eslint-disable-next-line no-await-in-loop
+        await Household.findByIdAndUpdate(household._id, {
+            memberCount: count,
+        });
+    }
+
+    return {
+        citizens,
+        residentHouseholdId: h5._id,
+        residentCitizenId: citizens[9]._id,
+    };
+}
+
+async function seedComplaints(residentId: string, leaderId: string) {
+    const items: Array<{
+        category: any;
+        title: string;
+        content: string;
+        status: any;
+        area: string;
+    }> = [
+        {
+            category: "ve_sinh_moi_truong",
+            title: "Rác thải tồn đọng ở ngõ 12",
+            content: "Rác không được thu gom 3 ngày nay, gây mùi hôi khó chịu.",
+            status: "moi_tiep_nhan",
+            area: "Ngõ 12, Cụm 1",
+        },
+        {
+            category: "chieu_sang",
+            title: "Bóng đèn đường bị hỏng",
+            content:
+                "Đèn đường đầu ngõ 8 không sáng gần 1 tuần, ảnh hưởng an toàn đi lại buổi tối.",
+            status: "dang_xu_ly",
+            area: "Ngõ 8, Cụm 2",
+        },
+        {
+            category: "an_ninh_trat_tu",
+            title: "Tụ tập gây ồn ào ban đêm",
+            content: "Có nhóm thanh niên tụ tập uống rượu gây ồn ào sau 23h.",
+            status: "da_tiep_nhan",
+            area: "Cụm 1",
+        },
+        {
+            category: "ha_tang_dien_nuoc",
+            title: "Nước yếu vào giờ cao điểm",
+            content: "Áp lực nước rất yếu vào buổi sáng từ 6h-8h.",
+            status: "da_xu_ly",
+            area: "Cụm 2",
+        },
+        {
+            category: "gop_y_chung",
+            title: "Đề nghị lắp thêm ghế đá công viên nhỏ",
+            content:
+                "Khu vực sân chung cụm 1 chưa có chỗ ngồi cho người cao tuổi.",
+            status: "dong",
+            area: "Cụm 1",
+        },
+    ];
+
+    for (const item of items) {
+        const code = await generateYearlyCode(Complaint, "HB-PA");
+        // eslint-disable-next-line no-await-in-loop
+        const complaint = await Complaint.create({
+            code,
+            category: item.category,
+            title: item.title,
+            content: item.content,
+            area: item.area,
+            status: item.status,
+            createdByUserId: residentId,
+            assigneeId: item.status === "moi_tiep_nhan" ? undefined : leaderId,
+        });
+
+        // eslint-disable-next-line no-await-in-loop
+        await ComplaintTimeline.create({
+            complaintId: complaint._id,
+            status: "moi_tiep_nhan",
+            note: "Phản ánh đã được tiếp nhận",
+            isPublic: true,
+            actorId: residentId,
+        });
+
+        if (item.status !== "moi_tiep_nhan") {
+            // eslint-disable-next-line no-await-in-loop
+            await ComplaintTimeline.create({
+                complaintId: complaint._id,
+                status: item.status,
+                note: "Cập nhật trạng thái xử lý",
+                isPublic: true,
+                actorId: leaderId,
+            });
+        }
+    }
+}
+
+async function seedAnnouncements(actorId: string) {
+    await Announcement.create([
+        {
+            title: "Lịch họp tổ dân phố quý mới",
+            content:
+                "Kính mời bà con tham dự cuộc họp tổ dân phố vào cuối tuần này.",
+            category: "hop_dan",
+            status: "da_dang",
+            pinned: true,
+            publishedAt: new Date(),
+            createdBy: actorId,
+        },
+        {
+            title: "Khuyến cáo phòng cháy chữa cháy mùa hanh khô",
+            content:
+                "Đề nghị các hộ dân kiểm tra bình chữa cháy, không để vật dụng dễ cháy gần nguồn điện.",
+            category: "pccc",
+            status: "da_dang",
+            priority: true,
+            publishedAt: new Date(),
+            createdBy: actorId,
+        },
+        {
+            title: "Dự thảo kế hoạch vệ sinh môi trường tháng tới",
+            content:
+                "Bản dự thảo đang được lấy ý kiến, sẽ đăng công khai sau khi hoàn thiện.",
+            category: "ve_sinh_moi_truong",
+            status: "nhap",
+            createdBy: actorId,
+        },
+    ]);
+}
+
+async function seedMeetings(actorId: string, residentId: string) {
+    const upcoming = await Meeting.create({
+        title: "Họp dân quý III",
+        startTime: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+        location: "Nhà văn hóa Tổ dân phố Hòa Bình",
+        content:
+            "Thông qua kế hoạch thu chi quý III và triển khai công tác PCCC.",
+        published: true,
+        createdBy: actorId,
+    });
+
+    await MeetingRegistration.create({
+        meetingId: upcoming._id,
+        userId: residentId,
+        answer: "co",
+    });
+
+    await Meeting.create({
+        title: "Họp dân quý II (đã diễn ra)",
+        startTime: new Date(Date.now() - 30 * 24 * 3600 * 1000),
+        location: "Nhà văn hóa Tổ dân phố Hòa Bình",
+        content: "Đã tổng kết công tác quý II.",
+        minutes:
+            "Biên bản: 100% hộ dân đồng thuận kế hoạch vệ sinh môi trường.",
+        published: true,
+        createdBy: actorId,
+    });
+}
+
+async function seedSurveys(actorId: string, residentId: string) {
+    const survey = await Survey.create({
+        title: "Khảo sát mức độ hài lòng về an ninh trật tự",
+        description:
+            "Ý kiến của bà con giúp tổ dân phố cải thiện công tác an ninh.",
+        status: "dang_mo",
+        openDate: new Date(),
+        eligibleAll: true,
+        questions: [
+            {
+                question: "Bạn có hài lòng với an ninh khu vực hiện tại?",
+                type: "dong_y_khong_dong_y",
+                options: [],
+                required: true,
+            },
+            {
+                question: "Vấn đề nào bạn quan tâm nhất?",
+                type: "chon_mot",
+                options: [
+                    "An ninh trật tự",
+                    "Vệ sinh môi trường",
+                    "PCCC",
+                    "Hạ tầng điện nước",
+                ],
+                required: true,
+            },
+        ],
+        createdBy: actorId,
+    });
+
+    const [q1, q2] = survey.questions;
+    await SurveyResponse.create({
+        surveyId: survey._id,
+        userId: residentId,
+        answers: [
+            { questionId: q1._id, selectedOptions: ["Đồng ý"] },
+            { questionId: q2._id, selectedOptions: ["An ninh trật tự"] },
+        ],
+    });
+}
+
+async function seedPcccAndSecurity(
+    households: any[],
+    leaderId: string,
+    policeId: string,
+) {
+    const [h1, h2, h3] = households;
+
+    await PcccCheck.create([
+        {
+            householdId: h1._id,
+            hasFireExtinguisher: true,
+            hasEmergencyExit: true,
+            riskLevel: "xanh",
+            inspectionDate: new Date(),
+            inspectorId: leaderId,
+        },
+        {
+            householdId: h2._id,
+            hasFireExtinguisher: false,
+            hasGasStoveOrStorageOrBusiness: true,
+            riskLevel: "vang",
+            remediationNeeded: "Trang bị bình chữa cháy mini",
+            inspectionDate: new Date(),
+            inspectorId: leaderId,
+        },
+        {
+            householdId: h3._id,
+            hasFireExtinguisher: false,
+            hasIndoorEvCharging: true,
+            isCrowdedRental: true,
+            riskLevel: "do",
+            remediationNeeded:
+                "Yêu cầu di dời điểm sạc xe điện ra ngoài, bổ sung lối thoát hiểm",
+            inspectionDate: new Date(),
+            inspectorId: leaderId,
+        },
+    ]);
+
+    await SecurityRecord.create([
+        {
+            householdId: h1._id,
+            ownershipType: "chinh_chu",
+            level: "binh_thuong",
+            updatedBy: policeId,
+        },
+        {
+            householdId: h3._id,
+            ownershipType: "cho_thue",
+            renterCount: 6,
+            temporaryResidenceDeclared: false,
+            level: "can_theo_doi",
+            handlingStatus:
+                "Đã nhắc nhở chủ nhà khai báo tạm trú cho người thuê",
+            updatedBy: policeId,
+        },
+    ]);
+}
+
+async function seedFinance(actorId: string) {
+    await FinanceTransaction.create([
+        {
+            type: "thu",
+            partyName: "Các hộ dân Cụm 1",
+            amount: 5000000,
+            transactionDate: new Date(),
+            content: "Thu quỹ vệ sinh môi trường quý III",
+            status: "da_duyet",
+            createdBy: actorId,
+        },
+        {
+            type: "thu",
+            partyName: "Các hộ dân Cụm 2",
+            amount: 4200000,
+            transactionDate: new Date(),
+            content: "Thu quỹ vệ sinh môi trường quý III",
+            status: "da_duyet",
+            createdBy: actorId,
+        },
+        {
+            type: "chi",
+            partyName: "Công ty vệ sinh môi trường",
+            amount: 3500000,
+            transactionDate: new Date(),
+            content: "Chi phí thu gom rác thải quý III",
+            status: "da_duyet",
+            createdBy: actorId,
+        },
+        {
+            type: "chi",
+            partyName: "Đội PCCC cơ sở",
+            amount: 1200000,
+            transactionDate: new Date(),
+            content: "Mua bình chữa cháy bổ sung",
+            status: "nhap",
+            createdBy: actorId,
+        },
+    ]);
+}
+
+async function seedFiles(actorId: string) {
+    await FileAsset.create([
+        {
+            name: "Đơn đăng ký tạm trú, tạm vắng",
+            description: "Mẫu đơn dùng cho hộ có người thuê trọ",
+            url: "https://dichvucong.gov.vn/mau-don-tam-tru",
+            category: "form",
+            isPublic: true,
+            uploadedBy: actorId,
+        },
+        {
+            name: "Biên bản họp tổ dân phố (mẫu)",
+            url: "https://dichvucong.gov.vn/mau-bien-ban-hop",
+            category: "form",
+            isPublic: true,
+            uploadedBy: actorId,
+        },
+    ]);
+}
+
+async function seedSettings(actorId: string) {
+    await Setting.create([
+        {
+            key: "app_identity",
+            value: {
+                name: "Tổ dân phố Hòa Bình",
+                ward: "Phường Dương Nội",
+                city: "Hà Nội",
+            },
+            description: "Thông tin định danh ứng dụng",
+            updatedBy: actorId,
+        },
+        {
+            key: "emergency_contacts",
+            value: [
+                { label: "Công an (113)", phone: "113" },
+                { label: "Phòng cháy chữa cháy (114)", phone: "114" },
+                { label: "Cấp cứu y tế (115)", phone: "115" },
+            ],
+            description: "Số điện thoại liên hệ khẩn cấp",
+            updatedBy: actorId,
+        },
+    ]);
+}
+
+async function seedNotifications(adminId: string) {
+    const notification = await Notification.create({
+        title: "Chào mừng đến với Mini App Tổ dân phố Hòa Bình",
+        body: "Tra cứu thông báo, gửi phản ánh và theo dõi hoạt động tổ dân phố ngay trên Zalo.",
+        type: "system.welcome",
+        targetUserIds: [adminId],
+        channel: "in_app",
+        status: "sent",
+        createdBy: adminId,
+    });
+
+    await NotificationDelivery.create({
+        notificationId: notification._id,
+        userId: adminId,
+        channel: "in_app",
+        sentAt: new Date(),
+    });
+}
+
+async function main() {
+    await connectDB();
+    console.log("Đang xóa dữ liệu demo cũ...");
+    await clearDemoData();
+
+    console.log("Đang tạo tài khoản mẫu cho từng vai trò...");
+    const { admin, leader, police, resident } = await seedUsers();
+
+    console.log("Đang tạo hộ dân mẫu...");
+    const households = await seedHouseholds(String(admin._id));
+
+    console.log("Đang tạo nhân khẩu mẫu...");
+    const { residentHouseholdId, residentCitizenId } = await seedCitizens(
+        households,
+        String(admin._id),
+    );
+    await User.findByIdAndUpdate(resident._id, {
+        householdId: residentHouseholdId,
+        citizenId: residentCitizenId,
+    });
+
+    console.log("Đang tạo phản ánh mẫu...");
+    await seedComplaints(String(resident._id), String(leader._id));
+
+    console.log("Đang tạo thông báo mẫu...");
+    await seedAnnouncements(String(admin._id));
+
+    console.log("Đang tạo cuộc họp mẫu...");
+    await seedMeetings(String(admin._id), String(resident._id));
+
+    console.log("Đang tạo khảo sát mẫu...");
+    await seedSurveys(String(admin._id), String(resident._id));
+
+    console.log("Đang tạo dữ liệu PCCC và an ninh mẫu...");
+    await seedPcccAndSecurity(
+        households,
+        String(leader._id),
+        String(police._id),
+    );
+
+    console.log("Đang tạo dữ liệu tài chính mẫu...");
+    await seedFinance(String(admin._id));
+
+    console.log("Đang tạo biểu mẫu mẫu...");
+    await seedFiles(String(admin._id));
+
+    console.log("Đang tạo cấu hình hệ thống mẫu...");
+    await seedSettings(String(admin._id));
+
+    console.log("Đang tạo thông báo hệ thống mẫu...");
+    await seedNotifications(String(admin._id));
+
+    console.log(
+        "\nHoàn tất seed dữ liệu demo. Tài khoản mẫu (zaloUserId dùng cho dang nhap sandbox):",
+    );
+    console.log("  admin                     -> seed-admin");
+    console.log("  neighborhood_leader       -> seed-leader");
+    console.log("  secretary                 -> seed-secretary");
+    console.log("  regional_police           -> seed-police");
+    console.log("  people_committee_official -> seed-committee");
+    console.log("  resident                  -> seed-resident");
+
+    await mongoose.connection.close();
+    process.exit(0);
+}
+
+main().catch(err => {
+    console.error("Seed that bai:", err);
+    process.exit(1);
+});

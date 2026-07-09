@@ -1,0 +1,59 @@
+import { connectDB } from "@/lib/mongodb";
+import {
+    apiSuccess,
+    apiErrorFromException,
+    paginationParams,
+} from "@/lib/response";
+import { requireSession, requireRole } from "@/lib/rbac";
+import { createAnnouncementSchema } from "@/validators/announcement";
+
+export const dynamic = "force-dynamic";
+import {
+    createAnnouncement,
+    listAnnouncements,
+    STAFF_ROLES_FOR_ANNOUNCEMENTS,
+} from "@/services/announcementService";
+
+/**
+ * GET cong khai: mac dinh chi tra ve thong bao da dang (publicOnly=true), khong yeu cau dang nhap.
+ * Neu co query ?admin=1 va nguoi goi la nhan vien (admin/secretary/neighborhood_leader) thi
+ * tra ve tat ca trang thai (nhap + da_dang) de admin quan ly.
+ */
+export async function GET(req: Request) {
+    try {
+        await connectDB();
+        const { searchParams } = new URL(req.url);
+        const { page, limit } = paginationParams(searchParams);
+
+        let publicOnly = true;
+        if (searchParams.get("admin") === "1") {
+            const session = requireSession(req);
+            requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+            publicOnly = false;
+        }
+
+        const result = await listAnnouncements({
+            page,
+            limit,
+            status: searchParams.get("status") || undefined,
+            category: searchParams.get("category") || undefined,
+            publicOnly,
+        });
+        return apiSuccess(result);
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}
+
+export async function POST(req: Request) {
+    try {
+        await connectDB();
+        const session = requireSession(req);
+        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const body = createAnnouncementSchema.parse(await req.json());
+        const announcement = await createAnnouncement(session.userId, body);
+        return apiSuccess(announcement, "Tao thong bao thanh cong", 201);
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}

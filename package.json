@@ -1,0 +1,37 @@
+{
+    "name": "hoa-binh-backend-app",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Backend API cho Zalo Mini App Tổ dân phố Hòa Bình",
+    "scripts": {
+        "dev": "next dev -p 4000",
+        "build": "next build",
+        "start": "next start -p 4000",
+        "lint": "next lint",
+        "seed": "tsx scripts/seed.ts",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "bcryptjs": "^2.4.3",
+        "exceljs": "^4.4.0",
+        "jsonwebtoken": "^9.0.2",
+        "mongoose": "^8.9.5",
+        "next": "14.2.35",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "zod": "^3.24.1"
+    },
+    "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
+        "@types/jsonwebtoken": "^9.0.7",
+        "@types/node": "^20.17.10",
+        "@types/react": "^18.3.18",
+        "dotenv": "^16.4.7",
+        "eslint": "^8.57.1",
+        "eslint-config-next": "14.2.35",
+        "mongodb-memory-server": "^11.2.0",
+        "tsx": "^4.23.0",
+        "typescript": "^5.7.2",
+        "vitest": "^4.1.10"
+    }
+}
