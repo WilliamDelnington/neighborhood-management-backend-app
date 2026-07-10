@@ -8,6 +8,7 @@ export const updateUserSchema = z.object({
     householdId: z.string().nullable().optional(),
     citizenId: z.string().nullable().optional(),
     assignedClusters: z.array(z.string()).optional(),
+    primaryRole: z.enum(ROLES).optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 

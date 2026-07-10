@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -13,8 +13,8 @@ import {
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin", "neighborhood_leader");
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, "admin", "neighborhood_leader");
 
         const { searchParams } = new URL(req.url);
         const surveyId = searchParams.get("surveyId");
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
         if (searchParams.get("format") === "excel") {
             const workbook = buildSurveyResultReportWorkbook(data);
             await writeAuditLog({
-                actorId: session.userId,
+                actorId: String(actorUser._id),
                 action: "report.export",
                 targetModel: "Report",
                 targetId: surveyId,

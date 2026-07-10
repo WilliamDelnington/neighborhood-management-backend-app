@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { commitHouseholdImport, IMPORT_ROLES } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +11,13 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...IMPORT_ROLES);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...IMPORT_ROLES);
 
-        const job = await commitHouseholdImport(session.userId, params.jobId);
+        const job = await commitHouseholdImport(
+            String(actorUser._id),
+            params.jobId,
+        );
         return apiSuccess(
             job,
             "Da nhap du lieu ho dan vao he thong thanh cong",

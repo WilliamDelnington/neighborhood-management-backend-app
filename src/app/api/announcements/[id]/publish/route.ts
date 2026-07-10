@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import {
     publishAnnouncement,
     STAFF_ROLES_FOR_ANNOUNCEMENTS,
@@ -14,10 +14,10 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
         const announcement = await publishAnnouncement(
-            session.userId,
+            String(actorUser._id),
             params.id,
         );
         return apiSuccess(announcement, "Dang thong bao thanh cong");

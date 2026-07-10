@@ -32,7 +32,7 @@ const UserSchema = new Schema<IUser>(
         zaloAppUserId: { type: String },
         displayName: { type: String, required: true, trim: true },
         avatarUrl: { type: String },
-        phone: { type: String, trim: true, index: true },
+        phone: { type: String, trim: true, unique: true, sparse: true },
         email: { type: String, trim: true },
         address: { type: String, trim: true },
         passwordHash: { type: String, select: false },

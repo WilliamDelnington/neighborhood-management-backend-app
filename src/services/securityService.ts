@@ -130,6 +130,28 @@ export async function getSecurityRecordById(id: string) {
     return record;
 }
 
+/**
+ * Kiem tra quyen truy cap ho so an ninh theo cum dan cu cua ho khau lien quan.
+ * Nem HttpError(403) neu user khong phai admin va cum cua ho khong nam trong assignedClusters.
+ */
+export function assertSecurityRecordInScope(
+    user: IUser,
+    record: { householdId: unknown },
+): void {
+    if (user.roles.includes("admin")) return;
+    if (!user.assignedClusters?.length) return;
+    const household = record.householdId as {
+        cluster?: string;
+    } | null;
+    const cluster = household && typeof household === "object" ? household.cluster : undefined;
+    if (cluster && !user.assignedClusters.includes(cluster)) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi ho so ngoai cum duoc phan cong",
+            403,
+        );
+    }
+}
+
 export async function updateSecurityRecord(
     actorUser: IUser,
     id: string,

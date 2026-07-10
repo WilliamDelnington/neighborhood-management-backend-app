@@ -15,13 +15,18 @@ export function requireSession(req: Request): SessionTokenPayload {
 }
 
 /**
- * Nem HttpError(403) neu session khong co bat ky role nao trong danh sach cho phep.
+ * Nem HttpError(403) neu subject khong co bat ky role nao trong danh sach cho phep.
+ * Nhan mot subject bat ky co truong `roles` (ca SessionTokenPayload lan IUser deu
+ * thoa man) - luon uu tien truyen vao IUser (tu requireUser) thay vi SessionTokenPayload
+ * de kiem tra dua tren du lieu MOI NHAT trong DB, khong phai ban sao cu luu trong JWT
+ * (JWT ton tai toi 30 ngay - neu role bi thu hoi ma van chi kiem tra qua JWT thi quyen
+ * cu se con hieu luc cho den khi token het han).
  */
 export function requireRole(
-    session: SessionTokenPayload,
+    subject: { roles: Role[] },
     ...allowed: Role[]
 ): void {
-    const hasRole = session.roles.some(r => allowed.includes(r));
+    const hasRole = subject.roles.some(r => allowed.includes(r));
     if (!hasRole) {
         throw new HttpError("Ban khong co quyen thuc hien thao tac nay", 403);
     }

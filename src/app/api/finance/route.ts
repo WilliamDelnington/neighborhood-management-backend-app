@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { createFinanceTransactionSchema } from "@/validators/finance";
 import { createTransaction, listTransactions } from "@/services/financeService";
 
@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, "admin");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
@@ -40,11 +40,14 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, "admin");
 
         const body = createFinanceTransactionSchema.parse(await req.json());
-        const transaction = await createTransaction(session.userId, body);
+        const transaction = await createTransaction(
+            String(actorUser._id),
+            body,
+        );
         return apiSuccess(transaction, "Tao giao dich thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

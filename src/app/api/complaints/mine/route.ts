@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession } from "@/lib/rbac";
+import { requireUser } from "@/lib/rbac";
 import { listMyComplaints } from "@/services/complaintService";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +12,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
-        const result = await listMyComplaints(session.userId, page, limit);
+        const result = await listMyComplaints(
+            String(actorUser._id),
+            page,
+            limit,
+        );
         return apiSuccess(result);
     } catch (err) {
         return apiErrorFromException(err);

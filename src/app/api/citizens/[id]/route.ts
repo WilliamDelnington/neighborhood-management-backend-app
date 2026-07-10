@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole, requireUser } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { updateCitizenSchema } from "@/validators/citizen";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +40,8 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_READ_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...CITIZEN_READ_ROLES);
 
         const citizen = await getCitizenById(params.id);
         await assertCitizenInScope(user, citizen);
@@ -59,9 +58,8 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_WRITE_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...CITIZEN_WRITE_ROLES);
 
         const existing = await getCitizenById(params.id);
         await assertCitizenInScope(user, existing);
@@ -80,9 +78,8 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_WRITE_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...CITIZEN_WRITE_ROLES);
 
         const existing = await getCitizenById(params.id);
         await assertCitizenInScope(user, existing);

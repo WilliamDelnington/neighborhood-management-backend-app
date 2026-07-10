@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession } from "@/lib/rbac";
+import { requireUser } from "@/lib/rbac";
 import { respondSurveySchema } from "@/validators/survey";
 import { respondToSurvey } from "@/services/surveyService";
 
@@ -12,9 +12,13 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         const body = respondSurveySchema.parse(await req.json());
-        const response = await respondToSurvey(session.userId, params.id, body);
+        const response = await respondToSurvey(
+            String(actorUser._id),
+            params.id,
+            body,
+        );
         return apiSuccess(response, "Gui tra loi khao sat thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession } from "@/lib/rbac";
+import { requireUser } from "@/lib/rbac";
 import { listMyNotifications } from "@/services/notificationReadService";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +12,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const unreadOnly = searchParams.get("unreadOnly") === "true";
 
-        const result = await listMyNotifications(session.userId, {
+        const result = await listMyNotifications(String(actorUser._id), {
             page,
             limit,
             unreadOnly,

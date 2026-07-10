@@ -165,14 +165,14 @@ async function buildTaskList(
             tasks.push({
                 label: "Phản ánh cần tiếp nhận / xử lý",
                 count: pendingComplaints,
-                link: "/api/complaints?status=moi_tiep_nhan",
+                link: "/admin/complaints",
             });
         }
         if (ctx.highRiskPcccCount > 0) {
             tasks.push({
                 label: "Hộ có nguy cơ PCCC mức Đỏ cần kiểm tra lại",
                 count: ctx.highRiskPcccCount,
-                link: "/api/pccc?riskLevel=do",
+                link: "/admin/pccc?riskLevel=do",
             });
         }
     }
@@ -182,7 +182,7 @@ async function buildTaskList(
             tasks.push({
                 label: "Hồ sơ an ninh mức Khẩn cấp cần xử lý",
                 count: ctx.urgentSecurityCount,
-                link: "/api/security-records?level=khan_cap",
+                link: "/admin/security?level=khan_cap",
             });
         }
     }
@@ -192,14 +192,14 @@ async function buildTaskList(
             tasks.push({
                 label: "Phản ánh mới tiếp nhận",
                 count: ctx.newComplaints,
-                link: "/api/complaints?status=moi_tiep_nhan",
+                link: "/admin/complaints?status=moi_tiep_nhan",
             });
         }
         if (ctx.inProgressComplaints > 0) {
             tasks.push({
                 label: "Phản ánh đang xử lý",
                 count: ctx.inProgressComplaints,
-                link: "/api/complaints?status=dang_xu_ly",
+                link: "/admin/complaints?status=dang_xu_ly",
             });
         }
     }

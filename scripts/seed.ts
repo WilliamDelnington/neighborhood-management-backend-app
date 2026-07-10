@@ -7,6 +7,13 @@ loadEnv();
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
+
+/**
+ * Mat khau dev/test dung chung cho moi tai khoan can bo duoc seed, de dang nhap
+ * vao trang quan tri web rieng (quan-ly-to-dan-pho-hoa-binh-admin) bang so dien
+ * thoai + mat khau thay vi Zalo. CHI dung cho moi truong dev/demo.
+ */
+const SEED_STAFF_PASSWORD = "HoaBinh@2026";
 import {
     User,
     Household,
@@ -50,10 +57,18 @@ async function clearDemoData() {
 }
 
 async function seedUsers() {
+    // Import dong (khong import tinh o dau file) vi @/lib/auth kiem tra bien
+    // moi truong JWT_SECRET ngay khi module duoc load - cac import tinh se bi
+    // hoist len truoc cac loi goi loadEnv() o dau file, khien module nay load
+    // truoc khi .env.local duoc doc va nem loi "Thieu bien moi truong JWT_SECRET".
+    const { hashPassword } = await import("@/lib/auth");
+    const staffPasswordHash = await hashPassword(SEED_STAFF_PASSWORD);
+
     const admin = await User.create({
         zaloUserId: "seed-admin",
         displayName: "Quản trị viên Hòa Bình",
         phone: "0900000001",
+        passwordHash: staffPasswordHash,
         address: "Nhà văn hóa Tổ dân phố Hòa Bình",
         roles: ["admin"],
         primaryRole: "admin",
@@ -65,6 +80,7 @@ async function seedUsers() {
         zaloUserId: "seed-leader",
         displayName: "Nguyễn Văn Tổ Trưởng",
         phone: "0900000002",
+        passwordHash: staffPasswordHash,
         address: "Cụm 1, Tổ dân phố Hòa Bình",
         roles: ["neighborhood_leader"],
         primaryRole: "neighborhood_leader",
@@ -77,6 +93,7 @@ async function seedUsers() {
         zaloUserId: "seed-secretary",
         displayName: "Trần Thị Bí Thư",
         phone: "0900000003",
+        passwordHash: staffPasswordHash,
         roles: ["secretary"],
         primaryRole: "secretary",
         status: "active",
@@ -86,6 +103,7 @@ async function seedUsers() {
         zaloUserId: "seed-police",
         displayName: "Lê Văn Công An",
         phone: "0900000004",
+        passwordHash: staffPasswordHash,
         roles: ["regional_police"],
         primaryRole: "regional_police",
         status: "active",
@@ -95,6 +113,7 @@ async function seedUsers() {
         zaloUserId: "seed-committee",
         displayName: "Phạm Thị Cán Bộ UBND",
         phone: "0900000005",
+        passwordHash: staffPasswordHash,
         roles: ["people_committee_official"],
         primaryRole: "people_committee_official",
         status: "active",
@@ -708,6 +727,15 @@ async function main() {
     console.log("  regional_police           -> seed-police");
     console.log("  people_committee_official -> seed-committee");
     console.log("  resident                  -> seed-resident");
+    console.log(
+        "\nDang nhap trang quan tri web (so dien thoai + mat khau, xem @/lib/phone cho dinh dang):",
+    );
+    console.log(`  Mat khau chung cho moi tai khoan can bo: ${SEED_STAFF_PASSWORD}`);
+    console.log("  admin                     -> 0900000001");
+    console.log("  neighborhood_leader       -> 0900000002");
+    console.log("  secretary                 -> 0900000003");
+    console.log("  regional_police           -> 0900000004");
+    console.log("  people_committee_official -> 0900000005");
 
     await mongoose.connection.close();
     process.exit(0);

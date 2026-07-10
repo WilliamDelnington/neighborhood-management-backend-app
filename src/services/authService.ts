@@ -1,8 +1,15 @@
 import { User, type IUser } from "@/models";
-import { signSessionToken } from "@/lib/auth";
+import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
 import { verifyZaloAccessToken } from "@/lib/zalo";
 import { writeAuditLog } from "@/services/auditService";
-import type { ZaloLoginInput, UpdateProfileInput } from "@/validators/auth";
+import { HttpError } from "@/lib/response";
+import { loginRateLimiter } from "@/lib/rateLimit";
+import type {
+    ZaloLoginInput,
+    UpdateProfileInput,
+    PhoneRegisterInput,
+    PhoneLoginInput,
+} from "@/validators/auth";
 
 export async function loginWithZalo(input: ZaloLoginInput) {
     const profile = await verifyZaloAccessToken(
@@ -53,6 +60,94 @@ export async function loginWithZalo(input: ZaloLoginInput) {
     return { token, user: sanitizeUser(user) };
 }
 
+export async function registerWithPhone(input: PhoneRegisterInput) {
+    const existing = await User.findOne({ phone: input.phone });
+    if (existing) {
+        throw new HttpError("So dien thoai da duoc su dung", 409);
+    }
+
+    const passwordHash = await hashPassword(input.password);
+    let user: IUser;
+    try {
+        user = await User.create({
+            phone: input.phone,
+            passwordHash,
+            displayName: input.displayName,
+            roles: ["resident"],
+            primaryRole: "resident",
+            status: "active",
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("So dien thoai da duoc su dung", 409);
+        }
+        throw err;
+    }
+
+    const token = signSessionToken({
+        userId: String(user._id),
+        primaryRole: user.primaryRole,
+        roles: user.roles,
+        sv: user.sessionVersion,
+    });
+
+    await writeAuditLog({
+        actorId: user._id,
+        action: "auth.register.phone",
+        targetModel: "User",
+        targetId: user._id,
+    });
+
+    return { token, user: sanitizeUser(user) };
+}
+
+export async function loginWithPhone(input: PhoneLoginInput) {
+    loginRateLimiter.check(input.phone);
+
+    const user = await User.findOne({ phone: input.phone }).select(
+        "+passwordHash",
+    );
+    if (!user || !user.passwordHash) {
+        throw new HttpError("So dien thoai hoac mat khau khong dung", 401);
+    }
+    if (user.status === "locked") {
+        throw new HttpError("Tai khoan da bi khoa", 401);
+    }
+
+    const matches = await comparePassword(input.password, user.passwordHash);
+    if (!matches) {
+        throw new HttpError("So dien thoai hoac mat khau khong dung", 401);
+    }
+
+    loginRateLimiter.reset(input.phone);
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    const token = signSessionToken({
+        userId: String(user._id),
+        primaryRole: user.primaryRole,
+        roles: user.roles,
+        sv: user.sessionVersion,
+    });
+
+    await writeAuditLog({
+        actorId: user._id,
+        action: "auth.login.phone",
+        targetModel: "User",
+        targetId: user._id,
+    });
+
+    return { token, user: sanitizeUser(user) };
+}
+
+export async function setPassword(userId: string, password: string) {
+    const user = await User.findById(userId);
+    if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
+    user.passwordHash = await hashPassword(password);
+    await user.save();
+    return sanitizeUser(user);
+}
+
 export async function updateOwnProfile(
     userId: string,
     input: UpdateProfileInput,
@@ -65,7 +160,14 @@ export async function updateOwnProfile(
     if (input.notificationPermission !== undefined) {
         user.notificationPermission = input.notificationPermission;
     }
-    await user.save();
+    try {
+        await user.save();
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("So dien thoai da duoc su dung", 409);
+        }
+        throw err;
+    }
     return sanitizeUser(user);
 }
 

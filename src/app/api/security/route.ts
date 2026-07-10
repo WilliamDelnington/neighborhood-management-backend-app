@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireRole, requireSession, requireUser } from "@/lib/rbac";
+import { requireRole, requireUser } from "@/lib/rbac";
 import { createSecurityRecordSchema } from "@/validators/security";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +18,8 @@ import {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...SECURITY_WRITE_ROLES);
         const actorUser = await requireUser(req);
+        requireRole(actorUser, ...SECURITY_WRITE_ROLES);
         const body = createSecurityRecordSchema.parse(await req.json());
         const record = await createSecurityRecord(actorUser, body);
         return apiSuccess(record, "Tao ho so an ninh thanh cong", 201);
@@ -32,9 +31,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...SECURITY_READ_ROLES);
         const actorUser = await requireUser(req);
+        requireRole(actorUser, ...SECURITY_READ_ROLES);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

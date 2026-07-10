@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { cancelTransaction } from "@/services/financeService";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,12 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
-        const transaction = await cancelTransaction(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, "admin");
+        const transaction = await cancelTransaction(
+            String(actorUser._id),
+            params.id,
+        );
         return apiSuccess(transaction, "Da huy giao dich");
     } catch (err) {
         return apiErrorFromException(err);

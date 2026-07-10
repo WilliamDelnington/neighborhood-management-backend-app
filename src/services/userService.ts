@@ -35,6 +35,18 @@ export async function listUsers(params: {
     };
 }
 
+/**
+ * Danh sach rut gon (chi id + displayName) cac nhan vien co bat ky role nao trong
+ * danh sach truyen vao - dung cho cac man hinh chon nguoi phu trach (vd. gan phu
+ * trach phan anh) ma KHONG can quyen quan ly nguoi dung day du (/api/users la admin-only).
+ */
+export async function listAssignableStaff(roles: Role[]) {
+    const users = await User.find({ roles: { $in: roles }, status: "active" })
+        .select("displayName")
+        .sort({ displayName: 1 });
+    return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
+}
+
 export async function getUserById(id: string) {
     const user = await User.findById(id);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
@@ -63,13 +75,29 @@ export async function updateUserByAdmin(
     }
     if (patch.assignedClusters !== undefined)
         user.assignedClusters = patch.assignedClusters;
+    if (patch.primaryRole !== undefined) {
+        if (!user.roles.includes(patch.primaryRole)) {
+            throw new HttpError(
+                "Vai tro chinh phai la mot trong cac vai tro hien co cua nguoi dung",
+                422,
+            );
+        }
+        user.primaryRole = patch.primaryRole;
+    }
     user.updatedBy = actorId as any;
 
     if (statusChanged && patch.status === "locked") {
         user.sessionVersion += 1;
     }
 
-    await user.save();
+    try {
+        await user.save();
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("So dien thoai da duoc su dung", 409);
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         actorId,
@@ -89,7 +117,6 @@ export async function assignRole(actorId: string, input: AssignRoleInput) {
     if (!user.roles.includes(input.role)) {
         user.roles.push(input.role);
     }
-    user.primaryRole = input.role;
     user.sessionVersion += 1;
     await user.save();
 

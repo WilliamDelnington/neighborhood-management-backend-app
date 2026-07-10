@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         // Tai chinh la du lieu nhay cam nhat -> chi admin duoc xem bao cao tong hop.
-        requireRole(session, "admin");
+        requireRole(actorUser, "admin");
 
         const { searchParams } = new URL(req.url);
         const fromDateRaw = searchParams.get("fromDate");
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
         if (searchParams.get("format") === "excel") {
             const workbook = buildFinanceReportWorkbook(data);
             await writeAuditLog({
-                actorId: session.userId,
+                actorId: String(actorUser._id),
                 action: "report.export",
                 targetModel: "Report",
                 metadata: {

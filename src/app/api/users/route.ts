@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { listUsers } from "@/services/userService";
 import type { Role } from "@/types";
 
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, "admin");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

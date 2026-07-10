@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { updateAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,8 @@ export async function GET(
         await connectDB();
         let isStaff = false;
         try {
-            const session = requireSession(req);
-            isStaff = session.roles.some(r =>
+            const actorUser = await requireUser(req);
+            isStaff = actorUser.roles.some(r =>
                 (STAFF_ROLES_FOR_ANNOUNCEMENTS as readonly string[]).includes(
                     r,
                 ),
@@ -45,11 +45,11 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
         const body = updateAnnouncementSchema.parse(await req.json());
         const announcement = await updateAnnouncement(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );
@@ -65,9 +65,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
-        await deleteAnnouncement(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        await deleteAnnouncement(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa thong bao thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

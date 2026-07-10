@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession } from "@/lib/rbac";
+import { requireUser } from "@/lib/rbac";
 import {
     getComplaintDetailForOwnerOrStaff,
     STAFF_ROLES_FOR_COMPLAINTS,
@@ -14,12 +14,12 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        const isStaff = session.roles.some(r =>
+        const actorUser = await requireUser(req);
+        const isStaff = actorUser.roles.some(r =>
             (STAFF_ROLES_FOR_COMPLAINTS as readonly string[]).includes(r),
         );
         const result = await getComplaintDetailForOwnerOrStaff(params.id, {
-            userId: session.userId,
+            userId: String(actorUser._id),
             isStaff,
         });
         return apiSuccess(result);

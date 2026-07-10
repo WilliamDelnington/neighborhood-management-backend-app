@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole, requireUser } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { createCitizenSchema } from "@/validators/citizen";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +18,8 @@ import {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_WRITE_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...CITIZEN_WRITE_ROLES);
 
         const body = createCitizenSchema.parse(await req.json());
         const citizen = await createCitizen(String(user._id), body);
@@ -33,9 +32,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_READ_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...CITIZEN_READ_ROLES);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

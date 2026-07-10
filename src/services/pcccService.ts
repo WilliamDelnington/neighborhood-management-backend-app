@@ -140,6 +140,28 @@ export async function getPcccCheckById(id: string) {
     return check;
 }
 
+/**
+ * Kiem tra quyen truy cap bien ban PCCC theo cum dan cu cua ho khau lien quan.
+ * Nem HttpError(403) neu user khong phai admin va cum cua ho khong nam trong assignedClusters.
+ */
+export function assertPcccCheckInScope(
+    user: IUser,
+    check: { householdId: unknown },
+): void {
+    if (user.roles.includes("admin")) return;
+    if (!user.assignedClusters?.length) return;
+    const household = check.householdId as {
+        cluster?: string;
+    } | null;
+    const cluster = household && typeof household === "object" ? household.cluster : undefined;
+    if (cluster && !user.assignedClusters.includes(cluster)) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi bien ban ngoai cum duoc phan cong",
+            403,
+        );
+    }
+}
+
 export async function updatePcccCheck(
     actorUser: IUser,
     id: string,

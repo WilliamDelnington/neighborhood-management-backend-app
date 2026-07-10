@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { getSessionFromRequest } from "@/lib/auth";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { updateFileAssetSchema } from "@/validators/fileAsset";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +37,11 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_FILE_ASSETS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_FILE_ASSETS);
         const body = updateFileAssetSchema.parse(await req.json());
         const fileAsset = await updateFileAsset(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );
@@ -57,9 +57,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_FILE_ASSETS);
-        await deleteFileAsset(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_FILE_ASSETS);
+        await deleteFileAsset(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa file thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

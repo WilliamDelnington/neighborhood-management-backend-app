@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { createAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +27,8 @@ export async function GET(req: Request) {
 
         let publicOnly = true;
         if (searchParams.get("admin") === "1") {
-            const session = requireSession(req);
-            requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+            const actorUser = await requireUser(req);
+            requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
             publicOnly = false;
         }
 
@@ -48,10 +48,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
         const body = createAnnouncementSchema.parse(await req.json());
-        const announcement = await createAnnouncement(session.userId, body);
+        const announcement = await createAnnouncement(
+            String(actorUser._id),
+            body,
+        );
         return apiSuccess(announcement, "Tao thong bao thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

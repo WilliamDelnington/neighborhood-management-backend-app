@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole, requireUser } from "@/lib/rbac";
+import { requireRole, requireUser } from "@/lib/rbac";
 import {
     getDashboardSummary,
     DASHBOARD_ROLES,
@@ -11,9 +11,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...DASHBOARD_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...DASHBOARD_ROLES);
 
         const summary = await getDashboardSummary(user);
         return apiSuccess(summary);

@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole, requireUser } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { updateHouseholdSchema } from "@/validators/household";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +19,8 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...HOUSEHOLD_READ_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...HOUSEHOLD_READ_ROLES);
 
         const household = await getHouseholdById(params.id);
         assertHouseholdInScope(user, household);
@@ -38,9 +37,8 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...HOUSEHOLD_WRITE_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...HOUSEHOLD_WRITE_ROLES);
 
         const existing = await getHouseholdById(params.id);
         assertHouseholdInScope(user, existing);
@@ -63,9 +61,8 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...HOUSEHOLD_WRITE_ROLES);
         const user = await requireUser(req);
+        requireRole(user, ...HOUSEHOLD_WRITE_ROLES);
 
         const existing = await getHouseholdById(params.id);
         assertHouseholdInScope(user, existing);

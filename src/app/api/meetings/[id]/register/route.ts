@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { registerMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +24,10 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         const body = registerMeetingSchema.parse(await req.json());
         const registration = await registerForMeeting(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );
@@ -46,8 +46,8 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_MEETINGS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_MEETINGS);
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const result = await listRegistrationsForMeeting(params.id, {

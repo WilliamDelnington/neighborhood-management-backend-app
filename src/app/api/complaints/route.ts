@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { createComplaintSchema } from "@/validators/complaint";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +17,9 @@ import {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         const body = createComplaintSchema.parse(await req.json());
-        const complaint = await createComplaint(session.userId, body);
+        const complaint = await createComplaint(String(actorUser._id), body);
         return apiSuccess(complaint, "Gui phan anh thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);
@@ -29,8 +29,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_COMPLAINTS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_COMPLAINTS);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

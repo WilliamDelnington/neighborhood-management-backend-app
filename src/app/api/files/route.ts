@@ -5,7 +5,7 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { getSessionFromRequest } from "@/lib/auth";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requireRole } from "@/lib/rbac";
 import { createFileAssetSchema } from "@/validators/fileAsset";
 
 export const dynamic = "force-dynamic";
@@ -48,11 +48,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_FILE_ASSETS);
+        const actorUser = await requireUser(req);
+        requireRole(actorUser, ...STAFF_ROLES_FOR_FILE_ASSETS);
 
         const body = createFileAssetSchema.parse(await req.json());
-        const fileAsset = await createFileAsset(session.userId, body);
+        const fileAsset = await createFileAsset(String(actorUser._id), body);
         return apiSuccess(fileAsset, "Them file thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);
