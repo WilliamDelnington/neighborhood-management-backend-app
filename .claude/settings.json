@@ -3,10 +3,13 @@
     "allow": [
       "Bash(node -e ' *)",
       "Bash(node -e \"const icons = require\\('lucide-react'\\); console.log\\(Object.keys\\(icons\\).filter\\(k => /message|warning|alert/i.test\\(k\\)\\).join\\('\\\\n'\\)\\)\")",
-      "Read(//e/Resident Management/quan-ly-to-dan-pho-hoa-binh-admin/src/constants/**)"
+      "Read(//e/Resident Management/quan-ly-to-dan-pho-hoa-binh-admin/src/constants/**)",
+      "Read(//e/Resident Management/quan-ly-to-dan-pho-hoa-binh-admin/**)",
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem -Force 'e:\\\\Resident Management\\\\quan-ly-to-dan-pho-hoa-binh-admin' | Select-Object Name\")"
     ],
     "additionalDirectories": [
-      "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin"
+      "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin",
+      "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin\\src\\pages\\Security"
     ]
   }
 }
