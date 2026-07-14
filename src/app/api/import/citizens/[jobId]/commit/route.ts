@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
-import { commitCitizenImport, IMPORT_ROLES } from "@/services/importService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { commitCitizenImport } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function POST(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...IMPORT_ROLES);
+        await requirePermission(actorUser, "imports.manage");
 
         const job = await commitCitizenImport(
             String(actorUser._id),

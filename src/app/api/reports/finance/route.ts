@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -14,8 +14,10 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        // Tai chinh la du lieu nhay cam nhat -> chi admin duoc xem bao cao tong hop.
-        requireRole(actorUser, "admin");
+        // Tai chinh la du lieu nhay cam nhat -> gate rieng theo finance.read
+        // (mac dinh chi admin) thay vi reports.read chung, tranh mo rong quyen
+        // xem du lieu tai chinh cho cac vai tro khac mot cach vo tinh.
+        await requirePermission(actorUser, "finance.read");
 
         const { searchParams } = new URL(req.url);
         const fromDateRaw = searchParams.get("fromDate");

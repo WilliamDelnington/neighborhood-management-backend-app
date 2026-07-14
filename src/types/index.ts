@@ -16,7 +16,10 @@ export type PaginatedData<T> = {
 // ---------------------------------------------------------------------------
 // Vai tro nguoi dung
 // ---------------------------------------------------------------------------
-export const ROLES = [
+// Vai tro gio la du lieu dong (xem model Role), khong con la union TypeScript
+// tinh. SYSTEM_ROLE_KEYS chi con dung de seed 6 vai tro he thong mac dinh -
+// khong dung lam danh sach day du cac vai tro hop le.
+export const SYSTEM_ROLE_KEYS = [
     "resident",
     "neighborhood_leader",
     "secretary",
@@ -24,9 +27,10 @@ export const ROLES = [
     "people_committee_official",
     "admin",
 ] as const;
-export type Role = typeof ROLES[number];
+export type Role = string;
+export type PermissionKey = string;
 
-export const ROLE_LABEL: Record<Role, string> = {
+export const ROLE_LABEL: Record<string, string> = {
     resident: "Người dân",
     neighborhood_leader: "Tổ trưởng",
     secretary: "Bí thư",

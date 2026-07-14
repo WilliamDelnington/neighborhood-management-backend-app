@@ -1,4 +1,4 @@
-import { RoleAssignment, User } from "@/models";
+import { Role as RoleModel, RoleAssignment, User } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
@@ -45,6 +45,20 @@ export async function listAssignableStaff(roles: Role[]) {
         .select("displayName")
         .sort({ displayName: 1 });
     return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
+}
+
+/**
+ * Danh sach cac to dan pho (neighborhood) hien co, lay tu assignedClusters cua
+ * cac tai khoan neighborhood_leader - day la nguon du lieu day du hon
+ * Household.distinct("cluster") vi mot to dan pho co the da co to truong duoc
+ * gan truoc khi co ho dan nao duoc nhap (xem scripts/create-proposal-accounts.ts).
+ */
+export async function listNeighborhoods(): Promise<string[]> {
+    const clusters = await User.find({
+        roles: "neighborhood_leader",
+    }).distinct("assignedClusters");
+    const collator = new Intl.Collator("vi", { numeric: true });
+    return (clusters as unknown as string[]).sort((a, b) => collator.compare(a, b));
 }
 
 export async function getUserById(id: string) {
@@ -113,6 +127,13 @@ export async function updateUserByAdmin(
 export async function assignRole(actorId: string, input: AssignRoleInput) {
     const user = await User.findById(input.userId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+
+    // Truoc day enum Mongoose tren User.roles dam bao role hop le - gio vai tro
+    // la du lieu dong nen phai kiem tra ton tai + active tai day.
+    const role = await RoleModel.findOne({ key: input.role });
+    if (!role || !role.active) {
+        throw new HttpError("Vai tro khong ton tai hoac da bi vo hieu hoa", 422);
+    }
 
     if (!user.roles.includes(input.role)) {
         user.roles.push(input.role);

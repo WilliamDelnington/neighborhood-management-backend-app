@@ -8,20 +8,28 @@ import type {
     UpdateHouseholdInput,
 } from "@/validators/household";
 
-export const HOUSEHOLD_WRITE_ROLES = ["admin", "neighborhood_leader"] as const;
-
-export const HOUSEHOLD_READ_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "secretary",
-    "regional_police",
-    "people_committee_official",
-] as const;
+/**
+ * Nem HttpError(403) neu actor khong phai admin va cluster truyen vao khong
+ * nam trong assignedClusters cua actor - dung khi tao/doi cluster cua ho dan,
+ * de tranh tao ra ho dan "mo coi" ma chinh nguoi tao cung khong con thay duoc
+ * (vi clusterScopeFilter se loc theo assignedClusters cho cac truy van sau do).
+ */
+function assertClusterAssignable(actorUser: IUser, cluster: string): void {
+    if (actorUser.roles.includes("admin")) return;
+    if (!actorUser.assignedClusters?.includes(cluster)) {
+        throw new HttpError(
+            "Cụm dân cư không thuộc phạm vi quản lý của bạn",
+            403,
+        );
+    }
+}
 
 export async function createHousehold(
-    actorId: string,
+    actorUser: IUser,
     input: CreateHouseholdInput,
 ): Promise<IHousehold> {
+    assertClusterAssignable(actorUser, input.cluster);
+
     const code = await generateSequentialCode(Household, "HB", 3);
     const household = await Household.create({
         code,
@@ -33,12 +41,12 @@ export async function createHousehold(
         ownershipType: input.ownershipType ?? "chinh_chu",
         needsSupport: input.needsSupport ?? false,
         note: input.note,
-        createdBy: actorId,
-        updatedBy: actorId,
+        createdBy: actorUser._id,
+        updatedBy: actorUser._id,
     });
 
     await writeAuditLog({
-        actorId,
+        actorId: String(actorUser._id),
         action: "household.create",
         targetModel: "Household",
         targetId: household._id,
@@ -97,6 +105,50 @@ export async function listHouseholds(params: {
     };
 }
 
+/**
+ * Tim ho dan cho nguoi dung tu chon ho khau cua minh (onboarding/doi ho khau) -
+ * khong yeu cau quyen "households.read" (resident khong co quyen nay theo mac
+ * dinh) va chi tra ve cac truong khong nhay cam. Neu khong truyen `cluster`
+ * thi tim tren toan bo cac to dan pho (nguoi dung co the chua chon to dan pho).
+ */
+export async function searchHouseholdsForOnboarding(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    cluster?: string;
+}) {
+    const filter: Record<string, unknown> = {};
+
+    if (params.cluster) {
+        filter.cluster = params.cluster;
+    }
+
+    if (params.search) {
+        filter.$or = [
+            { code: { $regex: params.search, $options: "i" } },
+            { address: { $regex: params.search, $options: "i" } },
+            { headOfHousehold: { $regex: params.search, $options: "i" } },
+        ];
+    }
+
+    const [items, total] = await Promise.all([
+        Household.find(filter)
+            .select("code address cluster headOfHousehold memberCount")
+            .sort({ createdAt: -1 })
+            .skip((params.page - 1) * params.limit)
+            .limit(params.limit),
+        Household.countDocuments(filter),
+    ]);
+
+    return {
+        items,
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.max(1, Math.ceil(total / params.limit)),
+    };
+}
+
 export async function getHouseholdById(id: string): Promise<IHousehold> {
     const household = await Household.findById(id);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
@@ -124,12 +176,16 @@ export function assertHouseholdInScope(
 }
 
 export async function updateHousehold(
-    actorId: string,
+    actorUser: IUser,
     id: string,
     patch: UpdateHouseholdInput,
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+
+    if (patch.cluster !== undefined) {
+        assertClusterAssignable(actorUser, patch.cluster);
+    }
 
     // Chi gan cac truong thuc su co mat trong patch (partial schema van tra ve
     // day du key voi gia tri undefined cho truong khong duoc gui len).
@@ -138,11 +194,11 @@ export async function updateHousehold(
             (household as unknown as Record<string, unknown>)[key] = value;
         }
     }
-    household.updatedBy = actorId as any;
+    household.updatedBy = actorUser._id as any;
     await household.save();
 
     await writeAuditLog({
-        actorId,
+        actorId: String(actorUser._id),
         action: "household.update",
         targetModel: "Household",
         targetId: household._id,

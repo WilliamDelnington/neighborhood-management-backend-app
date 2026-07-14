@@ -16,6 +16,7 @@ import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
 const SEED_STAFF_PASSWORD = "HoaBinh@2026";
 import {
     User,
+    Role,
     Household,
     Citizen,
     Complaint,
@@ -33,10 +34,13 @@ import {
     NotificationDelivery,
     Setting,
 } from "../src/models";
+import { SYSTEM_ROLE_PERMISSIONS } from "../src/lib/systemRoles";
+import { ROLE_LABEL } from "../src/types";
 
 async function clearDemoData() {
     await Promise.all([
         User.deleteMany({}),
+        Role.deleteMany({}),
         Household.deleteMany({}),
         Citizen.deleteMany({}),
         Complaint.deleteMany({}),
@@ -54,6 +58,22 @@ async function clearDemoData() {
         NotificationDelivery.deleteMany({}),
         Setting.deleteMany({}),
     ]);
+}
+
+async function seedRoles(actorId: string) {
+    const keys = Object.keys(SYSTEM_ROLE_PERMISSIONS);
+    await Role.create(
+        keys.map((key, index) => ({
+            key,
+            name: ROLE_LABEL[key] || key,
+            permissions: SYSTEM_ROLE_PERMISSIONS[key],
+            system: true,
+            active: true,
+            sortOrder: index,
+            createdBy: actorId,
+            updatedBy: actorId,
+        })),
+    );
 }
 
 async function seedUsers() {
@@ -644,6 +664,28 @@ async function seedSettings(actorId: string) {
             description: "Số điện thoại liên hệ khẩn cấp",
             updatedBy: actorId,
         },
+        {
+            key: "committee_members",
+            value: [
+                { role: "Bí thư Chi bộ", name: "Nguyễn Văn A", phone: "0912345678" },
+                { role: "Tổ trưởng Tổ dân phố", name: "Trần Thị B", phone: "0923456789" },
+                { role: "Tổ phó Tổ dân phố", name: "Lê Văn C", phone: "0934567890" },
+                { role: "Trưởng ban Công tác Mặt trận", name: "Phạm Thị D", phone: "0945678901" },
+            ],
+            description: "Ban công tác Tổ dân phố",
+            updatedBy: actorId,
+        },
+        {
+            key: "community_stats",
+            value: {
+                totalHouseholds: 186,
+                totalResidents: 742,
+                leaderName: "Trần Thị B",
+                termLabel: "2024-2029",
+            },
+            description: "Số liệu thống kê hiển thị ở trang chủ cổng thông tin",
+            updatedBy: actorId,
+        },
     ]);
 }
 
@@ -673,6 +715,9 @@ async function main() {
 
     console.log("Đang tạo tài khoản mẫu cho từng vai trò...");
     const { admin, leader, police, resident } = await seedUsers();
+
+    console.log("Đang tạo 6 vai trò hệ thống...");
+    await seedRoles(String(admin._id));
 
     console.log("Đang tạo hộ dân mẫu...");
     const households = await seedHouseholds(String(admin._id));

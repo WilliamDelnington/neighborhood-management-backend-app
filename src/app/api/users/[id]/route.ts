@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { getUserById, updateUserByAdmin } from "@/services/userService";
 import { updateUserSchema } from "@/validators/user";
 
@@ -13,7 +13,7 @@ export async function GET(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
+        await requirePermission(actorUser, "users.read");
         const user = await getUserById(params.id);
         return apiSuccess(user);
     } catch (err) {
@@ -28,7 +28,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
+        await requirePermission(actorUser, "users.update");
         const body = updateUserSchema.parse(await req.json());
         const user = await updateUserByAdmin(
             String(actorUser._id),

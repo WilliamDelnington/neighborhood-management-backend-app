@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { getSessionFromRequest } from "@/lib/auth";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { upsertSettingSchema } from "@/validators/setting";
 import {
     listSettings,
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 async function handleUpsert(req: Request) {
     await connectDB();
     const actorUser = await requireUser(req);
-    requireRole(actorUser, "admin");
+    await requirePermission(actorUser, "settings.update");
     const body = upsertSettingSchema.parse(await req.json());
     const setting = await upsertSetting(String(actorUser._id), body);
     return apiSuccess(setting, "Cap nhat cau hinh thanh cong");

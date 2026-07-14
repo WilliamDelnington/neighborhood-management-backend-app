@@ -10,18 +10,6 @@ import type {
     UpdateSecurityRecordInput,
 } from "@/validators/security";
 
-export const SECURITY_WRITE_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-] as const;
-export const SECURITY_READ_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-    "people_committee_official",
-] as const;
-
 const UPDATABLE_BOOLEAN_FIELDS = [
     "temporaryResidenceDeclared",
     "hasCamera",

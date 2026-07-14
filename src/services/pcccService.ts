@@ -10,18 +10,6 @@ import type {
     UpdatePcccCheckInput,
 } from "@/validators/pccc";
 
-export const PCCC_WRITE_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-] as const;
-export const PCCC_READ_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-    "people_committee_official",
-] as const;
-
 const UPDATABLE_BOOLEAN_FIELDS = [
     "hasFireExtinguisher",
     "hasEmergencyExit",

@@ -1,9 +1,12 @@
-import { User, type IUser } from "@/models";
+import { Role as RoleModel, User, Household, Citizen, type IUser } from "@/models";
 import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
 import { verifyZaloAccessToken } from "@/lib/zalo";
 import { writeAuditLog } from "@/services/auditService";
+import { recomputeHouseholdMemberCount } from "@/services/citizenService";
 import { HttpError } from "@/lib/response";
 import { loginRateLimiter } from "@/lib/rateLimit";
+import { getUserPermissionSet, getUserAllowedComplaintCategories } from "@/lib/rbac";
+import { ROLE_LABEL } from "@/types";
 import type {
     ZaloLoginInput,
     UpdateProfileInput,
@@ -57,7 +60,7 @@ export async function loginWithZalo(input: ZaloLoginInput) {
         targetId: user._id,
     });
 
-    return { token, user: sanitizeUser(user) };
+    return { token, user: await sanitizeUserWithPermissions(user) };
 }
 
 export async function registerWithPhone(input: PhoneRegisterInput) {
@@ -98,7 +101,7 @@ export async function registerWithPhone(input: PhoneRegisterInput) {
         targetId: user._id,
     });
 
-    return { token, user: sanitizeUser(user) };
+    return { token, user: await sanitizeUserWithPermissions(user) };
 }
 
 export async function loginWithPhone(input: PhoneLoginInput) {
@@ -137,7 +140,7 @@ export async function loginWithPhone(input: PhoneLoginInput) {
         targetId: user._id,
     });
 
-    return { token, user: sanitizeUser(user) };
+    return { token, user: await sanitizeUserWithPermissions(user) };
 }
 
 export async function setPassword(userId: string, password: string) {
@@ -145,7 +148,7 @@ export async function setPassword(userId: string, password: string) {
     if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
     user.passwordHash = await hashPassword(password);
     await user.save();
-    return sanitizeUser(user);
+    return sanitizeUserWithPermissions(user);
 }
 
 export async function updateOwnProfile(
@@ -160,6 +163,50 @@ export async function updateOwnProfile(
     if (input.notificationPermission !== undefined) {
         user.notificationPermission = input.notificationPermission;
     }
+
+    if (
+        input.householdId !== undefined &&
+        input.householdId !== String(user.householdId || "")
+    ) {
+        const household = await Household.findById(input.householdId);
+        if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+
+        const oldHouseholdId = user.householdId
+            ? String(user.householdId)
+            : undefined;
+
+        if (user.citizenId) {
+            await Citizen.findByIdAndUpdate(user.citizenId, {
+                householdId: household._id,
+                updatedBy: user._id,
+            });
+        } else {
+            const citizen = await Citizen.create({
+                fullName: user.displayName,
+                phone: user.phone,
+                householdId: household._id,
+                zaloUserId: user._id,
+                createdBy: user._id,
+                updatedBy: user._id,
+            });
+            user.citizenId = citizen._id;
+        }
+        user.householdId = household._id;
+
+        if (oldHouseholdId) {
+            await recomputeHouseholdMemberCount(oldHouseholdId);
+        }
+        await recomputeHouseholdMemberCount(household._id);
+
+        await writeAuditLog({
+            actorId: user._id,
+            action: "user.link_household",
+            targetModel: "User",
+            targetId: user._id,
+            metadata: { householdId: String(household._id) },
+        });
+    }
+
     try {
         await user.save();
     } catch (err: any) {
@@ -168,7 +215,7 @@ export async function updateOwnProfile(
         }
         throw err;
     }
-    return sanitizeUser(user);
+    return sanitizeUserWithPermissions(user);
 }
 
 export async function revokeSessions(userId: string) {
@@ -197,5 +244,35 @@ export function sanitizeUser(user: IUser) {
         assignedClusters: user.assignedClusters,
         notificationPermission: user.notificationPermission,
         createdAt: user.createdAt,
+    };
+}
+
+/**
+ * Giong sanitizeUser nhung kem theo permission hieu luc + nhan hien thi cua
+ * tung role - danh rieng cho cac response tra ve CHINH nguoi dang dang nhap
+ * (login/register/me/set-password), vi frontend (vd trang quan tri) dung
+ * user.permissions de an/hien menu va guard route. KHONG dung cho danh sach/
+ * chi tiet nguoi dung khac (userService.ts) de tranh N+1 query khong can thiet
+ * khi chi hien thi thong tin, khong dung de tu-phan-quyen ban than.
+ */
+export async function sanitizeUserWithPermissions(user: IUser) {
+    const base = sanitizeUser(user);
+    const [permissions, roleDocs, allowedComplaintCategories] = await Promise.all([
+        getUserPermissionSet(user),
+        RoleModel.find({ key: { $in: user.roles } }).select("key name"),
+        getUserAllowedComplaintCategories(user),
+    ]);
+
+    const roleLabels: Record<string, string> = {};
+    for (const key of user.roles) {
+        const doc = roleDocs.find(r => r.key === key);
+        roleLabels[key] = doc?.name || ROLE_LABEL[key] || key;
+    }
+
+    return {
+        ...base,
+        permissions: [...permissions],
+        roleLabels,
+        allowedComplaintCategories,
     };
 }

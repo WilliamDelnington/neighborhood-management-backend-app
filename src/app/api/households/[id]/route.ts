@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateHouseholdSchema } from "@/validators/household";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +9,6 @@ import {
     updateHousehold,
     deleteHousehold,
     assertHouseholdInScope,
-    HOUSEHOLD_READ_ROLES,
-    HOUSEHOLD_WRITE_ROLES,
 } from "@/services/householdService";
 
 export async function GET(
@@ -20,7 +18,7 @@ export async function GET(
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...HOUSEHOLD_READ_ROLES);
+        await requirePermission(user, "households.read");
 
         const household = await getHouseholdById(params.id);
         assertHouseholdInScope(user, household);
@@ -38,17 +36,13 @@ export async function PATCH(
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...HOUSEHOLD_WRITE_ROLES);
+        await requirePermission(user, "households.update");
 
         const existing = await getHouseholdById(params.id);
         assertHouseholdInScope(user, existing);
 
         const body = updateHouseholdSchema.parse(await req.json());
-        const household = await updateHousehold(
-            String(user._id),
-            params.id,
-            body,
-        );
+        const household = await updateHousehold(user, params.id, body);
         return apiSuccess(household, "Cap nhat ho dan thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
@@ -62,7 +56,7 @@ export async function DELETE(
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...HOUSEHOLD_WRITE_ROLES);
+        await requirePermission(user, "households.delete");
 
         const existing = await getHouseholdById(params.id);
         assertHouseholdInScope(user, existing);

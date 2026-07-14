@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { getImportJobById } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function GET(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "neighborhood_leader");
+        await requirePermission(actorUser, "imports.manage");
 
         const job = await getImportJobById(params.id);
         return apiSuccess(job);

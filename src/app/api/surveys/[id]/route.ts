@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateSurveySchema } from "@/validators/survey";
 import {
     deleteSurvey,
@@ -30,7 +30,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "secretary");
+        await requirePermission(actorUser, "surveys.update");
         const body = updateSurveySchema.parse(await req.json());
         const survey = await updateSurvey(
             String(actorUser._id),
@@ -50,7 +50,7 @@ export async function DELETE(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "secretary");
+        await requirePermission(actorUser, "surveys.update");
         await deleteSurvey(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa khao sat thanh cong");
     } catch (err) {

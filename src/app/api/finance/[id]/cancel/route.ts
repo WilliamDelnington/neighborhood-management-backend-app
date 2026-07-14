@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { cancelTransaction } from "@/services/financeService";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function POST(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
+        await requirePermission(actorUser, "finance.approve");
         const transaction = await cancelTransaction(
             String(actorUser._id),
             params.id,

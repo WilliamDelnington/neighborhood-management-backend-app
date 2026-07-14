@@ -10,24 +10,34 @@ import {
     FinanceTransaction,
     type IUser,
 } from "@/models";
-
-export const DASHBOARD_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "secretary",
-    "regional_police",
-    "people_committee_official",
-] as const;
+import { clusterScopeFilter } from "@/lib/rbac";
 
 export type DashboardTask = { label: string; count: number; link: string };
 
 /**
  * Tong hop toan bo so lieu cho dashboard admin/can bo: dan cu, phan anh, PCCC,
  * cuoc hop sap toi, tai chinh, khao sat, va danh sach viec can xu ly theo vai tro.
+ * Cac so lieu gan voi ho dan (so ho, nhan khau, PCCC, an ninh) duoc loc theo
+ * cum dan cu duoc phan cong (clusterScopeFilter) - to truong chi thay so lieu
+ * trong pham vi cum cua minh, giong nhu danh sach ho dan/nhan khau. Cuoc hop,
+ * tai chinh, khao sat van la du lieu chung toan to nen khong loc theo cum.
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const householdScope = clusterScopeFilter(actorUser);
+    const isClusterScoped = Object.keys(householdScope).length > 0;
+    const scopedHouseholdIds = isClusterScoped
+        ? (await Household.find(householdScope).select("_id")).map(h => h._id)
+        : undefined;
+
+    const householdFilter: Record<string, unknown> = isClusterScoped
+        ? { _id: { $in: scopedHouseholdIds } }
+        : {};
+    const citizenFilter: Record<string, unknown> = isClusterScoped
+        ? { householdId: { $in: scopedHouseholdIds } }
+        : {};
 
     const [
         totalHouseholds,
@@ -46,13 +56,16 @@ export async function getDashboardSummary(actorUser: IUser) {
         openSurveyDocs,
         urgentSecurityCount,
     ] = await Promise.all([
-        Household.countDocuments({}),
-        Citizen.countDocuments({}),
-        Household.countDocuments({ ownershipType: "cho_thue" }),
-        Household.countDocuments({ needsSupport: true }),
+        Household.countDocuments(householdFilter),
+        Citizen.countDocuments(citizenFilter),
+        Household.countDocuments({ ...householdFilter, ownershipType: "cho_thue" }),
+        Household.countDocuments({ ...householdFilter, needsSupport: true }),
         Complaint.countDocuments({ status: "moi_tiep_nhan" }),
         Complaint.countDocuments({ status: "dang_xu_ly" }),
         PcccCheck.aggregate([
+            ...(isClusterScoped
+                ? [{ $match: { householdId: { $in: scopedHouseholdIds } } }]
+                : []),
             { $sort: { inspectionDate: -1 } },
             {
                 $group: {
@@ -84,7 +97,12 @@ export async function getDashboardSummary(actorUser: IUser) {
         ]) as Promise<any[]>,
         Survey.countDocuments({ status: "dang_mo" }),
         Survey.find({ status: "dang_mo" }).select("_id"),
-        SecurityRecord.countDocuments({ level: "khan_cap" }),
+        SecurityRecord.countDocuments({
+            level: "khan_cap",
+            ...(isClusterScoped
+                ? { householdId: { $in: scopedHouseholdIds } }
+                : {}),
+        }),
     ]);
 
     const openSurveyIds = openSurveyDocs.map(s => s._id);

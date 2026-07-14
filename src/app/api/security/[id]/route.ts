@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireRole, requireUser } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { updateSecurityRecordSchema } from "@/validators/security";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,6 @@ import {
     assertSecurityRecordInScope,
     deleteSecurityRecord,
     getSecurityRecordById,
-    SECURITY_READ_ROLES,
-    SECURITY_WRITE_ROLES,
     updateSecurityRecord,
 } from "@/services/securityService";
 
@@ -20,7 +18,7 @@ export async function GET(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...SECURITY_READ_ROLES);
+        await requirePermission(actorUser, "security.read");
         const record = await getSecurityRecordById(params.id);
         assertSecurityRecordInScope(actorUser, record);
         return apiSuccess(record);
@@ -36,7 +34,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...SECURITY_WRITE_ROLES);
+        await requirePermission(actorUser, "security.update");
         const existing = await getSecurityRecordById(params.id);
         assertSecurityRecordInScope(actorUser, existing);
         const body = updateSecurityRecordSchema.parse(await req.json());
@@ -54,7 +52,7 @@ export async function DELETE(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...SECURITY_WRITE_ROLES);
+        await requirePermission(actorUser, "security.update");
         const existing = await getSecurityRecordById(params.id);
         assertSecurityRecordInScope(actorUser, existing);
         await deleteSecurityRecord(String(actorUser._id), params.id);

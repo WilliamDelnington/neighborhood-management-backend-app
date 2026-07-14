@@ -4,8 +4,8 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
-import { listCitizens, CITIZEN_READ_ROLES } from "@/services/citizenService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { listCitizens } from "@/services/citizenService";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export async function GET(
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...CITIZEN_READ_ROLES);
+        await requirePermission(user, "citizens.read");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

@@ -4,14 +4,13 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { registerMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
 import {
     listRegistrationsForMeeting,
     registerForMeeting,
-    STAFF_ROLES_FOR_MEETINGS,
 } from "@/services/meetingService";
 
 /**
@@ -47,7 +46,7 @@ export async function GET(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_MEETINGS);
+        await requirePermission(actorUser, "meetings.read");
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const result = await listRegistrationsForMeeting(params.id, {

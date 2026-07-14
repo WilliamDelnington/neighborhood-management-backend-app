@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { closeSurvey } from "@/services/surveyService";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function POST(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "secretary");
+        await requirePermission(actorUser, "surveys.publish");
         const survey = await closeSurvey(String(actorUser._id), params.id);
         return apiSuccess(survey, "Dong khao sat thanh cong");
     } catch (err) {

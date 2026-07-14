@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { createSurveySchema } from "@/validators/survey";
 import { createSurvey, listSurveys } from "@/services/surveyService";
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "secretary");
+        await requirePermission(actorUser, "surveys.create");
         const body = createSurveySchema.parse(await req.json());
         const survey = await createSurvey(String(actorUser._id), body);
         return apiSuccess(survey, "Tao khao sat thanh cong", 201);

@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
-import { previewHouseholdImport, IMPORT_ROLES } from "@/services/importService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { previewHouseholdImport } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...IMPORT_ROLES);
+        await requirePermission(actorUser, "imports.manage");
 
         const formData = await req.formData();
         const file = formData.get("file");

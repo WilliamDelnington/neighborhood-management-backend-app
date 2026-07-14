@@ -4,14 +4,13 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { createAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
 import {
     createAnnouncement,
     listAnnouncements,
-    STAFF_ROLES_FOR_ANNOUNCEMENTS,
 } from "@/services/announcementService";
 
 /**
@@ -28,7 +27,7 @@ export async function GET(req: Request) {
         let publicOnly = true;
         if (searchParams.get("admin") === "1") {
             const actorUser = await requireUser(req);
-            requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+            await requirePermission(actorUser, "announcements.read");
             publicOnly = false;
         }
 
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        await requirePermission(actorUser, "announcements.create");
         const body = createAnnouncementSchema.parse(await req.json());
         const announcement = await createAnnouncement(
             String(actorUser._id),

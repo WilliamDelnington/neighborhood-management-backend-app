@@ -4,15 +4,15 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import {
+    requireUser,
+    requirePermission,
+    getUserAllowedComplaintCategories,
+} from "@/lib/rbac";
 import { createComplaintSchema } from "@/validators/complaint";
 
 export const dynamic = "force-dynamic";
-import {
-    createComplaint,
-    listComplaints,
-    STAFF_ROLES_FOR_COMPLAINTS,
-} from "@/services/complaintService";
+import { createComplaint, listComplaints } from "@/services/complaintService";
 
 export async function POST(req: Request) {
     try {
@@ -30,7 +30,9 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_COMPLAINTS);
+        await requirePermission(actorUser, "complaints.read");
+        const allowedCategories =
+            await getUserAllowedComplaintCategories(actorUser);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
@@ -40,6 +42,7 @@ export async function GET(req: Request) {
             status: searchParams.get("status") || undefined,
             category: searchParams.get("category") || undefined,
             search: searchParams.get("search") || undefined,
+            allowedCategories,
         });
         return apiSuccess(result);
     } catch (err) {

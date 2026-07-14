@@ -9,6 +9,8 @@
         "start": "next start -p 4000",
         "lint": "next lint",
         "seed": "tsx scripts/seed.ts",
+        "seed:proposal": "tsx scripts/create-proposal-accounts.ts",
+        "roles:backfill": "tsx scripts/backfill-roles.ts",
         "test": "vitest run"
     },
     "dependencies": {

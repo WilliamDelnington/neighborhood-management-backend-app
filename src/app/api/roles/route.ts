@@ -1,40 +1,44 @@
 import { connectDB } from "@/lib/mongodb";
-import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
-import { assignRole, revokeRole } from "@/services/userService";
-import { assignRoleSchema } from "@/validators/user";
-import { ROLES, type Role } from "@/types";
+import {
+    apiSuccess,
+    apiErrorFromException,
+    paginationParams,
+} from "@/lib/response";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { createRoleSchema } from "@/validators/role";
+import { createRole, listRoles } from "@/services/roleService";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
-        const body = assignRoleSchema.parse(await req.json());
-        const result = await assignRole(String(actorUser._id), body);
-        return apiSuccess(result, "Gan vai tro thanh cong");
+        await requirePermission(actorUser, "roles.read");
+
+        const { searchParams } = new URL(req.url);
+        const search = searchParams.get("search") || undefined;
+        const activeParam = searchParams.get("active");
+        const active =
+            activeParam === null ? undefined : activeParam === "1";
+        const { page, limit } = paginationParams(searchParams);
+
+        const roles = await listRoles({ search, active, page, limit });
+        return apiSuccess(roles);
     } catch (err) {
         return apiErrorFromException(err);
     }
 }
 
-export async function DELETE(req: Request) {
+export async function POST(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
-        const { searchParams } = new URL(req.url);
-        const userId = searchParams.get("userId");
-        const role = searchParams.get("role") as Role | null;
-        if (!userId || !role || !ROLES.includes(role)) {
-            return apiErrorFromException(
-                new Error("Thieu userId hoac role hop le"),
-            );
-        }
-        const user = await revokeRole(String(actorUser._id), userId, role);
-        return apiSuccess(user, "Thu hoi vai tro thanh cong");
+        await requirePermission(actorUser, "roles.create");
+
+        const body = createRoleSchema.parse(await req.json());
+        const role = await createRole(String(actorUser._id), body);
+        return apiSuccess(role, "Tạo vai trò thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

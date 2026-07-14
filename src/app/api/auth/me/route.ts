@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { requireUser } from "@/lib/rbac";
-import { sanitizeUser, updateOwnProfile } from "@/services/authService";
+import { sanitizeUserWithPermissions, updateOwnProfile } from "@/services/authService";
 import { updateProfileSchema } from "@/validators/auth";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        return apiSuccess(sanitizeUser(user));
+        return apiSuccess(await sanitizeUserWithPermissions(user));
     } catch (err) {
         return apiErrorFromException(err);
     }

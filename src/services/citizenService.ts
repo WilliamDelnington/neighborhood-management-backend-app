@@ -7,20 +7,10 @@ import type {
     UpdateCitizenInput,
 } from "@/validators/citizen";
 
-export const CITIZEN_WRITE_ROLES = ["admin", "neighborhood_leader"] as const;
-
-export const CITIZEN_READ_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "secretary",
-    "regional_police",
-    "people_committee_official",
-] as const;
-
 /**
  * Tinh lai memberCount cua mot ho dan dua tren so nhan khau hien co.
  */
-async function recomputeHouseholdMemberCount(
+export async function recomputeHouseholdMemberCount(
     householdId: unknown,
 ): Promise<void> {
     const count = await Citizen.countDocuments({ householdId });

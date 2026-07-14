@@ -1,13 +1,12 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
 import {
     deleteMeeting,
     getMeetingById,
-    STAFF_ROLES_FOR_MEETINGS,
     updateMeeting,
 } from "@/services/meetingService";
 
@@ -31,7 +30,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_MEETINGS);
+        await requirePermission(actorUser, "meetings.update");
         const body = updateMeetingSchema.parse(await req.json());
         const meeting = await updateMeeting(
             String(actorUser._id),
@@ -51,7 +50,7 @@ export async function DELETE(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_MEETINGS);
+        await requirePermission(actorUser, "meetings.update");
         await deleteMeeting(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa cuoc hop thanh cong");
     } catch (err) {

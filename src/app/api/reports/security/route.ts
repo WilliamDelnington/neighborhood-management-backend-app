@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         await connectDB();
         const actorUser = await requireUser(req);
         // Bao cao an ninh/tam tru lien quan truc tiep den nghiep vu cua cong an khu vuc.
-        requireRole(actorUser, "admin", "neighborhood_leader", "regional_police");
+        await requirePermission(actorUser, "reports.read");
 
         const data = await getSecurityReport();
 

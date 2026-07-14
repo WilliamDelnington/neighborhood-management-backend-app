@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireRole, requireUser } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { updatePcccCheckSchema } from "@/validators/pccc";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,6 @@ import {
     assertPcccCheckInScope,
     deletePcccCheck,
     getPcccCheckById,
-    PCCC_READ_ROLES,
-    PCCC_WRITE_ROLES,
     updatePcccCheck,
 } from "@/services/pcccService";
 
@@ -20,7 +18,7 @@ export async function GET(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...PCCC_READ_ROLES);
+        await requirePermission(actorUser, "pccc.read");
         const check = await getPcccCheckById(params.id);
         assertPcccCheckInScope(actorUser, check);
         return apiSuccess(check);
@@ -36,7 +34,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...PCCC_WRITE_ROLES);
+        await requirePermission(actorUser, "pccc.update");
         const existing = await getPcccCheckById(params.id);
         assertPcccCheckInScope(actorUser, existing);
         const body = updatePcccCheckSchema.parse(await req.json());
@@ -54,7 +52,7 @@ export async function DELETE(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...PCCC_WRITE_ROLES);
+        await requirePermission(actorUser, "pccc.update");
         const existing = await getPcccCheckById(params.id);
         assertPcccCheckInScope(actorUser, existing);
         await deletePcccCheck(String(actorUser._id), params.id);

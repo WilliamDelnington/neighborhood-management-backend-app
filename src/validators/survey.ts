@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LOAI_CAU_HOI_KHAO_SAT, ROLES } from "@/types";
+import { LOAI_CAU_HOI_KHAO_SAT, SYSTEM_ROLE_KEYS } from "@/types";
 
 const surveyQuestionSchema = z.object({
     question: z.string().min(1, "Vui long nhap noi dung cau hoi"),
@@ -12,7 +12,7 @@ export const createSurveySchema = z.object({
     title: z.string().min(3, "Tieu de qua ngan"),
     description: z.string().optional(),
     questions: z.array(surveyQuestionSchema).min(1, "Can it nhat mot cau hoi"),
-    eligibleRoles: z.array(z.enum(ROLES)).optional(),
+    eligibleRoles: z.array(z.enum(SYSTEM_ROLE_KEYS)).optional(),
     eligibleClusters: z.array(z.string()).optional(),
     eligibleAll: z.boolean().default(true),
 });

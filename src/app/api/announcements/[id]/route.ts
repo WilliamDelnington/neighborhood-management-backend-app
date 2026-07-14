@@ -1,13 +1,12 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
 import { updateAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
 import {
     deleteAnnouncement,
     getAnnouncementById,
-    STAFF_ROLES_FOR_ANNOUNCEMENTS,
     updateAnnouncement,
 } from "@/services/announcementService";
 
@@ -24,11 +23,7 @@ export async function GET(
         let isStaff = false;
         try {
             const actorUser = await requireUser(req);
-            isStaff = actorUser.roles.some(r =>
-                (STAFF_ROLES_FOR_ANNOUNCEMENTS as readonly string[]).includes(
-                    r,
-                ),
-            );
+            isStaff = await userHasPermission(actorUser, "announcements.read");
         } catch {
             isStaff = false;
         }
@@ -46,7 +41,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        await requirePermission(actorUser, "announcements.update");
         const body = updateAnnouncementSchema.parse(await req.json());
         const announcement = await updateAnnouncement(
             String(actorUser._id),
@@ -66,7 +61,7 @@ export async function DELETE(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        await requirePermission(actorUser, "announcements.update");
         await deleteAnnouncement(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa thong bao thanh cong");
     } catch (err) {

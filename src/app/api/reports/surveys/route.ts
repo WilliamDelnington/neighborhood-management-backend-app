@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin", "neighborhood_leader");
+        await requirePermission(actorUser, "reports.read");
 
         const { searchParams } = new URL(req.url);
         const surveyId = searchParams.get("surveyId");

@@ -4,25 +4,20 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { createHouseholdSchema } from "@/validators/household";
 
 export const dynamic = "force-dynamic";
-import {
-    createHousehold,
-    listHouseholds,
-    HOUSEHOLD_READ_ROLES,
-    HOUSEHOLD_WRITE_ROLES,
-} from "@/services/householdService";
+import { createHousehold, listHouseholds } from "@/services/householdService";
 
 export async function POST(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...HOUSEHOLD_WRITE_ROLES);
+        await requirePermission(user, "households.create");
 
         const body = createHouseholdSchema.parse(await req.json());
-        const household = await createHousehold(String(user._id), body);
+        const household = await createHousehold(user, body);
         return apiSuccess(household, "Tao ho dan thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);
@@ -33,7 +28,7 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, ...HOUSEHOLD_READ_ROLES);
+        await requirePermission(user, "households.read");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

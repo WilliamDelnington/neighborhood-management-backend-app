@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { listUsers } from "@/services/userService";
 import type { Role } from "@/types";
 
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        requireRole(actorUser, "admin");
+        await requirePermission(actorUser, "users.read");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

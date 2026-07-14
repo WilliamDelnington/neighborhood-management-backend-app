@@ -22,6 +22,7 @@ export const updateProfileSchema = z.object({
     displayName: z.string().min(1).optional(),
     phone: z.string().optional(),
     address: z.string().optional(),
+    householdId: z.string().optional(),
     notificationPermission: z.boolean().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
