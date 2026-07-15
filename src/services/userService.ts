@@ -40,7 +40,7 @@ export async function listUsers(params: {
  * danh sach truyen vao - dung cho cac man hinh chon nguoi phu trach (vd. gan phu
  * trach phan anh) ma KHONG can quyen quan ly nguoi dung day du (/api/users la admin-only).
  */
-export async function listAssignableStaff(roles: Role[]) {
+export async function listAssignableStaff(roles: RoleType[]) {
     const users = await User.find({ roles: { $in: roles }, status: "active" })
         .select("displayName")
         .sort({ displayName: 1 });

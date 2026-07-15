@@ -4,7 +4,6 @@ export {
     default as RoleAssignment,
     type IRoleAssignment,
 } from "./RoleAssignment";
-export { default as Role, type IRole } from "./Role";
 export { default as Household, type IHousehold } from "./Household";
 export { default as Citizen, type ICitizen } from "./Citizen";
 export { default as Complaint, type IComplaint } from "./Complaint";

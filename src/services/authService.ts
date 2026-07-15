@@ -4,7 +4,6 @@ import { verifyZaloAccessToken } from "@/lib/zalo";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdMemberCount } from "@/services/citizenService";
-import { HttpError } from "@/lib/response";
 import { loginRateLimiter } from "@/lib/rateLimit";
 import { getUserPermissionSet, getUserAllowedComplaintCategories } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/types";
@@ -228,14 +227,7 @@ export async function revokeSessions(userId: string) {
     return user;
 }
 
-export async function sanitizeUser(user: IUser) {
-    const [permissions, roleLabels, allowedComplaintCategories] =
-        await Promise.all([
-            permissionsForRoles(user.roles),
-            roleLabelMap(),
-            allowedComplaintCategoriesForRoles(user.roles),
-        ]);
-
+export function sanitizeUser(user: IUser) {
     return {
         id: String(user._id),
         zaloUserId: user.zaloUserId,
@@ -246,14 +238,11 @@ export async function sanitizeUser(user: IUser) {
         address: user.address,
         roles: user.roles,
         primaryRole: user.primaryRole,
-        permissions,
-        roleLabels,
         status: user.status,
         householdId: user.householdId ? String(user.householdId) : undefined,
         citizenId: user.citizenId ? String(user.citizenId) : undefined,
         assignedClusters: user.assignedClusters,
         notificationPermission: user.notificationPermission,
-        allowedComplaintCategories,
         createdAt: user.createdAt,
     };
 }
