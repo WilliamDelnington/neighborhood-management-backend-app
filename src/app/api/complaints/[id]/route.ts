@@ -1,7 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession } from "@/lib/rbac";
+import { requireSession, requirePermission } from "@/lib/rbac";
 import {
+    deleteComplaint,
     getComplaintDetailForOwnerOrStaff,
     STAFF_ROLES_FOR_COMPLAINTS,
 } from "@/services/complaintService";
@@ -23,6 +24,21 @@ export async function GET(
             isStaff,
         });
         return apiSuccess(result);
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}
+
+export async function DELETE(
+    req: Request,
+    { params }: { params: { id: string } },
+) {
+    try {
+        await connectDB();
+        const session = requireSession(req);
+        await requirePermission(session, "complaints.delete");
+        await deleteComplaint(session.userId, params.id);
+        return apiSuccess(null, "Xoa phan anh thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
     }

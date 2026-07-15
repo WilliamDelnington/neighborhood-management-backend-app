@@ -1,15 +1,15 @@
-import { RoleAssignment, User } from "@/models";
+import { Role, RoleAssignment, User } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import type { AssignRoleInput, UpdateUserInput } from "@/validators/user";
-import type { Role } from "@/types";
+import type { Role as RoleType } from "@/types";
 
 export async function listUsers(params: {
     page: number;
     limit: number;
     search?: string;
-    role?: Role;
+    role?: RoleType;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.role) filter.roles = params.role;
@@ -27,7 +27,7 @@ export async function listUsers(params: {
         User.countDocuments(filter),
     ]);
     return {
-        items: items.map(sanitizeUser),
+        items: await Promise.all(items.map(sanitizeUser)),
         total,
         page: params.page,
         limit: params.limit,
@@ -38,7 +38,7 @@ export async function listUsers(params: {
 export async function getUserById(id: string) {
     const user = await User.findById(id);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }
 
 export async function updateUserByAdmin(
@@ -63,6 +63,18 @@ export async function updateUserByAdmin(
     }
     if (patch.assignedClusters !== undefined)
         user.assignedClusters = patch.assignedClusters;
+
+    if (patch.primaryRole !== undefined && patch.primaryRole !== user.primaryRole) {
+        if (!user.roles.includes(patch.primaryRole)) {
+            throw new HttpError(
+                "Nguoi dung chua co vai tro nay, khong the dat lam vai tro chinh",
+                400,
+            );
+        }
+        user.primaryRole = patch.primaryRole;
+        user.sessionVersion += 1;
+    }
+
     user.updatedBy = actorId as any;
 
     if (statusChanged && patch.status === "locked") {
@@ -79,12 +91,17 @@ export async function updateUserByAdmin(
         metadata: patch,
     });
 
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }
 
 export async function assignRole(actorId: string, input: AssignRoleInput) {
     const user = await User.findById(input.userId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+
+    const role = await Role.findOne({ key: input.role, active: true });
+    if (!role) {
+        throw new HttpError("Vai tro khong ton tai hoac da bi vo hieu hoa", 404);
+    }
 
     if (!user.roles.includes(input.role)) {
         user.roles.push(input.role);
@@ -109,10 +126,14 @@ export async function assignRole(actorId: string, input: AssignRoleInput) {
         metadata: { role: input.role, scopeType: input.scopeType },
     });
 
-    return { user: sanitizeUser(user), assignment };
+    return { user: await sanitizeUser(user), assignment };
 }
 
-export async function revokeRole(actorId: string, userId: string, role: Role) {
+export async function revokeRole(
+    actorId: string,
+    userId: string,
+    role: RoleType,
+) {
     const user = await User.findById(userId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
 
@@ -135,5 +156,5 @@ export async function revokeRole(actorId: string, userId: string, role: Role) {
         metadata: { role },
     });
 
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }

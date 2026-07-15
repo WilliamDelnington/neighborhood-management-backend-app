@@ -24,7 +24,10 @@ export const ROLES = [
     "people_committee_official",
     "admin",
 ] as const;
-export type Role = typeof ROLES[number];
+// Role la string dong: ROLES/ROLE_LABEL ben duoi la 6 vai tro he thong duoc seed
+// san (xem roleService.ensureSystemRoles), nhung admin co the tao them vai tro tuy
+// chinh qua /api/roles nen kieu Role khong con la union tinh nua.
+export type Role = string;
 
 export const ROLE_LABEL: Record<Role, string> = {
     resident: "Người dân",

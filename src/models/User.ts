@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { ROLES, USER_STATUS, type Role, type UserStatus } from "@/types";
+import { USER_STATUS, type Role, type UserStatus } from "@/types";
 
 export interface IUser extends Document {
     zaloUserId?: string;
@@ -36,8 +36,8 @@ const UserSchema = new Schema<IUser>(
         email: { type: String, trim: true },
         address: { type: String, trim: true },
         passwordHash: { type: String, select: false },
-        roles: { type: [String], enum: ROLES, default: ["resident"] },
-        primaryRole: { type: String, enum: ROLES, default: "resident" },
+        roles: { type: [String], default: ["resident"] },
+        primaryRole: { type: String, default: "resident" },
         status: { type: String, enum: USER_STATUS, default: "active" },
         householdId: { type: Schema.Types.ObjectId, ref: "Household" },
         citizenId: { type: Schema.Types.ObjectId, ref: "Citizen" },

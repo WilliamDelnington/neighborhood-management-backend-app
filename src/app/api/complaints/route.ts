@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireSession, requireRole, requirePermission } from "@/lib/rbac";
 import { createComplaintSchema } from "@/validators/complaint";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const session = requireSession(req);
+        await requirePermission(session, "complaints.create");
         const body = createComplaintSchema.parse(await req.json());
         const complaint = await createComplaint(session.userId, body);
         return apiSuccess(complaint, "Gui phan anh thanh cong", 201);

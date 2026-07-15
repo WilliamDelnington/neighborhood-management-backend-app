@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ROLES, USER_STATUS } from "@/types";
+import { USER_STATUS } from "@/types";
 
 export const updateUserSchema = z.object({
     displayName: z.string().min(1).optional(),
@@ -8,15 +8,22 @@ export const updateUserSchema = z.object({
     householdId: z.string().nullable().optional(),
     citizenId: z.string().nullable().optional(),
     assignedClusters: z.array(z.string()).optional(),
+    primaryRole: z.string().min(1).optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 export const assignRoleSchema = z.object({
     userId: z.string().min(1),
-    role: z.enum(ROLES),
+    role: z.string().min(1),
     scopeType: z
         .enum(["all", "cluster", "household", "complaint", "module"])
         .default("all"),
     scopeValues: z.array(z.string()).default([]),
 });
 export type AssignRoleInput = z.infer<typeof assignRoleSchema>;
+
+export const revokeRoleSchema = z.object({
+    userId: z.string().min(1),
+    role: z.string().min(1),
+});
+export type RevokeRoleInput = z.infer<typeof revokeRoleSchema>;

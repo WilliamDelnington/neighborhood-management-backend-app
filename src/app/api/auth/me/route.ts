@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        return apiSuccess(sanitizeUser(user));
+        return apiSuccess(await sanitizeUser(user));
     } catch (err) {
         return apiErrorFromException(err);
     }

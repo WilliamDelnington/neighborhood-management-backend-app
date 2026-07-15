@@ -10,6 +10,7 @@ import {
     FinanceTransaction,
     type IUser,
 } from "@/models";
+import { clusterScopeFilter } from "@/lib/rbac";
 
 export const DASHBOARD_ROLES = [
     "admin",
@@ -22,12 +23,43 @@ export const DASHBOARD_ROLES = [
 export type DashboardTask = { label: string; count: number; link: string };
 
 /**
+ * To truong chi duoc xem so lieu dan cu/ho dan trong pham vi cum duoc phan cong
+ * (assignedClusters); admin/canh sat khu vuc/can bo UBND van xem tong so toan
+ * to dan pho nhu cu.
+ */
+async function residentScopeFor(
+    actorUser: IUser,
+): Promise<{ householdFilter: Record<string, unknown>; scoped: boolean }> {
+    const isLeaderOnly =
+        !actorUser.roles.includes("admin") &&
+        actorUser.roles.includes("neighborhood_leader");
+    if (!isLeaderOnly) return { householdFilter: {}, scoped: false };
+
+    const scope = clusterScopeFilter(actorUser);
+    if (Object.keys(scope).length === 0) return { householdFilter: {}, scoped: false };
+
+    return { householdFilter: scope, scoped: true };
+}
+
+/**
  * Tong hop toan bo so lieu cho dashboard admin/can bo: dan cu, phan anh, PCCC,
  * cuoc hop sap toi, tai chinh, khao sat, va danh sach viec can xu ly theo vai tro.
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const { householdFilter, scoped: scopedToCluster } =
+        await residentScopeFor(actorUser);
+    const citizenFilter: Record<string, unknown> = {};
+    if (scopedToCluster) {
+        const allowedHouseholds = await Household.find(householdFilter).select(
+            "_id",
+        );
+        citizenFilter.householdId = {
+            $in: allowedHouseholds.map(h => h._id),
+        };
+    }
 
     const [
         totalHouseholds,
@@ -46,10 +78,10 @@ export async function getDashboardSummary(actorUser: IUser) {
         openSurveyDocs,
         urgentSecurityCount,
     ] = await Promise.all([
-        Household.countDocuments({}),
-        Citizen.countDocuments({}),
-        Household.countDocuments({ ownershipType: "cho_thue" }),
-        Household.countDocuments({ needsSupport: true }),
+        Household.countDocuments(householdFilter),
+        Citizen.countDocuments(citizenFilter),
+        Household.countDocuments({ ...householdFilter, ownershipType: "cho_thue" }),
+        Household.countDocuments({ ...householdFilter, needsSupport: true }),
         Complaint.countDocuments({ status: "moi_tiep_nhan" }),
         Complaint.countDocuments({ status: "dang_xu_ly" }),
         PcccCheck.aggregate([
@@ -112,6 +144,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         totalCitizens,
         rentalHouseholds,
         householdsNeedingSupport,
+        scopedToCluster,
         newComplaints,
         inProgressComplaints,
         highRiskPcccCount,
