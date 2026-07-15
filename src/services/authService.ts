@@ -1,6 +1,7 @@
 import { Role as RoleModel, User, Household, Citizen, type IUser } from "@/models";
 import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
 import { verifyZaloAccessToken } from "@/lib/zalo";
+import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdMemberCount } from "@/services/citizenService";
 import { HttpError } from "@/lib/response";
@@ -227,7 +228,14 @@ export async function revokeSessions(userId: string) {
     return user;
 }
 
-export function sanitizeUser(user: IUser) {
+export async function sanitizeUser(user: IUser) {
+    const [permissions, roleLabels, allowedComplaintCategories] =
+        await Promise.all([
+            permissionsForRoles(user.roles),
+            roleLabelMap(),
+            allowedComplaintCategoriesForRoles(user.roles),
+        ]);
+
     return {
         id: String(user._id),
         zaloUserId: user.zaloUserId,
@@ -238,11 +246,14 @@ export function sanitizeUser(user: IUser) {
         address: user.address,
         roles: user.roles,
         primaryRole: user.primaryRole,
+        permissions,
+        roleLabels,
         status: user.status,
         householdId: user.householdId ? String(user.householdId) : undefined,
         citizenId: user.citizenId ? String(user.citizenId) : undefined,
         assignedClusters: user.assignedClusters,
         notificationPermission: user.notificationPermission,
+        allowedComplaintCategories,
         createdAt: user.createdAt,
     };
 }

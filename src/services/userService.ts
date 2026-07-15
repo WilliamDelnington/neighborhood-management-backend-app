@@ -3,13 +3,13 @@ import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import type { AssignRoleInput, UpdateUserInput } from "@/validators/user";
-import type { Role } from "@/types";
+import type { Role as RoleType } from "@/types";
 
 export async function listUsers(params: {
     page: number;
     limit: number;
     search?: string;
-    role?: Role;
+    role?: RoleType;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.role) filter.roles = params.role;
@@ -27,7 +27,7 @@ export async function listUsers(params: {
         User.countDocuments(filter),
     ]);
     return {
-        items: items.map(sanitizeUser),
+        items: await Promise.all(items.map(sanitizeUser)),
         total,
         page: params.page,
         limit: params.limit,
@@ -64,7 +64,7 @@ export async function listNeighborhoods(): Promise<string[]> {
 export async function getUserById(id: string) {
     const user = await User.findById(id);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }
 
 export async function updateUserByAdmin(
@@ -121,7 +121,7 @@ export async function updateUserByAdmin(
         metadata: patch,
     });
 
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }
 
 export async function assignRole(actorId: string, input: AssignRoleInput) {
@@ -157,10 +157,14 @@ export async function assignRole(actorId: string, input: AssignRoleInput) {
         metadata: { role: input.role, scopeType: input.scopeType },
     });
 
-    return { user: sanitizeUser(user), assignment };
+    return { user: await sanitizeUser(user), assignment };
 }
 
-export async function revokeRole(actorId: string, userId: string, role: Role) {
+export async function revokeRole(
+    actorId: string,
+    userId: string,
+    role: RoleType,
+) {
     const user = await User.findById(userId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
 
@@ -183,5 +187,5 @@ export async function revokeRole(actorId: string, userId: string, role: Role) {
         metadata: { role },
     });
 
-    return sanitizeUser(user);
+    return await sanitizeUser(user);
 }

@@ -18,6 +18,18 @@ export const zaloLoginSchema = z.object({
 });
 export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;
 
+export const phoneLoginSchema = z.object({
+    phone: z.string().min(1, "Thieu so dien thoai"),
+    password: z.string().min(1, "Thieu mat khau"),
+});
+export type PhoneLoginInput = z.infer<typeof phoneLoginSchema>;
+
+export const setPasswordSchema = z.object({
+    password: z.string().min(6, "Mat khau phai co it nhat 6 ky tu"),
+    currentPassword: z.string().optional(),
+});
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
+
 export const updateProfileSchema = z.object({
     displayName: z.string().min(1).optional(),
     phone: z.string().optional(),

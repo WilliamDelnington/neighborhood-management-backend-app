@@ -77,6 +77,22 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
         expect(res.status).toBe(200);
     });
 
+    it("can bo (staff) khong co quyen complaints.create khong the gui phan anh", async () => {
+        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        const res = await createComplaintRoute(
+            makeRequest("/api/complaints", {
+                method: "POST",
+                headers: await authHeaders(leader),
+                body: {
+                    category: "ve_sinh_moi_truong",
+                    title: "Rác thải tồn đọng ở ngõ 12",
+                    content: "Rác không được thu gom nhiều ngày nay.",
+                },
+            }),
+        );
+        expect(res.status).toBe(403);
+    });
+
     it("GET /api/complaints/mine chi tra ve phan anh cua nguoi dang dang nhap", async () => {
         const userA = await createTestUser({ roles: ["resident"] });
         const userB = await createTestUser({ roles: ["resident"] });

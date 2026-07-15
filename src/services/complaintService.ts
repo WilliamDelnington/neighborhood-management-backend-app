@@ -213,6 +213,22 @@ export async function updateComplaintStatus(
     return complaint;
 }
 
+export async function deleteComplaint(actorId: string, complaintId: string) {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+
+    await ComplaintTimeline.deleteMany({ complaintId: complaint._id });
+    await complaint.deleteOne();
+
+    await writeAuditLog({
+        actorId,
+        action: "complaint.delete",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+        metadata: { code: complaint.code },
+    });
+}
+
 export async function assignComplaint(
     actorId: string,
     complaintId: string,

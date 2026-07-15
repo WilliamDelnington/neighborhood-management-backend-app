@@ -15,6 +15,25 @@ import { clusterScopeFilter } from "@/lib/rbac";
 export type DashboardTask = { label: string; count: number; link: string };
 
 /**
+ * To truong chi duoc xem so lieu dan cu/ho dan trong pham vi cum duoc phan cong
+ * (assignedClusters); admin/canh sat khu vuc/can bo UBND van xem tong so toan
+ * to dan pho nhu cu.
+ */
+async function residentScopeFor(
+    actorUser: IUser,
+): Promise<{ householdFilter: Record<string, unknown>; scoped: boolean }> {
+    const isLeaderOnly =
+        !actorUser.roles.includes("admin") &&
+        actorUser.roles.includes("neighborhood_leader");
+    if (!isLeaderOnly) return { householdFilter: {}, scoped: false };
+
+    const scope = clusterScopeFilter(actorUser);
+    if (Object.keys(scope).length === 0) return { householdFilter: {}, scoped: false };
+
+    return { householdFilter: scope, scoped: true };
+}
+
+/**
  * Tong hop toan bo so lieu cho dashboard admin/can bo: dan cu, phan anh, PCCC,
  * cuoc hop sap toi, tai chinh, khao sat, va danh sach viec can xu ly theo vai tro.
  * Cac so lieu gan voi ho dan (so ho, nhan khau, PCCC, an ninh) duoc loc theo
@@ -130,6 +149,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         totalCitizens,
         rentalHouseholds,
         householdsNeedingSupport,
+        scopedToCluster,
         newComplaints,
         inProgressComplaints,
         highRiskPcccCount,

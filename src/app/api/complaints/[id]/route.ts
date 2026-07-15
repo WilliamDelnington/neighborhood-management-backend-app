@@ -30,3 +30,18 @@ export async function GET(
         return apiErrorFromException(err);
     }
 }
+
+export async function DELETE(
+    req: Request,
+    { params }: { params: { id: string } },
+) {
+    try {
+        await connectDB();
+        const session = requireSession(req);
+        await requirePermission(session, "complaints.delete");
+        await deleteComplaint(session.userId, params.id);
+        return apiSuccess(null, "Xoa phan anh thanh cong");
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}

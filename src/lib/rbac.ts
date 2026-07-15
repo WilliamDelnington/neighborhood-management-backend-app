@@ -34,6 +34,22 @@ export function requireRole(
 }
 
 /**
+ * Nem HttpError(403) neu khong co vai tro active nao cua session mang permission
+ * nay (permission duoc quan ly dong qua man hinh Vai tro & phan quyen, xem
+ * permissionsForRoles) - dung cho cac thao tac ma quyen han phai theo dung
+ * Role collection thay vi danh sach role code cung.
+ */
+export async function requirePermission(
+    session: SessionTokenPayload,
+    permission: string,
+): Promise<void> {
+    const permissions = await permissionsForRoles(session.roles);
+    if (!permissions.includes(permission)) {
+        throw new HttpError("Ban khong co quyen thuc hien thao tac nay", 403);
+    }
+}
+
+/**
  * Tai ve document User day du (can cho scope filtering: assignedClusters, householdId...).
  * Nem HttpError(401) neu tai khoan khong con ton tai hoac bi khoa.
  */
