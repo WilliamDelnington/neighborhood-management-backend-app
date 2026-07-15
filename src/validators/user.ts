@@ -8,6 +8,8 @@ export const updateUserSchema = z.object({
     householdId: z.string().nullable().optional(),
     citizenId: z.string().nullable().optional(),
     assignedClusters: z.array(z.string()).optional(),
+    // Vai tro la du lieu dong - tinh hop le (ton tai, active) duoc kiem tra
+    // trong updateUserByAdmin, khong con the kiem bang z.enum tinh.
     primaryRole: z.string().min(1).optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

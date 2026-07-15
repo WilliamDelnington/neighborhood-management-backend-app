@@ -6,12 +6,6 @@ import type {
     UpdateFileAssetInput,
 } from "@/validators/fileAsset";
 
-export const STAFF_ROLES_FOR_FILE_ASSETS = [
-    "neighborhood_leader",
-    "secretary",
-    "admin",
-] as const;
-
 // Giai doan dau chi ho tro file dang lien ket (admin dan URL cua file da duoc
 // luu tru san, vd Google Drive). TODO: bo sung storage adapter (S3/GCS...) de
 // ho tro upload nhi phan truc tiep trong tuong lai.

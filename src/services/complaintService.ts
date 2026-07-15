@@ -10,13 +10,6 @@ import type {
     UpdateComplaintStatusInput,
 } from "@/validators/complaint";
 
-export const STAFF_ROLES_FOR_COMPLAINTS = [
-    "neighborhood_leader",
-    "regional_police",
-    "people_committee_official",
-    "admin",
-] as const;
-
 export async function createComplaint(
     userId: string,
     input: CreateComplaintInput,
@@ -60,10 +53,18 @@ export async function listComplaints(params: {
     status?: string;
     category?: string;
     search?: string;
+    allowedCategories?: string[] | null;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.status) filter.status = params.status;
-    if (params.category) filter.category = params.category;
+    if (params.allowedCategories) {
+        const categories = params.category
+            ? params.allowedCategories.filter(c => c === params.category)
+            : params.allowedCategories;
+        filter.category = { $in: categories };
+    } else if (params.category) {
+        filter.category = params.category;
+    }
     if (params.search) {
         filter.$or = [
             { code: { $regex: params.search, $options: "i" } },
@@ -118,7 +119,11 @@ async function getTimelineFor(complaintId: string, publicOnly: boolean) {
 
 export async function getComplaintDetailForOwnerOrStaff(
     complaintId: string,
-    requester: { userId: string; isStaff: boolean },
+    requester: {
+        userId: string;
+        isStaff: boolean;
+        allowedCategories?: string[] | null;
+    },
 ) {
     const complaint = await Complaint.findById(complaintId)
         .populate("createdByUserId", "displayName phone")
@@ -130,6 +135,14 @@ export async function getComplaintDetailForOwnerOrStaff(
         requester.userId;
     if (!requester.isStaff && !isOwner) {
         throw new HttpError("Ban khong co quyen xem phan anh nay", 403);
+    }
+    if (
+        requester.isStaff &&
+        !isOwner &&
+        requester.allowedCategories &&
+        !requester.allowedCategories.includes(complaint.category)
+    ) {
+        throw new HttpError("Ban khong co quyen xem nhom phan anh nay", 403);
     }
 
     const timeline = await getTimelineFor(complaintId, !requester.isStaff);

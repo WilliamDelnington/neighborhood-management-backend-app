@@ -7,8 +7,16 @@ loadEnv();
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
+
+/**
+ * Mat khau dev/test dung chung cho moi tai khoan can bo duoc seed, de dang nhap
+ * vao trang quan tri web rieng (quan-ly-to-dan-pho-hoa-binh-admin) bang so dien
+ * thoai + mat khau thay vi Zalo. CHI dung cho moi truong dev/demo.
+ */
+const SEED_STAFF_PASSWORD = "HoaBinh@2026";
 import {
     User,
+    Role,
     Household,
     Citizen,
     Complaint,
@@ -26,10 +34,13 @@ import {
     NotificationDelivery,
     Setting,
 } from "../src/models";
+import { SYSTEM_ROLE_PERMISSIONS } from "../src/lib/systemRoles";
+import { ROLE_LABEL } from "../src/types";
 
 async function clearDemoData() {
     await Promise.all([
         User.deleteMany({}),
+        Role.deleteMany({}),
         Household.deleteMany({}),
         Citizen.deleteMany({}),
         Complaint.deleteMany({}),
@@ -49,11 +60,35 @@ async function clearDemoData() {
     ]);
 }
 
+async function seedRoles(actorId: string) {
+    const keys = Object.keys(SYSTEM_ROLE_PERMISSIONS);
+    await Role.create(
+        keys.map((key, index) => ({
+            key,
+            name: ROLE_LABEL[key] || key,
+            permissions: SYSTEM_ROLE_PERMISSIONS[key],
+            system: true,
+            active: true,
+            sortOrder: index,
+            createdBy: actorId,
+            updatedBy: actorId,
+        })),
+    );
+}
+
 async function seedUsers() {
+    // Import dong (khong import tinh o dau file) vi @/lib/auth kiem tra bien
+    // moi truong JWT_SECRET ngay khi module duoc load - cac import tinh se bi
+    // hoist len truoc cac loi goi loadEnv() o dau file, khien module nay load
+    // truoc khi .env.local duoc doc va nem loi "Thieu bien moi truong JWT_SECRET".
+    const { hashPassword } = await import("@/lib/auth");
+    const staffPasswordHash = await hashPassword(SEED_STAFF_PASSWORD);
+
     const admin = await User.create({
         zaloUserId: "seed-admin",
         displayName: "Quản trị viên Hòa Bình",
         phone: "0900000001",
+        passwordHash: staffPasswordHash,
         address: "Nhà văn hóa Tổ dân phố Hòa Bình",
         roles: ["admin"],
         primaryRole: "admin",
@@ -65,6 +100,7 @@ async function seedUsers() {
         zaloUserId: "seed-leader",
         displayName: "Nguyễn Văn Tổ Trưởng",
         phone: "0900000002",
+        passwordHash: staffPasswordHash,
         address: "Cụm 1, Tổ dân phố Hòa Bình",
         roles: ["neighborhood_leader"],
         primaryRole: "neighborhood_leader",
@@ -77,6 +113,7 @@ async function seedUsers() {
         zaloUserId: "seed-secretary",
         displayName: "Trần Thị Bí Thư",
         phone: "0900000003",
+        passwordHash: staffPasswordHash,
         roles: ["secretary"],
         primaryRole: "secretary",
         status: "active",
@@ -86,6 +123,7 @@ async function seedUsers() {
         zaloUserId: "seed-police",
         displayName: "Lê Văn Công An",
         phone: "0900000004",
+        passwordHash: staffPasswordHash,
         roles: ["regional_police"],
         primaryRole: "regional_police",
         status: "active",
@@ -95,6 +133,7 @@ async function seedUsers() {
         zaloUserId: "seed-committee",
         displayName: "Phạm Thị Cán Bộ UBND",
         phone: "0900000005",
+        passwordHash: staffPasswordHash,
         roles: ["people_committee_official"],
         primaryRole: "people_committee_official",
         status: "active",
@@ -625,6 +664,28 @@ async function seedSettings(actorId: string) {
             description: "Số điện thoại liên hệ khẩn cấp",
             updatedBy: actorId,
         },
+        {
+            key: "committee_members",
+            value: [
+                { role: "Bí thư Chi bộ", name: "Nguyễn Văn A", phone: "0912345678" },
+                { role: "Tổ trưởng Tổ dân phố", name: "Trần Thị B", phone: "0923456789" },
+                { role: "Tổ phó Tổ dân phố", name: "Lê Văn C", phone: "0934567890" },
+                { role: "Trưởng ban Công tác Mặt trận", name: "Phạm Thị D", phone: "0945678901" },
+            ],
+            description: "Ban công tác Tổ dân phố",
+            updatedBy: actorId,
+        },
+        {
+            key: "community_stats",
+            value: {
+                totalHouseholds: 186,
+                totalResidents: 742,
+                leaderName: "Trần Thị B",
+                termLabel: "2024-2029",
+            },
+            description: "Số liệu thống kê hiển thị ở trang chủ cổng thông tin",
+            updatedBy: actorId,
+        },
     ]);
 }
 
@@ -654,6 +715,9 @@ async function main() {
 
     console.log("Đang tạo tài khoản mẫu cho từng vai trò...");
     const { admin, leader, police, resident } = await seedUsers();
+
+    console.log("Đang tạo 6 vai trò hệ thống...");
+    await seedRoles(String(admin._id));
 
     console.log("Đang tạo hộ dân mẫu...");
     const households = await seedHouseholds(String(admin._id));
@@ -708,6 +772,15 @@ async function main() {
     console.log("  regional_police           -> seed-police");
     console.log("  people_committee_official -> seed-committee");
     console.log("  resident                  -> seed-resident");
+    console.log(
+        "\nDang nhap trang quan tri web (so dien thoai + mat khau, xem @/lib/phone cho dinh dang):",
+    );
+    console.log(`  Mat khau chung cho moi tai khoan can bo: ${SEED_STAFF_PASSWORD}`);
+    console.log("  admin                     -> 0900000001");
+    console.log("  neighborhood_leader       -> 0900000002");
+    console.log("  secretary                 -> 0900000003");
+    console.log("  regional_police           -> 0900000004");
+    console.log("  people_committee_official -> 0900000005");
 
     await mongoose.connection.close();
     process.exit(0);

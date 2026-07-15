@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { revokeSessions } from "@/services/authService";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -12,11 +12,11 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "users.update");
         await revokeSessions(params.id);
         await writeAuditLog({
-            actorId: session.userId,
+            actorId: actorUser._id,
             action: "user.revoke_session",
             targetModel: "User",
             targetId: params.id,

@@ -1,7 +1,38 @@
-import { User, type IUser } from "@/models";
+import { Role as RoleModel, User, type IUser } from "@/models";
+import { SYSTEM_ROLE_PERMISSIONS } from "@/lib/systemRoles";
 import type { Role } from "@/types";
 
 let counter = 0;
+
+/**
+ * Dam bao Role doc ton tai cho moi key he thong duoc dung trong test, voi
+ * permission giong scripts/seed.ts (dung chung SYSTEM_ROLE_PERMISSIONS) - de
+ * cac bai test goi createTestUser({roles:["admin"]}) roi goi API duoc
+ * requirePermission bao ve van hoat dong nhu truoc khi co permission dong,
+ * ma khong phai tu tao Role thu cong trong tung test. Bo qua cac role key
+ * khong nam trong danh sach he thong (test tu chiu trach nhiem seed Role rieng
+ * neu can mot custom role).
+ */
+async function ensureSystemRoleDocs(roleKeys: Role[]): Promise<void> {
+    const systemKeys = roleKeys.filter(key => key in SYSTEM_ROLE_PERMISSIONS);
+    await Promise.all(
+        systemKeys.map(key =>
+            RoleModel.findOneAndUpdate(
+                { key },
+                {
+                    $setOnInsert: {
+                        key,
+                        name: key,
+                        permissions: SYSTEM_ROLE_PERMISSIONS[key],
+                        system: true,
+                        active: true,
+                    },
+                },
+                { upsert: true },
+            ),
+        ),
+    );
+}
 
 /**
  * Tao mot User trong DB test voi vai tro chi dinh, dung cho cac bai test API/service
@@ -12,6 +43,7 @@ export async function createTestUser(
 ): Promise<IUser> {
     counter += 1;
     const primaryRole = overrides.primaryRole || overrides.roles[0];
+    await ensureSystemRoleDocs(overrides.roles);
     return User.create({
         zaloUserId: `test-user-${counter}`,
         displayName: `Test User ${counter}`,

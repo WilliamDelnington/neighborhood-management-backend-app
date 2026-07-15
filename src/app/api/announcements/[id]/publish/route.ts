@@ -1,10 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
-import {
-    publishAnnouncement,
-    STAFF_ROLES_FOR_ANNOUNCEMENTS,
-} from "@/services/announcementService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { publishAnnouncement } from "@/services/announcementService";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +11,10 @@ export async function POST(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "announcements.publish");
         const announcement = await publishAnnouncement(
-            session.userId,
+            String(actorUser._id),
             params.id,
         );
         return apiSuccess(announcement, "Dang thong bao thanh cong");

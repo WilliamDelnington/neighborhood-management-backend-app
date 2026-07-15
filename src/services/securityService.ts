@@ -10,18 +10,6 @@ import type {
     UpdateSecurityRecordInput,
 } from "@/validators/security";
 
-export const SECURITY_WRITE_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-] as const;
-export const SECURITY_READ_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "regional_police",
-    "people_committee_official",
-] as const;
-
 const UPDATABLE_BOOLEAN_FIELDS = [
     "temporaryResidenceDeclared",
     "hasCamera",
@@ -128,6 +116,28 @@ export async function getSecurityRecordById(id: string) {
         .populate("updatedBy", "displayName");
     if (!record) throw new HttpError("Khong tim thay ho so an ninh", 404);
     return record;
+}
+
+/**
+ * Kiem tra quyen truy cap ho so an ninh theo cum dan cu cua ho khau lien quan.
+ * Nem HttpError(403) neu user khong phai admin va cum cua ho khong nam trong assignedClusters.
+ */
+export function assertSecurityRecordInScope(
+    user: IUser,
+    record: { householdId: unknown },
+): void {
+    if (user.roles.includes("admin")) return;
+    if (!user.assignedClusters?.length) return;
+    const household = record.householdId as {
+        cluster?: string;
+    } | null;
+    const cluster = household && typeof household === "object" ? household.cluster : undefined;
+    if (cluster && !user.assignedClusters.includes(cluster)) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi ho so ngoai cum duoc phan cong",
+            403,
+        );
+    }
 }
 
 export async function updateSecurityRecord(

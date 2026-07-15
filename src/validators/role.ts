@@ -1,45 +1,42 @@
 import { z } from "zod";
+import { isValidPermissionKey } from "@/lib/permissionRegistry";
 import { NHOM_PHAN_ANH } from "@/types";
-import { ALL_PERMISSION_KEYS } from "@/config/permissions";
 
-const ROLE_KEY_REGEX = /^[a-z][a-z0-9_]{1,49}$/;
+const permissionsField = z
+    .array(z.string())
+    .default([])
+    .refine(
+        permissions => permissions.every(isValidPermissionKey),
+        "Danh sach permission chua key khong hop le",
+    );
 
-const validPermissionList = (perms: string[]) =>
-    perms.every(p => ALL_PERMISSION_KEYS.has(p));
-
-const allowedComplaintCategoriesSchema = z
-    .array(z.enum(NHOM_PHAN_ANH))
-    .nullable()
-    .optional();
+const complaintCategoriesField = z.array(z.enum(NHOM_PHAN_ANH));
 
 export const createRoleSchema = z.object({
     key: z
         .string()
+        .min(2, "Key qua ngan")
         .regex(
-            ROLE_KEY_REGEX,
-            "Key chi gom chu thuong, so, gach duoi, bat dau bang chu cai",
+            /^[a-z][a-z0-9_]*$/,
+            "Key chi gom chu thuong, so va gach duoi, bat dau bang chu",
         ),
     name: z.string().min(1, "Thieu ten vai tro"),
     description: z.string().optional(),
-    permissions: z
-        .array(z.string())
-        .default([])
-        .refine(validPermissionList, "Danh sach permissions co gia tri khong hop le"),
-    allowedComplaintCategories: allowedComplaintCategoriesSchema,
+    permissions: permissionsField,
+    // Bo trong = khong gioi han (xem tat ca nhom phan anh).
+    allowedComplaintCategories: complaintCategoriesField.optional(),
     active: z.boolean().default(true),
-    sortOrder: z.number().int().default(0),
+    sortOrder: z.number().default(0),
 });
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 
 export const updateRoleSchema = z.object({
-    name: z.string().min(1).optional(),
+    name: z.string().min(1, "Thieu ten vai tro").optional(),
     description: z.string().optional(),
-    permissions: z
-        .array(z.string())
-        .refine(validPermissionList, "Danh sach permissions co gia tri khong hop le")
-        .optional(),
-    allowedComplaintCategories: allowedComplaintCategoriesSchema,
+    permissions: permissionsField.optional(),
+    // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
+    allowedComplaintCategories: complaintCategoriesField.nullable().optional(),
     active: z.boolean().optional(),
-    sortOrder: z.number().int().optional(),
+    sortOrder: z.number().optional(),
 });
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;

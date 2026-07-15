@@ -1,11 +1,11 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requirePermission } from "@/lib/rbac";
 import {
-    deleteComplaint,
-    getComplaintDetailForOwnerOrStaff,
-    STAFF_ROLES_FOR_COMPLAINTS,
-} from "@/services/complaintService";
+    requireUser,
+    userHasPermission,
+    getUserAllowedComplaintCategories,
+} from "@/lib/rbac";
+import { getComplaintDetailForOwnerOrStaff } from "@/services/complaintService";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +15,15 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        const isStaff = session.roles.some(r =>
-            (STAFF_ROLES_FOR_COMPLAINTS as readonly string[]).includes(r),
-        );
+        const actorUser = await requireUser(req);
+        const isStaff = await userHasPermission(actorUser, "complaints.read");
+        const allowedCategories = isStaff
+            ? await getUserAllowedComplaintCategories(actorUser)
+            : null;
         const result = await getComplaintDetailForOwnerOrStaff(params.id, {
-            userId: session.userId,
+            userId: String(actorUser._id),
             isStaff,
+            allowedCategories,
         });
         return apiSuccess(result);
     } catch (err) {

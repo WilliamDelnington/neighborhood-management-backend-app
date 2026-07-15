@@ -4,23 +4,17 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireRole, requireSession, requireUser } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { createPcccCheckSchema } from "@/validators/pccc";
 
 export const dynamic = "force-dynamic";
-import {
-    createPcccCheck,
-    listPcccChecks,
-    PCCC_READ_ROLES,
-    PCCC_WRITE_ROLES,
-} from "@/services/pcccService";
+import { createPcccCheck, listPcccChecks } from "@/services/pcccService";
 
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...PCCC_WRITE_ROLES);
         const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "pccc.create");
         const body = createPcccCheckSchema.parse(await req.json());
         const check = await createPcccCheck(actorUser, body);
         return apiSuccess(check, "Tao bien ban kiem tra PCCC thanh cong", 201);
@@ -32,9 +26,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...PCCC_READ_ROLES);
         const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "pccc.read");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

@@ -7,12 +7,6 @@ import type {
     UpdateAnnouncementInput,
 } from "@/validators/announcement";
 
-export const STAFF_ROLES_FOR_ANNOUNCEMENTS = [
-    "neighborhood_leader",
-    "secretary",
-    "admin",
-] as const;
-
 export async function createAnnouncement(
     actorId: string,
     input: CreateAnnouncementInput,

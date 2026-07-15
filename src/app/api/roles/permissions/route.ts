@@ -1,14 +1,17 @@
+import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
-import { getPermissionRegistry } from "@/services/roleService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { MODULE_PERMISSION_REGISTRY } from "@/lib/permissionRegistry";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
     try {
-        const session = requireSession(req);
-        requireRole(session, "admin");
-        return apiSuccess(getPermissionRegistry());
+        await connectDB();
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "roles.read");
+
+        return apiSuccess(MODULE_PERMISSION_REGISTRY);
     } catch (err) {
         return apiErrorFromException(err);
     }

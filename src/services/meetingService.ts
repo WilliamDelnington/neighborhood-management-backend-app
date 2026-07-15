@@ -8,12 +8,6 @@ import type {
     UpdateMeetingInput,
 } from "@/validators/meeting";
 
-export const STAFF_ROLES_FOR_MEETINGS = [
-    "neighborhood_leader",
-    "secretary",
-    "admin",
-] as const;
-
 async function notifyMeetingPublished(actorId: string, meeting: IMeeting) {
     // Chua co co che phan cum/vai tro rieng cho cuoc hop nen thong bao rong toi
     // toan bo cu dan (resident); co the thu hep theo targetClusters khi co nhu cau.

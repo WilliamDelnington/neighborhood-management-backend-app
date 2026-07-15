@@ -11,8 +11,6 @@ import {
     type LoaiSoHuu,
 } from "@/types";
 
-export const IMPORT_ROLES = ["admin", "neighborhood_leader"] as const;
-
 // ---------------------------------------------------------------------------
 // Dinh dang cot Excel mong doi (hang dau tien cua sheet dau tien la header).
 //

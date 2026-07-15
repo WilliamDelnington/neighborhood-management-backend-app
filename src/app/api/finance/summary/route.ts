@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { getFinanceSummary } from "@/services/financeService";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "finance.read");
 
         const { searchParams } = new URL(req.url);
         const summary = await getFinanceSummary({

@@ -4,15 +4,11 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { createMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
-import {
-    createMeeting,
-    listMeetings,
-    STAFF_ROLES_FOR_MEETINGS,
-} from "@/services/meetingService";
+import { createMeeting, listMeetings } from "@/services/meetingService";
 
 export async function GET(req: Request) {
     try {
@@ -33,10 +29,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_MEETINGS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "meetings.create");
         const body = createMeetingSchema.parse(await req.json());
-        const meeting = await createMeeting(session.userId, body);
+        const meeting = await createMeeting(String(actorUser._id), body);
         return apiSuccess(meeting, "Tao cuoc hop thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

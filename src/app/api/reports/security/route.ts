@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
+        const actorUser = await requireUser(req);
         // Bao cao an ninh/tam tru lien quan truc tiep den nghiep vu cua cong an khu vuc.
-        requireRole(session, "admin", "neighborhood_leader", "regional_police");
+        await requirePermission(actorUser, "reports.read");
 
         const data = await getSecurityReport();
 
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
         if (searchParams.get("format") === "excel") {
             const workbook = buildSecurityReportWorkbook(data);
             await writeAuditLog({
-                actorId: session.userId,
+                actorId: String(actorUser._id),
                 action: "report.export",
                 targetModel: "Report",
                 metadata: { report: "security" },

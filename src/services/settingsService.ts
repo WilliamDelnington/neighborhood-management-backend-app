@@ -9,6 +9,8 @@ const PUBLIC_SETTING_KEYS = [
     "app_identity",
     "emergency_contacts",
     "oa_info",
+    "committee_members",
+    "community_stats",
 ] as const;
 
 // Luu y: co tinh khong lam endpoint reset/wipe du lieu he thong o day. Day la

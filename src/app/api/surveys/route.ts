@@ -4,7 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { createSurveySchema } from "@/validators/survey";
 import { createSurvey, listSurveys } from "@/services/surveyService";
 
@@ -34,10 +34,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin", "secretary");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "surveys.create");
         const body = createSurveySchema.parse(await req.json());
-        const survey = await createSurvey(session.userId, body);
+        const survey = await createSurvey(String(actorUser._id), body);
         return apiSuccess(survey, "Tao khao sat thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

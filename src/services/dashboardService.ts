@@ -12,14 +12,6 @@ import {
 } from "@/models";
 import { clusterScopeFilter } from "@/lib/rbac";
 
-export const DASHBOARD_ROLES = [
-    "admin",
-    "neighborhood_leader",
-    "secretary",
-    "regional_police",
-    "people_committee_official",
-] as const;
-
 export type DashboardTask = { label: string; count: number; link: string };
 
 /**
@@ -44,22 +36,27 @@ async function residentScopeFor(
 /**
  * Tong hop toan bo so lieu cho dashboard admin/can bo: dan cu, phan anh, PCCC,
  * cuoc hop sap toi, tai chinh, khao sat, va danh sach viec can xu ly theo vai tro.
+ * Cac so lieu gan voi ho dan (so ho, nhan khau, PCCC, an ninh) duoc loc theo
+ * cum dan cu duoc phan cong (clusterScopeFilter) - to truong chi thay so lieu
+ * trong pham vi cum cua minh, giong nhu danh sach ho dan/nhan khau. Cuoc hop,
+ * tai chinh, khao sat van la du lieu chung toan to nen khong loc theo cum.
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const { householdFilter, scoped: scopedToCluster } =
-        await residentScopeFor(actorUser);
-    const citizenFilter: Record<string, unknown> = {};
-    if (scopedToCluster) {
-        const allowedHouseholds = await Household.find(householdFilter).select(
-            "_id",
-        );
-        citizenFilter.householdId = {
-            $in: allowedHouseholds.map(h => h._id),
-        };
-    }
+    const householdScope = clusterScopeFilter(actorUser);
+    const isClusterScoped = Object.keys(householdScope).length > 0;
+    const scopedHouseholdIds = isClusterScoped
+        ? (await Household.find(householdScope).select("_id")).map(h => h._id)
+        : undefined;
+
+    const householdFilter: Record<string, unknown> = isClusterScoped
+        ? { _id: { $in: scopedHouseholdIds } }
+        : {};
+    const citizenFilter: Record<string, unknown> = isClusterScoped
+        ? { householdId: { $in: scopedHouseholdIds } }
+        : {};
 
     const [
         totalHouseholds,
@@ -85,6 +82,9 @@ export async function getDashboardSummary(actorUser: IUser) {
         Complaint.countDocuments({ status: "moi_tiep_nhan" }),
         Complaint.countDocuments({ status: "dang_xu_ly" }),
         PcccCheck.aggregate([
+            ...(isClusterScoped
+                ? [{ $match: { householdId: { $in: scopedHouseholdIds } } }]
+                : []),
             { $sort: { inspectionDate: -1 } },
             {
                 $group: {
@@ -116,7 +116,12 @@ export async function getDashboardSummary(actorUser: IUser) {
         ]) as Promise<any[]>,
         Survey.countDocuments({ status: "dang_mo" }),
         Survey.find({ status: "dang_mo" }).select("_id"),
-        SecurityRecord.countDocuments({ level: "khan_cap" }),
+        SecurityRecord.countDocuments({
+            level: "khan_cap",
+            ...(isClusterScoped
+                ? { householdId: { $in: scopedHouseholdIds } }
+                : {}),
+        }),
     ]);
 
     const openSurveyIds = openSurveyDocs.map(s => s._id);
@@ -198,14 +203,14 @@ async function buildTaskList(
             tasks.push({
                 label: "Phản ánh cần tiếp nhận / xử lý",
                 count: pendingComplaints,
-                link: "/api/complaints?status=moi_tiep_nhan",
+                link: "/admin/complaints",
             });
         }
         if (ctx.highRiskPcccCount > 0) {
             tasks.push({
                 label: "Hộ có nguy cơ PCCC mức Đỏ cần kiểm tra lại",
                 count: ctx.highRiskPcccCount,
-                link: "/api/pccc?riskLevel=do",
+                link: "/admin/pccc?riskLevel=do",
             });
         }
     }
@@ -215,7 +220,7 @@ async function buildTaskList(
             tasks.push({
                 label: "Hồ sơ an ninh mức Khẩn cấp cần xử lý",
                 count: ctx.urgentSecurityCount,
-                link: "/api/security-records?level=khan_cap",
+                link: "/admin/security?level=khan_cap",
             });
         }
     }
@@ -225,14 +230,14 @@ async function buildTaskList(
             tasks.push({
                 label: "Phản ánh mới tiếp nhận",
                 count: ctx.newComplaints,
-                link: "/api/complaints?status=moi_tiep_nhan",
+                link: "/admin/complaints?status=moi_tiep_nhan",
             });
         }
         if (ctx.inProgressComplaints > 0) {
             tasks.push({
                 label: "Phản ánh đang xử lý",
                 count: ctx.inProgressComplaints,
-                link: "/api/complaints?status=dang_xu_ly",
+                link: "/admin/complaints?status=dang_xu_ly",
             });
         }
     }

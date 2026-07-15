@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireRole, requireSession } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { getHouseholdRiskSummary } from "@/services/pcccService";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin", "neighborhood_leader");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "pccc.read");
         const summary = await getHouseholdRiskSummary();
         return apiSuccess(summary);
     } catch (err) {

@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole, requireUser } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateCitizenSchema } from "@/validators/citizen";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,6 @@ import {
     getCitizenById,
     updateCitizen,
     deleteCitizen,
-    CITIZEN_READ_ROLES,
-    CITIZEN_WRITE_ROLES,
 } from "@/services/citizenService";
 import {
     assertHouseholdInScope,
@@ -40,9 +38,8 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_READ_ROLES);
         const user = await requireUser(req);
+        await requirePermission(user, "citizens.read");
 
         const citizen = await getCitizenById(params.id);
         await assertCitizenInScope(user, citizen);
@@ -59,9 +56,8 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_WRITE_ROLES);
         const user = await requireUser(req);
+        await requirePermission(user, "citizens.update");
 
         const existing = await getCitizenById(params.id);
         await assertCitizenInScope(user, existing);
@@ -80,9 +76,8 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...CITIZEN_WRITE_ROLES);
         const user = await requireUser(req);
+        await requirePermission(user, "citizens.delete");
 
         const existing = await getCitizenById(params.id);
         await assertCitizenInScope(user, existing);

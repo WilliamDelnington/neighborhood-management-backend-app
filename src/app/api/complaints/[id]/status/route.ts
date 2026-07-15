@@ -1,11 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateComplaintStatusSchema } from "@/validators/complaint";
-import {
-    updateComplaintStatus,
-    STAFF_ROLES_FOR_COMPLAINTS,
-} from "@/services/complaintService";
+import { updateComplaintStatus } from "@/services/complaintService";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +12,11 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_COMPLAINTS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "complaints.update_status");
         const body = updateComplaintStatusSchema.parse(await req.json());
         const complaint = await updateComplaintStatus(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );

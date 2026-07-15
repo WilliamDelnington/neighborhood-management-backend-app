@@ -1,13 +1,12 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
 import {
     deleteMeeting,
     getMeetingById,
-    STAFF_ROLES_FOR_MEETINGS,
     updateMeeting,
 } from "@/services/meetingService";
 
@@ -30,10 +29,14 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_MEETINGS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "meetings.update");
         const body = updateMeetingSchema.parse(await req.json());
-        const meeting = await updateMeeting(session.userId, params.id, body);
+        const meeting = await updateMeeting(
+            String(actorUser._id),
+            params.id,
+            body,
+        );
         return apiSuccess(meeting, "Cap nhat cuoc hop thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
@@ -46,9 +49,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_MEETINGS);
-        await deleteMeeting(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "meetings.update");
+        await deleteMeeting(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa cuoc hop thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

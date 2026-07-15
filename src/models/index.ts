@@ -1,4 +1,5 @@
 export { default as User, type IUser } from "./User";
+export { default as Role, type IRole } from "./Role";
 export {
     default as RoleAssignment,
     type IRoleAssignment,

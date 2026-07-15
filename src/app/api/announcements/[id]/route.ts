@@ -1,13 +1,12 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
 import { updateAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
 import {
     deleteAnnouncement,
     getAnnouncementById,
-    STAFF_ROLES_FOR_ANNOUNCEMENTS,
     updateAnnouncement,
 } from "@/services/announcementService";
 
@@ -23,12 +22,8 @@ export async function GET(
         await connectDB();
         let isStaff = false;
         try {
-            const session = requireSession(req);
-            isStaff = session.roles.some(r =>
-                (STAFF_ROLES_FOR_ANNOUNCEMENTS as readonly string[]).includes(
-                    r,
-                ),
-            );
+            const actorUser = await requireUser(req);
+            isStaff = await userHasPermission(actorUser, "announcements.read");
         } catch {
             isStaff = false;
         }
@@ -45,11 +40,11 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "announcements.update");
         const body = updateAnnouncementSchema.parse(await req.json());
         const announcement = await updateAnnouncement(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );
@@ -65,9 +60,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_ANNOUNCEMENTS);
-        await deleteAnnouncement(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "announcements.update");
+        await deleteAnnouncement(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa thong bao thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

@@ -1,12 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
-import {
-    getRoleById,
-    updateRoleById,
-    deleteRoleById,
-} from "@/services/roleService";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateRoleSchema } from "@/validators/role";
+import { deleteRole, getRoleById, updateRole } from "@/services/roleService";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +12,9 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "roles.read");
+
         const role = await getRoleById(params.id);
         return apiSuccess(role);
     } catch (err) {
@@ -31,11 +28,12 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "roles.update");
+
         const body = updateRoleSchema.parse(await req.json());
-        const role = await updateRoleById(session.userId, params.id, body);
-        return apiSuccess(role, "Cap nhat vai tro thanh cong");
+        const role = await updateRole(String(actorUser._id), params.id, body);
+        return apiSuccess(role, "Cập nhật vai trò thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -47,10 +45,11 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin");
-        const result = await deleteRoleById(session.userId, params.id);
-        return apiSuccess(result, "Xoa vai tro thanh cong");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "roles.delete");
+
+        const result = await deleteRole(String(actorUser._id), params.id);
+        return apiSuccess(result, "Xóa vai trò thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

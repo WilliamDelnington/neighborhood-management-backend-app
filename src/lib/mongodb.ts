@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import dns from "dns";
 
 type MongooseCache = {
     conn: typeof mongoose | null;
@@ -17,6 +18,16 @@ const cache: MongooseCache = global._hoaBinhMongooseCache || {
 
 global._hoaBinhMongooseCache = cache;
 
+const MONGODB_DNS_SERVERS = process.env.MONGODB_DNS_SERVERS;
+
+if (MONGODB_DNS_SERVERS) {
+    dns.setServers(
+        MONGODB_DNS_SERVERS.split(",")
+            .map(server => server.trim())
+            .filter(Boolean),
+    );
+}
+
 export async function connectDB(): Promise<typeof mongoose> {
     if (cache.conn) {
         return cache.conn;
@@ -33,6 +44,11 @@ export async function connectDB(): Promise<typeof mongoose> {
         });
     }
 
-    cache.conn = await cache.promise;
-    return cache.conn;
+    try {
+        cache.conn = await cache.promise;
+        return cache.conn;
+    } catch (error) {
+        cache.promise = null;
+        throw error;
+    }
 }

@@ -8,12 +8,6 @@ import type {
     UpdateSurveyInput,
 } from "@/validators/survey";
 
-export const STAFF_ROLES_FOR_SURVEYS = [
-    "neighborhood_leader",
-    "secretary",
-    "admin",
-] as const;
-
 export async function createSurvey(actorId: string, input: CreateSurveyInput) {
     const survey = await Survey.create({
         title: input.title,

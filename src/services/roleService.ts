@@ -1,125 +1,96 @@
-import { Role, User, type IRole } from "@/models";
+import { Role, RoleAssignment, User } from "@/models";
+import type { IRole } from "@/models/Role";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
-import { PERMISSION_REGISTRY, SEED_ROLE_PERMISSIONS } from "@/config/permissions";
-import { ROLE_LABEL } from "@/types";
 import type { CreateRoleInput, UpdateRoleInput } from "@/validators/role";
 
 /**
- * Upsert 6 vai tro he thong (idempotent, $setOnInsert nen khong ghi de chinh sua cua
- * admin). Goi lai moi lan thay vi cache mot lan duy nhat, vi collection Role co the
- * bi xoa trong test (afterEach don du lieu) - tu phuc hoi thay vi dua vao co bien nho.
+ * Dam bao van con it nhat mot user active co quyen quan ly vai tro (permission
+ * "roles.manage") SAU KHI thay doi duoc ap dung. Goi truoc khi luu thay doi co
+ * the lam mat quyen roles.manage cuoi cung (deactivate/xoa role, go permission
+ * roles.manage khoi role). excludeRoleId la role dang duoc sua/xoa - permission
+ * cua no khong con hieu luc nen phai loai khoi tap hop "role con lai".
  */
-export async function ensureSystemRoles(): Promise<void> {
-    const keys = Object.keys(SEED_ROLE_PERMISSIONS);
-    await Role.bulkWrite(
-        keys.map((key, index) => ({
-            updateOne: {
-                filter: { key },
-                update: {
-                    $setOnInsert: {
-                        key,
-                        name: ROLE_LABEL[key] || key,
-                        permissions: SEED_ROLE_PERMISSIONS[key],
-                        system: true,
-                        active: true,
-                        sortOrder: index,
-                        allowedComplaintCategories: null,
-                    },
-                },
-                upsert: true,
-            },
-        })),
-        { ordered: false },
-    );
-}
+async function assertRoleManagementNotLocked(excludeRoleId?: string): Promise<void> {
+    const managingRoles = await Role.find({
+        active: true,
+        permissions: "roles.manage",
+        ...(excludeRoleId ? { _id: { $ne: excludeRoleId } } : {}),
+    }).select("key");
+    const keys = managingRoles.map(r => r.key);
 
-function toRecord(role: IRole, assignedUserCount: number) {
-    return {
-        _id: String(role._id),
-        key: role.key,
-        name: role.name,
-        description: role.description,
-        permissions: role.permissions,
-        allowedComplaintCategories: role.allowedComplaintCategories ?? null,
-        system: role.system,
-        active: role.active,
-        sortOrder: role.sortOrder,
-        assignedUserCount,
-        createdAt: role.createdAt,
-        updatedAt: role.updatedAt,
-    };
-}
+    const count = await User.countDocuments({
+        status: "active",
+        $or: [{ roles: { $in: keys } }, { permissions: "roles.manage" }],
+    });
 
-export function getPermissionRegistry() {
-    return PERMISSION_REGISTRY;
+    if (count === 0) {
+        throw new HttpError(
+            "Không thể thực hiện: sẽ không còn ai có quyền quản lý vai trò",
+            409,
+        );
+    }
 }
 
 export async function listRoles(params: {
-    page: number;
-    limit: number;
     search?: string;
     active?: boolean;
-}) {
-    await ensureSystemRoles();
-
+    page?: number;
+    limit?: number;
+} = {}) {
     const filter: Record<string, unknown> = {};
     if (params.active !== undefined) filter.active = params.active;
     if (params.search) {
         filter.$or = [
-            { name: { $regex: params.search, $options: "i" } },
             { key: { $regex: params.search, $options: "i" } },
+            { name: { $regex: params.search, $options: "i" } },
         ];
     }
+    const page = params.page || 1;
+    const limit = params.limit || 20;
 
-    const [roles, total] = await Promise.all([
+    const [roles, total, counts] = await Promise.all([
         Role.find(filter)
             .sort({ sortOrder: 1, name: 1 })
-            .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
+            .skip((page - 1) * limit)
+            .limit(limit),
         Role.countDocuments(filter),
+        // Dem so nguoi dung theo tung role key tren TOAN BO du lieu (khong
+        // theo trang hien tai), vi day la thong ke tong the cua moi role.
+        User.aggregate<{ _id: string; count: number }>([
+            { $unwind: "$roles" },
+            { $group: { _id: "$roles", count: { $sum: 1 } } },
+        ]),
     ]);
-    const counts = await Promise.all(
-        roles.map(r => User.countDocuments({ roles: r.key })),
-    );
+    const countByKey = new Map(counts.map(c => [c._id, c.count]));
 
     return {
-        items: roles.map((r, i) => toRecord(r, counts[i])),
+        items: roles.map(role => ({
+            ...role.toObject(),
+            assignedUserCount: countByKey.get(role.key) || 0,
+        })),
         total,
-        page: params.page,
-        limit: params.limit,
-        totalPages: Math.max(1, Math.ceil(total / params.limit)),
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
     };
 }
 
-export async function getRoleById(id: string) {
-    await ensureSystemRoles();
+export async function getRoleById(id: string): Promise<IRole> {
     const role = await Role.findById(id);
-    if (!role) throw new HttpError("Khong tim thay vai tro", 404);
-    const assignedUserCount = await User.countDocuments({ roles: role.key });
-    return toRecord(role, assignedUserCount);
-}
-
-export async function findActiveRoleByKey(key: string) {
-    await ensureSystemRoles();
-    return Role.findOne({ key, active: true });
+    if (!role) throw new HttpError("Không tìm thấy vai trò", 404);
+    return role;
 }
 
 export async function createRole(actorId: string, input: CreateRoleInput) {
-    await ensureSystemRoles();
-
     const existing = await Role.findOne({ key: input.key });
-    if (existing) throw new HttpError("Key vai tro da ton tai", 409);
+    if (existing) throw new HttpError("Key vai trò đã được sử dụng", 409);
 
     const role = await Role.create({
-        key: input.key,
-        name: input.name,
-        description: input.description,
-        permissions: input.permissions,
-        allowedComplaintCategories: input.allowedComplaintCategories ?? null,
-        active: input.active,
-        sortOrder: input.sortOrder,
+        ...input,
         system: false,
+        createdBy: actorId,
+        updatedBy: actorId,
     });
 
     await writeAuditLog({
@@ -127,58 +98,84 @@ export async function createRole(actorId: string, input: CreateRoleInput) {
         action: "role.create",
         targetModel: "Role",
         targetId: role._id,
-        metadata: { key: role.key },
+        metadata: { key: role.key, permissions: role.permissions },
     });
 
-    return toRecord(role, 0);
+    return role;
 }
 
-export async function updateRoleById(
+export async function updateRole(
     actorId: string,
     id: string,
-    patch: UpdateRoleInput,
+    input: UpdateRoleInput,
 ) {
-    const role = await Role.findById(id);
-    if (!role) throw new HttpError("Khong tim thay vai tro", 404);
+    const role = await getRoleById(id);
 
-    if (patch.name !== undefined) role.name = patch.name;
-    if (patch.description !== undefined) role.description = patch.description;
-    if (patch.permissions !== undefined) role.permissions = patch.permissions;
-    if (patch.allowedComplaintCategories !== undefined) {
-        role.allowedComplaintCategories = patch.allowedComplaintCategories;
+    const grantsManageNow = role.active && role.permissions.includes("roles.manage");
+    const willGrantManage =
+        (input.active ?? role.active) &&
+        (input.permissions ?? role.permissions).includes("roles.manage");
+    if (grantsManageNow && !willGrantManage) {
+        await assertRoleManagementNotLocked(String(role._id));
     }
-    if (patch.active !== undefined) role.active = patch.active;
-    if (patch.sortOrder !== undefined) role.sortOrder = patch.sortOrder;
+
+    const permissionsChanged =
+        input.permissions !== undefined &&
+        JSON.stringify([...input.permissions].sort()) !==
+            JSON.stringify([...role.permissions].sort());
+
+    if (input.name !== undefined) role.name = input.name;
+    if (input.description !== undefined) role.description = input.description;
+    if (input.permissions !== undefined) role.permissions = input.permissions;
+    if (input.allowedComplaintCategories !== undefined) {
+        role.allowedComplaintCategories =
+            input.allowedComplaintCategories === null
+                ? undefined
+                : input.allowedComplaintCategories;
+    }
+    if (input.active !== undefined) role.active = input.active;
+    if (input.sortOrder !== undefined) role.sortOrder = input.sortOrder;
+    role.updatedBy = actorId as any;
     await role.save();
 
     await writeAuditLog({
         actorId,
-        action: "role.update",
+        action: permissionsChanged ? "role.permissions.update" : "role.update",
         targetModel: "Role",
         targetId: role._id,
-        metadata: patch,
+        metadata: { key: role.key, permissions: role.permissions, active: role.active },
     });
 
-    const assignedUserCount = await User.countDocuments({ roles: role.key });
-    return toRecord(role, assignedUserCount);
+    return role;
 }
 
-export async function deleteRoleById(actorId: string, id: string) {
-    const role = await Role.findById(id);
-    if (!role) throw new HttpError("Khong tim thay vai tro", 404);
+export async function deleteRole(actorId: string, id: string) {
+    const role = await getRoleById(id);
+
     if (role.system) {
-        throw new HttpError("Khong the xoa vai tro he thong", 400);
+        throw new HttpError(
+            "Vai trò hệ thống không thể xóa, chỉ có thể vô hiệu hóa",
+            409,
+        );
     }
 
     const assignedUserCount = await User.countDocuments({ roles: role.key });
     if (assignedUserCount > 0) {
         throw new HttpError(
-            "Vai tro dang duoc gan cho nguoi dung, khong the xoa",
-            400,
+            "Vai trò đang được gán cho người dùng, vui lòng chuyển họ sang vai trò khác trước khi xóa",
+            409,
         );
     }
 
-    await role.deleteOne();
+    if (role.active && role.permissions.includes("roles.manage")) {
+        await assertRoleManagementNotLocked(String(role._id));
+    }
+
+    await Role.findByIdAndDelete(id);
+    await RoleAssignment.updateMany(
+        { role: role.key, revokedAt: { $exists: false } },
+        { revokedAt: new Date() },
+    );
 
     await writeAuditLog({
         actorId,

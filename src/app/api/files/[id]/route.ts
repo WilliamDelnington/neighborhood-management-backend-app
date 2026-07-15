@@ -1,7 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { getSessionFromRequest } from "@/lib/auth";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
 import { updateFileAssetSchema } from "@/validators/fileAsset";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +8,6 @@ import {
     getFileAssetById,
     updateFileAsset,
     deleteFileAsset,
-    STAFF_ROLES_FOR_FILE_ASSETS,
 } from "@/services/fileAssetService";
 
 export async function GET(
@@ -18,12 +16,13 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        const session = getSessionFromRequest(req);
-        const isStaff =
-            !!session &&
-            session.roles.some(r =>
-                (STAFF_ROLES_FOR_FILE_ASSETS as readonly string[]).includes(r),
-            );
+        let isStaff = false;
+        try {
+            const actorUser = await requireUser(req);
+            isStaff = await userHasPermission(actorUser, "files.read");
+        } catch {
+            isStaff = false;
+        }
         const fileAsset = await getFileAssetById(params.id, !isStaff);
         return apiSuccess(fileAsset);
     } catch (err) {
@@ -37,11 +36,11 @@ export async function PATCH(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_FILE_ASSETS);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "files.update");
         const body = updateFileAssetSchema.parse(await req.json());
         const fileAsset = await updateFileAsset(
-            session.userId,
+            String(actorUser._id),
             params.id,
             body,
         );
@@ -57,9 +56,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...STAFF_ROLES_FOR_FILE_ASSETS);
-        await deleteFileAsset(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "files.delete");
+        await deleteFileAsset(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa file thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

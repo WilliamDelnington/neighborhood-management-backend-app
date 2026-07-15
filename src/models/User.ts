@@ -32,10 +32,12 @@ const UserSchema = new Schema<IUser>(
         zaloAppUserId: { type: String },
         displayName: { type: String, required: true, trim: true },
         avatarUrl: { type: String },
-        phone: { type: String, trim: true, index: true },
+        phone: { type: String, trim: true, unique: true, sparse: true },
         email: { type: String, trim: true },
         address: { type: String, trim: true },
         passwordHash: { type: String, select: false },
+        // Vai tro la du lieu dong (bang Role), khong con enum tinh - tinh hop le
+        // (ton tai, active) duoc kiem tra o service layer (assignRole).
         roles: { type: [String], default: ["resident"] },
         primaryRole: { type: String, default: "resident" },
         status: { type: String, enum: USER_STATUS, default: "active" },

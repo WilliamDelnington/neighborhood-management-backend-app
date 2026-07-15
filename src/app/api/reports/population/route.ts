@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
+import { requireUser, requirePermission } from "@/lib/rbac";
 import { workbookToXlsxResponse } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, "admin", "neighborhood_leader");
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "reports.read");
 
         const data = await getPopulationReport();
 
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
         if (searchParams.get("format") === "excel") {
             const workbook = buildPopulationReportWorkbook(data);
             await writeAuditLog({
-                actorId: session.userId,
+                actorId: String(actorUser._id),
                 action: "report.export",
                 targetModel: "Report",
                 metadata: { report: "population" },

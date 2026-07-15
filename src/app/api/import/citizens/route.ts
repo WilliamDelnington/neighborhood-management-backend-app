@@ -1,15 +1,15 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import { requireSession, requireRole } from "@/lib/rbac";
-import { previewCitizenImport, IMPORT_ROLES } from "@/services/importService";
+import { requireUser, requirePermission } from "@/lib/rbac";
+import { previewCitizenImport } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        requireRole(session, ...IMPORT_ROLES);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "imports.manage");
 
         const formData = await req.formData();
         const file = formData.get("file");
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
             file instanceof File ? file.name : "import-nhan-khau.xlsx";
 
         const job = await previewCitizenImport(
-            session.userId,
+            String(actorUser._id),
             buffer,
             fileName,
         );
