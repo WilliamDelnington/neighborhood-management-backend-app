@@ -149,7 +149,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         totalCitizens,
         rentalHouseholds,
         householdsNeedingSupport,
-        scopedToCluster,
+        scopedToCluster: isClusterScoped,
         newComplaints,
         inProgressComplaints,
         highRiskPcccCount,

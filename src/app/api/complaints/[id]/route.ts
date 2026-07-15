@@ -3,9 +3,13 @@ import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import {
     requireUser,
     userHasPermission,
+    requirePermission,
     getUserAllowedComplaintCategories,
 } from "@/lib/rbac";
-import { getComplaintDetailForOwnerOrStaff } from "@/services/complaintService";
+import {
+    getComplaintDetailForOwnerOrStaff,
+    deleteComplaint,
+} from "@/services/complaintService";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +41,9 @@ export async function DELETE(
 ) {
     try {
         await connectDB();
-        const session = requireSession(req);
-        await requirePermission(session, "complaints.delete");
-        await deleteComplaint(session.userId, params.id);
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "complaints.delete");
+        await deleteComplaint(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa phan anh thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
