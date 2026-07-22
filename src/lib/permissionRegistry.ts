@@ -41,6 +41,18 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "houses",
+        label: "Nhà số",
+        permissions: [
+            { key: "houses.read", label: "Xem nhà số" },
+            { key: "houses.create", label: "Tạo nhà số" },
+            { key: "houses.update", label: "Cập nhật nhà số" },
+            { key: "houses.delete", label: "Xóa nhà số" },
+            { key: "houses.verify", label: "Duyệt / từ chối nhà số" },
+            { key: "houses.lock", label: "Khóa / mở khóa nhà số" },
+        ],
+    },
+    {
         key: "households",
         label: "Hộ dân",
         permissions: [
@@ -48,6 +60,16 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "households.create", label: "Tạo hộ dân" },
             { key: "households.update", label: "Cập nhật hộ dân" },
             { key: "households.delete", label: "Xóa hộ dân" },
+        ],
+    },
+    {
+        key: "businesses",
+        label: "Hộ kinh doanh",
+        permissions: [
+            { key: "businesses.read", label: "Xem hộ kinh doanh" },
+            { key: "businesses.create", label: "Tạo hộ kinh doanh" },
+            { key: "businesses.update", label: "Cập nhật hộ kinh doanh" },
+            { key: "businesses.delete", label: "Xóa hộ kinh doanh" },
         ],
     },
     {
@@ -61,10 +83,27 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "business_types",
+        label: "Loại hình kinh doanh",
+        permissions: [
+            { key: "business_types.read", label: "Xem loại hình kinh doanh" },
+            { key: "business_types.create", label: "Tạo loại hình kinh doanh" },
+            {
+                key: "business_types.update",
+                label: "Cập nhật loại hình kinh doanh",
+            },
+            { key: "business_types.delete", label: "Xóa loại hình kinh doanh" },
+        ],
+    },
+    {
         key: "complaints",
         label: "Phản ánh",
         permissions: [
             { key: "complaints.read", label: "Xem phản ánh" },
+            {
+                key: "complaints.read_escalated",
+                label: "Xem phản ánh đã chuyển UBND (không giới hạn theo cụm)",
+            },
             { key: "complaints.create", label: "Tạo phản ánh" },
             { key: "complaints.read_own", label: "Xem phản ánh của mình" },
             { key: "complaints.assign", label: "Gán người xử lý" },

@@ -8,6 +8,8 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "test-secret-key-for-vitest";
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1h";
 process.env.ZALO_ENV = "sandbox";
 process.env.CORS_ORIGIN = "*";
+process.env.ENCRYPTION_KEY =
+    process.env.ENCRYPTION_KEY || Buffer.alloc(32, 7).toString("base64");
 
 declare global {
     // eslint-disable-next-line no-var

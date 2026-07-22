@@ -11,6 +11,10 @@
         "seed": "tsx scripts/seed.ts",
         "seed:proposal": "tsx scripts/create-proposal-accounts.ts",
         "roles:backfill": "tsx scripts/backfill-roles.ts",
+        "complaints:backfill-clusters": "tsx scripts/backfill-complaint-clusters.ts",
+        "citizens:backfill-encryption": "tsx scripts/backfill-encrypt-citizens.ts",
+        "households:backfill-member-count": "tsx scripts/backfill-household-member-count.ts",
+        "pccc:backfill-house-id": "tsx scripts/backfill-pccc-house-id.ts",
         "test": "vitest run"
     },
     "dependencies": {

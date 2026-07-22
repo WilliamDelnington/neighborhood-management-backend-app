@@ -70,9 +70,11 @@ export async function listMeetings(params: {
     page: number;
     limit: number;
     upcomingOnly?: boolean;
+    publicOnly?: boolean;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.upcomingOnly) filter.startTime = { $gte: new Date() };
+    if (params.publicOnly) filter.published = true;
 
     const [items, total] = await Promise.all([
         Meeting.find(filter)
@@ -91,9 +93,12 @@ export async function listMeetings(params: {
     };
 }
 
-export async function getMeetingById(id: string) {
+export async function getMeetingById(id: string, publicOnly: boolean) {
     const meeting = await Meeting.findById(id);
     if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (publicOnly && !meeting.published) {
+        throw new HttpError("Khong tim thay cuoc hop", 404);
+    }
     return meeting;
 }
 

@@ -24,6 +24,8 @@ export async function createFileAsset(
         relatedModel: input.relatedModel,
         relatedId: input.relatedId,
         isPublic: input.isPublic,
+        targetRoles: input.targetRoles,
+        audienceAll: input.audienceAll,
         uploadedBy: actorId,
     });
 
@@ -43,10 +45,20 @@ export async function listFileAssets(params: {
     limit: number;
     category?: string;
     publicOnly?: boolean;
+    // undefined/null = khong gioi han theo doi tuong (goc nhin quan tri: thay het
+    // de quan ly). Mang (ke ca rong) = chi tra ve file audienceAll=true hoac co
+    // it nhat 1 targetRoles trung voi role cua nguoi xem.
+    viewerRoles?: string[] | null;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.publicOnly) filter.isPublic = true;
     if (params.category) filter.category = params.category;
+    if (params.viewerRoles !== undefined && params.viewerRoles !== null) {
+        filter.$or = [
+            { audienceAll: true },
+            { targetRoles: { $in: params.viewerRoles } },
+        ];
+    }
 
     const [items, total] = await Promise.all([
         FileAsset.find(filter)
@@ -66,7 +78,11 @@ export async function listFileAssets(params: {
     };
 }
 
-export async function getFileAssetById(id: string, publicOnly: boolean) {
+export async function getFileAssetById(
+    id: string,
+    publicOnly: boolean,
+    viewerRoles?: string[] | null,
+) {
     const fileAsset = await FileAsset.findById(id).populate(
         "uploadedBy",
         "displayName",
@@ -74,6 +90,12 @@ export async function getFileAssetById(id: string, publicOnly: boolean) {
     if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
     if (publicOnly && !fileAsset.isPublic) {
         throw new HttpError("Khong tim thay file", 404);
+    }
+    if (viewerRoles !== undefined && viewerRoles !== null) {
+        const allowed =
+            fileAsset.audienceAll ||
+            fileAsset.targetRoles.some(role => viewerRoles.includes(role));
+        if (!allowed) throw new HttpError("Khong tim thay file", 404);
     }
     return fileAsset;
 }

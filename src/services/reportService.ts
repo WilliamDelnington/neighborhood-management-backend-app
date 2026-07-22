@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import ExcelJS from "exceljs";
 import {
     Household,
+    HouseRecord,
     Citizen,
     Complaint,
     PcccCheck,
@@ -283,24 +284,23 @@ export function buildComplaintReportWorkbook(
 // ---------------------------------------------------------------------------
 
 export type PcccReport = {
-    totalHouseholdsChecked: number;
+    totalHousesChecked: number;
     byRiskLevel: { riskLevel: string; label: string; count: number }[];
-    householdsNeedingRemediation: {
-        householdId: string;
+    housesNeedingRemediation: {
+        houseId: string;
         code: string;
         cluster: string;
         address: string;
-        headOfHousehold: string;
         remediationNeeded?: string;
     }[];
 };
 
 export async function getPcccReport(): Promise<PcccReport> {
-    // Lay ban ghi kiem tra MOI NHAT cho tung ho: sap xep theo ho + ngay kiem tra giam dan,
-    // group theo householdId lay $first, roi $replaceRoot de lam viec voi document goc.
+    // Lay ban ghi kiem tra MOI NHAT cho tung nha: sap xep theo nha + ngay kiem tra giam dan,
+    // group theo houseId lay $first, roi $replaceRoot de lam viec voi document goc.
     const latestChecks = await PcccCheck.aggregate([
-        { $sort: { householdId: 1, inspectionDate: -1 } },
-        { $group: { _id: "$householdId", latest: { $first: "$$ROOT" } } },
+        { $sort: { houseId: 1, inspectionDate: -1 } },
+        { $group: { _id: "$houseId", latest: { $first: "$$ROOT" } } },
         { $replaceRoot: { newRoot: "$latest" } },
     ]);
 
@@ -309,7 +309,7 @@ export async function getPcccReport(): Promise<PcccReport> {
         vang: 0,
         do: 0,
     };
-    const remediationByHouseholdId = new Map<string, string>();
+    const remediationByHouseId = new Map<string, string>();
     for (const check of latestChecks) {
         byRiskLevelCount[check.riskLevel] =
             (byRiskLevelCount[check.riskLevel] || 0) + 1;
@@ -317,22 +317,22 @@ export async function getPcccReport(): Promise<PcccReport> {
             check.remediationNeeded &&
             String(check.remediationNeeded).trim().length > 0
         ) {
-            remediationByHouseholdId.set(
-                String(check.householdId),
+            remediationByHouseId.set(
+                String(check.houseId),
                 String(check.remediationNeeded),
             );
         }
     }
 
-    const remediationIds = Array.from(remediationByHouseholdId.keys()).map(
+    const remediationIds = Array.from(remediationByHouseId.keys()).map(
         id => new mongoose.Types.ObjectId(id),
     );
-    const households = await Household.find({
+    const houses = await HouseRecord.find({
         _id: { $in: remediationIds },
-    }).select("code cluster address headOfHousehold");
+    }).select("code cluster address");
 
     return {
-        totalHouseholdsChecked: latestChecks.length,
+        totalHousesChecked: latestChecks.length,
         byRiskLevel: (
             Object.keys(MUC_NGUY_CO_PCCC_LABEL) as MucNguyCoPccc[]
         ).map(level => ({
@@ -340,13 +340,12 @@ export async function getPcccReport(): Promise<PcccReport> {
             label: MUC_NGUY_CO_PCCC_LABEL[level],
             count: byRiskLevelCount[level] || 0,
         })),
-        householdsNeedingRemediation: households.map(h => ({
-            householdId: String(h._id),
+        housesNeedingRemediation: houses.map(h => ({
+            houseId: String(h._id),
             code: h.code,
             cluster: h.cluster,
             address: h.address,
-            headOfHousehold: h.headOfHousehold,
-            remediationNeeded: remediationByHouseholdId.get(String(h._id)),
+            remediationNeeded: remediationByHouseId.get(String(h._id)),
         })),
     };
 }
@@ -355,12 +354,12 @@ export function buildPcccReportWorkbook(data: PcccReport): ExcelJS.Workbook {
     const workbook = new ExcelJS.Workbook();
     addSummarySheet(workbook, "Tong quan", [
         {
-            label: "Tổng số hộ đã kiểm tra PCCC",
-            value: data.totalHouseholdsChecked,
+            label: "Tổng số nhà đã kiểm tra PCCC",
+            value: data.totalHousesChecked,
         },
         {
-            label: "Số hộ cần khắc phục",
-            value: data.householdsNeedingRemediation.length,
+            label: "Số nhà cần khắc phục",
+            value: data.housesNeedingRemediation.length,
         },
     ]);
     addTableSheet(
@@ -368,25 +367,24 @@ export function buildPcccReportWorkbook(data: PcccReport): ExcelJS.Workbook {
         "Theo muc nguy co",
         [
             { header: "Mức nguy cơ", key: "label", width: 20 },
-            { header: "Số hộ", key: "count", width: 15 },
+            { header: "Số nhà", key: "count", width: 15 },
         ],
         data.byRiskLevel,
     );
     addTableSheet(
         workbook,
-        "Ho can khac phuc",
+        "Nha can khac phuc",
         [
-            { header: "Mã hộ", key: "code", width: 12 },
+            { header: "Mã nhà", key: "code", width: 12 },
             { header: "Cụm dân cư", key: "cluster", width: 20 },
             { header: "Địa chỉ", key: "address", width: 30 },
-            { header: "Chủ hộ", key: "headOfHousehold", width: 25 },
             {
                 header: "Việc cần khắc phục",
                 key: "remediationNeeded",
                 width: 40,
             },
         ],
-        data.householdsNeedingRemediation,
+        data.housesNeedingRemediation,
     );
     return workbook;
 }

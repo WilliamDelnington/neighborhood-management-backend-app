@@ -1,5 +1,6 @@
 import {
     Household,
+    HouseRecord,
     Citizen,
     Complaint,
     PcccCheck,
@@ -50,6 +51,11 @@ export async function getDashboardSummary(actorUser: IUser) {
     const scopedHouseholdIds = isClusterScoped
         ? (await Household.find(householdScope).select("_id")).map(h => h._id)
         : undefined;
+    // House co truong `cluster` truc tiep nen dung chung filter cua Household -
+    // PCCC gio gan voi House, khong con gan voi Household nua.
+    const scopedHouseIds = isClusterScoped
+        ? (await HouseRecord.find(householdScope).select("_id")).map(h => h._id)
+        : undefined;
 
     const householdFilter: Record<string, unknown> = isClusterScoped
         ? { _id: { $in: scopedHouseholdIds } }
@@ -83,12 +89,12 @@ export async function getDashboardSummary(actorUser: IUser) {
         Complaint.countDocuments({ status: "dang_xu_ly" }),
         PcccCheck.aggregate([
             ...(isClusterScoped
-                ? [{ $match: { householdId: { $in: scopedHouseholdIds } } }]
+                ? [{ $match: { houseId: { $in: scopedHouseIds } } }]
                 : []),
             { $sort: { inspectionDate: -1 } },
             {
                 $group: {
-                    _id: "$householdId",
+                    _id: "$houseId",
                     riskLevel: { $first: "$riskLevel" },
                 },
             },
@@ -208,7 +214,7 @@ async function buildTaskList(
         }
         if (ctx.highRiskPcccCount > 0) {
             tasks.push({
-                label: "Hộ có nguy cơ PCCC mức Đỏ cần kiểm tra lại",
+                label: "Nhà có nguy cơ PCCC mức Đỏ cần kiểm tra lại",
                 count: ctx.highRiskPcccCount,
                 link: "/admin/pccc?riskLevel=do",
             });

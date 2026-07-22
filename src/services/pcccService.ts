@@ -1,4 +1,4 @@
-import { Household, PcccCheck, type IPcccCheck } from "@/models";
+import { HouseRecord, PcccCheck, type IPcccCheck } from "@/models";
 import type { IUser } from "@/models/User";
 import { HttpError } from "@/lib/response";
 import { clusterScopeFilter } from "@/lib/rbac";
@@ -20,12 +20,12 @@ const UPDATABLE_BOOLEAN_FIELDS = [
 
 async function notifyHighRisk(
     check: IPcccCheck,
-    household: { code: string; address: string },
+    house: { code: string; address: string },
     actorId: string,
 ) {
     await createNotification({
         title: "Phát hiện nguy cơ PCCC cao",
-        body: `Hộ ${household.code} (${household.address}) đang ở mức nguy cơ PCCC: ${MUC_NGUY_CO_PCCC_LABEL.do}`,
+        body: `Nhà ${house.code} (${house.address}) đang ở mức nguy cơ PCCC: ${MUC_NGUY_CO_PCCC_LABEL.do}`,
         type: "pccc.high_risk",
         targetRoles: ["admin", "neighborhood_leader"],
         relatedModel: "PcccCheck",
@@ -38,10 +38,10 @@ export async function createPcccCheck(
     actorUser: IUser,
     input: CreatePcccCheckInput,
 ) {
-    const household = await Household.findById(input.householdId).select(
+    const house = await HouseRecord.findById(input.houseId).select(
         "_id code address",
     );
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!house) throw new HttpError("Khong tim thay nha", 404);
 
     const inspectorId =
         input.inspectorId && actorUser.roles.includes("admin")
@@ -49,7 +49,7 @@ export async function createPcccCheck(
             : String(actorUser._id);
 
     const check = await PcccCheck.create({
-        householdId: input.householdId,
+        houseId: input.houseId,
         hasFireExtinguisher: input.hasFireExtinguisher,
         hasEmergencyExit: input.hasEmergencyExit,
         hasIndoorEvCharging: input.hasIndoorEvCharging,
@@ -68,13 +68,13 @@ export async function createPcccCheck(
         targetModel: "PcccCheck",
         targetId: check._id,
         metadata: {
-            householdId: input.householdId,
+            houseId: input.houseId,
             riskLevel: check.riskLevel,
         },
     });
 
     if (check.riskLevel === "do") {
-        await notifyHighRisk(check, household, String(actorUser._id));
+        await notifyHighRisk(check, house, String(actorUser._id));
     }
 
     return check;
@@ -84,19 +84,19 @@ export async function listPcccChecks(params: {
     page: number;
     limit: number;
     riskLevel?: string;
-    householdId?: string;
+    houseId?: string;
     actorUser: IUser;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.riskLevel) filter.riskLevel = params.riskLevel;
 
-    if (params.householdId) {
-        filter.householdId = params.householdId;
+    if (params.houseId) {
+        filter.houseId = params.houseId;
     } else if (!params.actorUser.roles.includes("admin")) {
         const scopeFilter = clusterScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
-            const households = await Household.find(scopeFilter).select("_id");
-            filter.householdId = { $in: households.map(h => h._id) };
+            const houses = await HouseRecord.find(scopeFilter).select("_id");
+            filter.houseId = { $in: houses.map(h => h._id) };
         }
     }
 
@@ -105,7 +105,7 @@ export async function listPcccChecks(params: {
             .sort({ inspectionDate: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
-            .populate("householdId", "code address cluster")
+            .populate("houseId", "code address cluster")
             .populate("inspectorId", "displayName"),
         PcccCheck.countDocuments(filter),
     ]);
@@ -121,7 +121,7 @@ export async function listPcccChecks(params: {
 
 export async function getPcccCheckById(id: string) {
     const check = await PcccCheck.findById(id)
-        .populate("householdId", "code address cluster")
+        .populate("houseId", "code address cluster")
         .populate("inspectorId", "displayName");
     if (!check)
         throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
@@ -129,19 +129,19 @@ export async function getPcccCheckById(id: string) {
 }
 
 /**
- * Kiem tra quyen truy cap bien ban PCCC theo cum dan cu cua ho khau lien quan.
- * Nem HttpError(403) neu user khong phai admin va cum cua ho khong nam trong assignedClusters.
+ * Kiem tra quyen truy cap bien ban PCCC theo cum dan cu cua nha lien quan.
+ * Nem HttpError(403) neu user khong phai admin va cum cua nha khong nam trong assignedClusters.
  */
 export function assertPcccCheckInScope(
     user: IUser,
-    check: { householdId: unknown },
+    check: { houseId: unknown },
 ): void {
     if (user.roles.includes("admin")) return;
     if (!user.assignedClusters?.length) return;
-    const household = check.householdId as {
+    const house = check.houseId as {
         cluster?: string;
     } | null;
-    const cluster = household && typeof household === "object" ? household.cluster : undefined;
+    const cluster = house && typeof house === "object" ? house.cluster : undefined;
     if (cluster && !user.assignedClusters.includes(cluster)) {
         throw new HttpError(
             "Ban khong co quyen thao tac voi bien ban ngoai cum duoc phan cong",
@@ -161,13 +161,10 @@ export async function updatePcccCheck(
 
     const previousRiskLevel = check.riskLevel;
 
-    if (patch.householdId !== undefined) {
-        const household = await Household.findById(patch.householdId).select(
-            "_id",
-        );
-        if (!household) throw new HttpError("Khong tim thay ho dan", 404);
-        check.householdId =
-            patch.householdId as unknown as typeof check.householdId;
+    if (patch.houseId !== undefined) {
+        const house = await HouseRecord.findById(patch.houseId).select("_id");
+        if (!house) throw new HttpError("Khong tim thay nha", 404);
+        check.houseId = patch.houseId as unknown as typeof check.houseId;
     }
 
     for (const field of UPDATABLE_BOOLEAN_FIELDS) {
@@ -198,11 +195,10 @@ export async function updatePcccCheck(
     });
 
     if (check.riskLevel === "do" && previousRiskLevel !== "do") {
-        const household = await Household.findById(check.householdId).select(
+        const house = await HouseRecord.findById(check.houseId).select(
             "code address",
         );
-        if (household)
-            await notifyHighRisk(check, household, String(actorUser._id));
+        if (house) await notifyHighRisk(check, house, String(actorUser._id));
     }
 
     return check;
@@ -223,12 +219,12 @@ export async function deletePcccCheck(actorId: string, id: string) {
     return check;
 }
 
-export async function getHouseholdRiskSummary() {
+export async function getHouseRiskSummary() {
     const result = await PcccCheck.aggregate([
         { $sort: { inspectionDate: -1 } },
         {
             $group: {
-                _id: "$householdId",
+                _id: "$houseId",
                 riskLevel: { $first: "$riskLevel" },
             },
         },

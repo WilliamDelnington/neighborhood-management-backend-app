@@ -7,6 +7,7 @@ import {
 import {
     requireUser,
     requirePermission,
+    userHasPermission,
     getUserAllowedComplaintCategories,
 } from "@/lib/rbac";
 import { createComplaintSchema } from "@/validators/complaint";
@@ -18,8 +19,9 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "complaints.create");
         const body = createComplaintSchema.parse(await req.json());
-        const complaint = await createComplaint(String(actorUser._id), body);
+        const complaint = await createComplaint(actorUser, body);
         return apiSuccess(complaint, "Gui phan anh thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);
@@ -33,6 +35,10 @@ export async function GET(req: Request) {
         await requirePermission(actorUser, "complaints.read");
         const allowedCategories =
             await getUserAllowedComplaintCategories(actorUser);
+        const canReadEscalated = await userHasPermission(
+            actorUser,
+            "complaints.read_escalated",
+        );
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
@@ -43,6 +49,8 @@ export async function GET(req: Request) {
             category: searchParams.get("category") || undefined,
             search: searchParams.get("search") || undefined,
             allowedCategories,
+            actorUser,
+            canReadEscalated,
         });
         return apiSuccess(result);
     } catch (err) {

@@ -2,7 +2,7 @@ import mongoose, { Schema, type Document, type Model } from "mongoose";
 import { MUC_NGUY_CO_PCCC, type MucNguyCoPccc } from "@/types";
 
 export interface IPcccCheck extends Document {
-    householdId: mongoose.Types.ObjectId;
+    houseId: mongoose.Types.ObjectId;
     hasFireExtinguisher: boolean;
     hasEmergencyExit: boolean;
     hasIndoorEvCharging: boolean;
@@ -19,9 +19,9 @@ export interface IPcccCheck extends Document {
 
 const PcccCheckSchema = new Schema<IPcccCheck>(
     {
-        householdId: {
+        houseId: {
             type: Schema.Types.ObjectId,
-            ref: "Household",
+            ref: "House",
             required: true,
             index: true,
         },
