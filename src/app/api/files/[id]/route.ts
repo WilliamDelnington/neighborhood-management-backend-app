@@ -16,14 +16,22 @@ export async function GET(
 ) {
     try {
         await connectDB();
-        let isStaff = false;
+        let actorUser = null;
         try {
-            const actorUser = await requireUser(req);
-            isStaff = await userHasPermission(actorUser, "files.read");
+            actorUser = await requireUser(req);
         } catch {
-            isStaff = false;
+            actorUser = null;
         }
-        const fileAsset = await getFileAssetById(params.id, !isStaff);
+        const isStaff = actorUser
+            ? await userHasPermission(actorUser, "files.read")
+            : false;
+        // Nhan vien co quyen files.read xem duoc de quan ly, bat ke targetRoles.
+        const viewerRoles = isStaff ? null : actorUser?.roles || [];
+        const fileAsset = await getFileAssetById(
+            params.id,
+            !isStaff,
+            viewerRoles,
+        );
         return apiSuccess(fileAsset);
     } catch (err) {
         return apiErrorFromException(err);

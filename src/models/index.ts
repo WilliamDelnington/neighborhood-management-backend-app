@@ -4,7 +4,13 @@ export {
     default as RoleAssignment,
     type IRoleAssignment,
 } from "./RoleAssignment";
+export { default as HouseRecord, type IHouseRecord } from "./HouseRecord";
 export { default as Household, type IHousehold } from "./Household";
+export {
+    default as BusinessType,
+    type IBusinessType,
+} from "./BusinessType";
+export { default as Business, type IBusiness } from "./Business";
 export { default as Citizen, type ICitizen } from "./Citizen";
 export { default as Complaint, type IComplaint } from "./Complaint";
 export {

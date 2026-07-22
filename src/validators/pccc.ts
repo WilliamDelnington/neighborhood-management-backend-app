@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MUC_NGUY_CO_PCCC } from "@/types";
 
 export const createPcccCheckSchema = z.object({
-    householdId: z.string().min(1, "Thieu ma ho dan"),
+    houseId: z.string().min(1, "Thieu ma nha"),
     hasFireExtinguisher: z.boolean().default(false),
     hasEmergencyExit: z.boolean().default(false),
     hasIndoorEvCharging: z.boolean().default(false),

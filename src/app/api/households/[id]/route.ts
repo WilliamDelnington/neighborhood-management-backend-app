@@ -21,7 +21,7 @@ export async function GET(
         await requirePermission(user, "households.read");
 
         const household = await getHouseholdById(params.id);
-        assertHouseholdInScope(user, household);
+        await assertHouseholdInScope(user, household);
 
         return apiSuccess(household);
     } catch (err) {
@@ -39,7 +39,7 @@ export async function PATCH(
         await requirePermission(user, "households.update");
 
         const existing = await getHouseholdById(params.id);
-        assertHouseholdInScope(user, existing);
+        await assertHouseholdInScope(user, existing);
 
         const body = updateHouseholdSchema.parse(await req.json());
         const household = await updateHousehold(user, params.id, body);
@@ -59,7 +59,7 @@ export async function DELETE(
         await requirePermission(user, "households.delete");
 
         const existing = await getHouseholdById(params.id);
-        assertHouseholdInScope(user, existing);
+        await assertHouseholdInScope(user, existing);
 
         await deleteHousehold(String(user._id), params.id);
         return apiSuccess(null, "Xoa ho dan thanh cong");

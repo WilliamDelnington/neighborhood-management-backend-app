@@ -19,6 +19,10 @@ export const createFileAssetSchema = z.object({
     sizeBytes: z.number().nonnegative().optional(),
     category: z.enum(FILE_ASSET_CATEGORIES).default("other"),
     isPublic: z.boolean().default(false),
+    // audienceAll=true: bo qua targetRoles, ai cung xem duoc (mac dinh, giu hanh vi cu).
+    // audienceAll=false: chi user co role nam trong targetRoles moi xem duoc.
+    targetRoles: z.array(z.string()).default([]),
+    audienceAll: z.boolean().default(true),
     relatedModel: z.string().optional(),
     relatedId: z.string().optional(),
 });

@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requirePermission } from "@/lib/rbac";
+import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
 import { updateMeetingSchema } from "@/validators/meeting";
 
 export const dynamic = "force-dynamic";
@@ -10,13 +10,25 @@ import {
     updateMeeting,
 } from "@/services/meetingService";
 
+/**
+ * GET cong khai: chi xem duoc cuoc hop da dang, tru khi nguoi goi co quyen
+ * "meetings.read" (nhan vien) thi duoc xem ca ban nhap - giong pattern cua
+ * /api/announcements/[id].
+ */
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: { id: string } },
 ) {
     try {
         await connectDB();
-        const meeting = await getMeetingById(params.id);
+        let isStaff = false;
+        try {
+            const actorUser = await requireUser(req);
+            isStaff = await userHasPermission(actorUser, "meetings.read");
+        } catch {
+            isStaff = false;
+        }
+        const meeting = await getMeetingById(params.id, !isStaff);
         return apiSuccess(meeting);
     } catch (err) {
         return apiErrorFromException(err);

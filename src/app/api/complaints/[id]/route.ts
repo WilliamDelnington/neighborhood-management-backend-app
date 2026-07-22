@@ -24,10 +24,15 @@ export async function GET(
         const allowedCategories = isStaff
             ? await getUserAllowedComplaintCategories(actorUser)
             : null;
+        const canReadEscalated = isStaff
+            ? await userHasPermission(actorUser, "complaints.read_escalated")
+            : false;
         const result = await getComplaintDetailForOwnerOrStaff(params.id, {
             userId: String(actorUser._id),
             isStaff,
             allowedCategories,
+            actorUser: isStaff ? actorUser : undefined,
+            canReadEscalated,
         });
         return apiSuccess(result);
     } catch (err) {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { LOAI_CAU_HOI_KHAO_SAT, SYSTEM_ROLE_KEYS } from "@/types";
 
 const surveyQuestionSchema = z.object({
+    _id: z.string().optional(),
     question: z.string().min(1, "Vui long nhap noi dung cau hoi"),
     type: z.enum(LOAI_CAU_HOI_KHAO_SAT),
     options: z.array(z.string()).default([]),

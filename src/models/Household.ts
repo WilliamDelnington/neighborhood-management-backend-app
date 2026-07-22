@@ -10,6 +10,7 @@ export interface IHousehold extends Document {
     memberCount: number;
     ownershipType: LoaiSoHuu;
     needsSupport: boolean;
+    houseId?: mongoose.Types.ObjectId;
     note?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -31,6 +32,7 @@ const HouseholdSchema = new Schema<IHousehold>(
             default: "chinh_chu",
         },
         needsSupport: { type: Boolean, default: false },
+        houseId: { type: Schema.Types.ObjectId, ref: "House", index: true },
         note: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

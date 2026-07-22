@@ -20,7 +20,9 @@ export async function GET(req: Request) {
         const search = searchParams.get("search") || undefined;
         const activeParam = searchParams.get("active");
         const active =
-            activeParam === null ? undefined : activeParam === "1";
+            activeParam === null
+                ? undefined
+                : activeParam === "1" || activeParam === "true";
         const { page, limit } = paginationParams(searchParams);
 
         const roles = await listRoles({ search, active, page, limit });

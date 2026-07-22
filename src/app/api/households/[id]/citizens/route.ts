@@ -6,6 +6,7 @@ import {
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
 import { listCitizens } from "@/services/citizenService";
+import { getHouseholdById, assertHouseholdInScope } from "@/services/householdService";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export async function GET(
         await connectDB();
         const user = await requireUser(req);
         await requirePermission(user, "citizens.read");
+
+        const household = await getHouseholdById(params.id);
+        await assertHouseholdInScope(user, household);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

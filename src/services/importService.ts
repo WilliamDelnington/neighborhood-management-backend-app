@@ -15,11 +15,13 @@ import {
 // Dinh dang cot Excel mong doi (hang dau tien cua sheet dau tien la header).
 //
 // Import ho dan:
-//   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Số nhân khẩu | Loại sở hữu
-//   | Cần hỗ trợ | Ghi chú
+//   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
+//   | Ghi chú
 //   - "Loại sở hữu" chap nhan "Chính chủ" / "Cho thuê" (khong phan biet hoa/thuong,
 //     co the go co dau hoac khong dau, vd "chinh chu" cung hop le).
 //   - "Cần hỗ trợ" chap nhan "Có"/"Không" hoac true/false/1/0, mac dinh Khong.
+//   - Khong co cot "so nhan khau": memberCount do he thong tu tinh dua tren so
+//     Citizen thuc te thuoc ho dan, duoc dien khi import nhan khau (xem duoi).
 //
 // Import nhan khau:
 //   Họ tên | Số điện thoại | CCCD | Ngày sinh | Giới tính | Quan hệ với chủ hộ
@@ -34,7 +36,6 @@ const HOUSEHOLD_COLUMNS = {
     address: "Địa chỉ",
     headOfHousehold: "Chủ hộ",
     phone: "Số điện thoại",
-    memberCount: "Số nhân khẩu",
     ownershipType: "Loại sở hữu",
     needsSupport: "Cần hỗ trợ",
     note: "Ghi chú",
@@ -174,9 +175,6 @@ export async function previewHouseholdImport(
             v[HOUSEHOLD_COLUMNS.headOfHousehold],
         ).trim();
         const phone = cellToString(v[HOUSEHOLD_COLUMNS.phone]).trim();
-        const memberCountRaw = cellToString(
-            v[HOUSEHOLD_COLUMNS.memberCount],
-        ).trim();
         const ownershipRaw = cellToString(
             v[HOUSEHOLD_COLUMNS.ownershipType],
         ).trim();
@@ -199,16 +197,6 @@ export async function previewHouseholdImport(
             }
         }
 
-        let memberCount = 0;
-        if (memberCountRaw) {
-            memberCount = Number(memberCountRaw);
-            if (Number.isNaN(memberCount)) {
-                rowErrors.push(
-                    `Giá trị 'Số nhân khẩu' không phải là số: "${memberCountRaw}"`,
-                );
-            }
-        }
-
         if (rowErrors.length > 0) {
             errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
             continue;
@@ -219,7 +207,6 @@ export async function previewHouseholdImport(
             address,
             headOfHousehold,
             phone: phone || undefined,
-            memberCount,
             ownershipType,
             needsSupport: parseBoolean(v[HOUSEHOLD_COLUMNS.needsSupport]),
             note: note || undefined,
@@ -271,7 +258,6 @@ export async function commitHouseholdImport(
             address: row.address,
             headOfHousehold: row.headOfHousehold,
             phone: row.phone,
-            memberCount: row.memberCount,
             ownershipType: row.ownershipType,
             needsSupport: row.needsSupport,
             note: row.note,
@@ -435,6 +421,11 @@ export async function commitCitizenImport(
     }
 
     let committedCount = 0;
+    // memberCount cua ho dan lien quan duoc +1 cho moi Citizen import thanh
+    // cong - gom theo householdId roi cap nhat 1 lan bang bulkWrite (thay vi
+    // recompute/update rieng le cho tung dong) de tranh O(n) update khi import
+    // nhieu nhan khau cung luc.
+    const memberCountDeltas = new Map<string, number>();
     for (const row of job.previewData as Record<string, unknown>[]) {
         // eslint-disable-next-line no-await-in-loop
         await Citizen.create({
@@ -457,6 +448,23 @@ export async function commitCitizenImport(
             updatedBy: actorId,
         });
         committedCount += 1;
+        if (row.householdId) {
+            const key = String(row.householdId);
+            memberCountDeltas.set(key, (memberCountDeltas.get(key) || 0) + 1);
+        }
+    }
+
+    if (memberCountDeltas.size > 0) {
+        await Household.bulkWrite(
+            Array.from(memberCountDeltas.entries()).map(
+                ([householdId, delta]) => ({
+                    updateOne: {
+                        filter: { _id: householdId },
+                        update: { $inc: { memberCount: delta } },
+                    },
+                }),
+            ),
+        );
     }
 
     job.status = "committed";

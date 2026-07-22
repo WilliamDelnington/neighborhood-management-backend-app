@@ -12,28 +12,36 @@ import { createFileAsset, listFileAssets } from "@/services/fileAssetService";
 
 // GET la endpoint cong khai (nguoi dan xem "Bieu mau" khong can dang nhap).
 // Neu co session hop le voi quyen files.read va truyen ?admin=1, tra ve toan
-// bo danh sach (ca file chua cong khai) cho man hinh quan tri.
+// bo danh sach (ca file chua cong khai, khong loc theo doi tuong) cho man hinh
+// quan tri. Nguoc lai (nguoi dan xem trong Mini App), ket qua duoc loc them
+// theo targetRoles/audienceAll dua tren role cua nguoi dang nhap (hoac chi
+// audienceAll=true neu chua dang nhap).
 export async function GET(req: Request) {
     try {
         await connectDB();
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
 
-        let isStaff = false;
+        let actorUser = null;
         try {
-            const actorUser = await requireUser(req);
-            isStaff = await userHasPermission(actorUser, "files.read");
+            actorUser = await requireUser(req);
         } catch {
-            isStaff = false;
+            actorUser = null;
         }
+        const isStaff = actorUser
+            ? await userHasPermission(actorUser, "files.read")
+            : false;
         const wantsAdminView = searchParams.get("admin") === "1";
-        const publicOnly = !(isStaff && wantsAdminView);
+        const isAdminView = isStaff && wantsAdminView;
+        const publicOnly = !isAdminView;
+        const viewerRoles = isAdminView ? null : actorUser?.roles || [];
 
         const result = await listFileAssets({
             page,
             limit,
             category: searchParams.get("category") || undefined,
             publicOnly,
+            viewerRoles,
         });
         return apiSuccess(result);
     } catch (err) {

@@ -1,0 +1,44 @@
+import mongoose, { Schema, type Document, type Model } from "mongoose";
+import { HOUSE_RECORD_STATUS, type HouseRecordStatus } from "@/types";
+
+export interface IHouseRecord extends Document {
+    code: string;
+    cluster: string;
+    address: string;
+    status: HouseRecordStatus;
+    ownerId?: mongoose.Types.ObjectId;
+    note?: string;
+    createdBy?: mongoose.Types.ObjectId;
+    updatedBy?: mongoose.Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+const HouseRecordSchema = new Schema<IHouseRecord>(
+    {
+        code: { type: String, required: true, unique: true, index: true },
+        cluster: { type: String, required: true, index: true },
+        address: { type: String, required: true },
+        status: {
+            type: String,
+            enum: HOUSE_RECORD_STATUS,
+            default: "unverified",
+            index: true,
+        },
+        // Nguoi tao nha so - duoc coi la chu nha, chi minh nguoi nay (hoac
+        // admin/nhan vien co quyen quan ly theo cum) duoc thao tac voi nha nay.
+        ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+        note: { type: String },
+        createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+        updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    },
+    { timestamps: true },
+);
+
+HouseRecordSchema.index({ address: "text" });
+
+// Ten model dang ky voi Mongoose van la "House" (khong doi) de giu nguyen
+// collection "houses" va cac `ref: "House"` o Household/Business - chi doi
+// ten export/interface phia TypeScript de tranh nham lan voi Household.
+export default (mongoose.models.House as Model<IHouseRecord>) ||
+    mongoose.model<IHouseRecord>("House", HouseRecordSchema);

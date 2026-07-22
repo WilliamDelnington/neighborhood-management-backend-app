@@ -57,6 +57,25 @@ export const SCOPE_TYPES = [
 export type ScopeType = typeof SCOPE_TYPES[number];
 
 // ---------------------------------------------------------------------------
+// Nha so
+// ---------------------------------------------------------------------------
+export const HOUSE_RECORD_STATUS = [
+    "unverified",
+    "pending",
+    "verified",
+    "denied",
+    "locked",
+] as const;
+export type HouseRecordStatus = typeof HOUSE_RECORD_STATUS[number];
+export const HOUSE_RECORD_STATUS_LABEL: Record<HouseRecordStatus, string> = {
+    unverified: "chưa xác thực",
+    pending: "chờ duyệt",
+    verified: "đã xác thực",
+    denied: "bị từ chối",
+    locked: "đã khóa",
+};
+
+// ---------------------------------------------------------------------------
 // Ho dan
 // ---------------------------------------------------------------------------
 export const LOAI_SO_HUU = ["chinh_chu", "cho_thue"] as const;

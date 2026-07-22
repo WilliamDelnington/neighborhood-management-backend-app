@@ -48,15 +48,24 @@ describe("createComplaintSchema", () => {
 });
 
 describe("createHouseholdSchema", () => {
-    it("ap dung gia tri mac dinh cho ownershipType va memberCount", () => {
+    it("ap dung gia tri mac dinh cho ownershipType va needsSupport", () => {
         const result = createHouseholdSchema.parse({
             cluster: "Cụm 1",
             address: "Số 1, ngõ 12",
             headOfHousehold: "Nguyễn Văn An",
         });
         expect(result.ownershipType).toBe("chinh_chu");
-        expect(result.memberCount).toBe(0);
         expect(result.needsSupport).toBe(false);
+    });
+
+    it("bo qua memberCount neu client gui len - truong nay do he thong tu tinh", () => {
+        const result = createHouseholdSchema.parse({
+            cluster: "Cụm 1",
+            address: "Số 1, ngõ 12",
+            headOfHousehold: "Nguyễn Văn An",
+            memberCount: 999,
+        } as any);
+        expect((result as any).memberCount).toBeUndefined();
     });
 
     it("tu choi khi thieu dia chi", () => {

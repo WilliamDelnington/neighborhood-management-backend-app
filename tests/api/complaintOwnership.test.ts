@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { POST as createComplaintRoute } from "@/app/api/complaints/route";
+import {
+    POST as createComplaintRoute,
+    GET as listComplaintsRoute,
+} from "@/app/api/complaints/route";
 import { GET as getComplaintRoute } from "@/app/api/complaints/[id]/route";
 import { GET as listMineRoute } from "@/app/api/complaints/mine/route";
+import { Complaint } from "@/models";
 import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
 async function createComplaintAs(
@@ -109,5 +113,74 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
         expect(String(json.data.items[0].createdByUserId)).toBe(
             String(userA._id),
         );
+    });
+
+    it("to truong duoc gan cum khong xem duoc phan anh cua cum khac (chi tiet + danh sach)", async () => {
+        const owner = await createTestUser({
+            roles: ["resident"],
+            assignedClusters: ["Cum 2"],
+        });
+        const leader = await createTestUser({
+            roles: ["neighborhood_leader"],
+            assignedClusters: ["Cum 1"],
+        });
+        const created = await createComplaintAs(
+            String(owner._id),
+            await authHeaders(owner),
+        );
+
+        const detailRes = await getComplaintRoute(
+            makeRequest(`/api/complaints/${created.data._id}`, {
+                headers: await authHeaders(leader),
+            }),
+            { params: { id: created.data._id } },
+        );
+        expect(detailRes.status).toBe(403);
+
+        const listRes = await listComplaintsRoute(
+            makeRequest("/api/complaints", {
+                headers: await authHeaders(leader),
+            }),
+        );
+        const listJson = await readJson(listRes);
+        expect(
+            listJson.data.items.map((item: any) => String(item._id)),
+        ).not.toContain(String(created.data._id));
+    });
+
+    it("can bo UBND co complaints.read_escalated chi xem duoc phan anh cum khac sau khi da chuyen UBND", async () => {
+        const owner = await createTestUser({
+            roles: ["resident"],
+            assignedClusters: ["Cum 2"],
+        });
+        const committee = await createTestUser({
+            roles: ["people_committee_official"],
+            assignedClusters: ["Cum 1"],
+            permissions: ["complaints.read_escalated"],
+        });
+        const created = await createComplaintAs(
+            String(owner._id),
+            await authHeaders(owner),
+        );
+
+        const before = await getComplaintRoute(
+            makeRequest(`/api/complaints/${created.data._id}`, {
+                headers: await authHeaders(committee),
+            }),
+            { params: { id: created.data._id } },
+        );
+        expect(before.status).toBe(403);
+
+        await Complaint.findByIdAndUpdate(created.data._id, {
+            escalatedToCommittee: true,
+        });
+
+        const after = await getComplaintRoute(
+            makeRequest(`/api/complaints/${created.data._id}`, {
+                headers: await authHeaders(committee),
+            }),
+            { params: { id: created.data._id } },
+        );
+        expect(after.status).toBe(200);
     });
 });

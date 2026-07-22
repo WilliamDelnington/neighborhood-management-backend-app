@@ -29,7 +29,7 @@ async function assertCitizenInScope(
         household && typeof household === "object" && "cluster" in household
             ? household
             : await getHouseholdById(String(citizen.householdId));
-    assertHouseholdInScope(user, resolvedHousehold);
+    await assertHouseholdInScope(user, resolvedHousehold);
 }
 
 export async function GET(
@@ -63,7 +63,7 @@ export async function PATCH(
         await assertCitizenInScope(user, existing);
 
         const body = updateCitizenSchema.parse(await req.json());
-        const citizen = await updateCitizen(String(user._id), params.id, body);
+        const citizen = await updateCitizen(user, params.id, body);
         return apiSuccess(citizen, "Cap nhat nhan khau thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
