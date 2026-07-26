@@ -5,6 +5,7 @@ export const createHouseRecordSchema = z.object({
     cluster: z.string().min(1, "Cum dan cu khong duoc de trong"),
     address: z.string().min(1, "Dia chi khong duoc de trong"),
     note: z.string().optional(),
+    residenceDeclarationNumber: z.string().optional(),
 });
 export type CreateHouseRecordInput = z.infer<typeof createHouseRecordSchema>;
 

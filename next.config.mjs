@@ -3,6 +3,9 @@ const corsOrigin = process.env.CORS_ORIGIN || "*";
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    instrumentationHook: true,
+  },
   async headers() {
     return [
       {

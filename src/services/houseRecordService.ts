@@ -126,6 +126,7 @@ export async function createHouseRecord(
         // dang ky lan nhan vien tao ho khi nguoi dan chua co tai khoan).
         ownerId: actorUser._id,
         note: input.note,
+        residenceDeclarationNumber: input.residenceDeclarationNumber,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });

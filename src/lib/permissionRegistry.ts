@@ -112,21 +112,45 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "support_tickets",
+        label: "Yêu cầu hỗ trợ",
+        permissions: [
+            { key: "support_tickets.read", label: "Xem yêu cầu hỗ trợ" },
+            { key: "support_tickets.create", label: "Tạo yêu cầu hỗ trợ" },
+            {
+                key: "support_tickets.read_own",
+                label: "Xem yêu cầu hỗ trợ của mình",
+            },
+            {
+                key: "support_tickets.update_status",
+                label: "Cập nhật trạng thái",
+            },
+        ],
+    },
+    {
         key: "pccc",
         label: "PCCC",
         permissions: [
             { key: "pccc.read", label: "Xem PCCC" },
             { key: "pccc.create", label: "Tạo bản ghi PCCC" },
             { key: "pccc.update", label: "Cập nhật PCCC" },
+            {
+                key: "pccc.assign",
+                label: "Giao phụ trách khắc phục (và được chọn làm người phụ trách)",
+            },
         ],
     },
     {
         key: "security",
-        label: "An ninh, tạm trú",
+        label: "An ninh & Quản lý cư trú",
         permissions: [
             { key: "security.read", label: "Xem an ninh, tạm trú" },
             { key: "security.create", label: "Tạo bản ghi an ninh" },
             { key: "security.update", label: "Cập nhật an ninh" },
+            {
+                key: "security.assign",
+                label: "Giao theo dõi (và được chọn làm người phụ trách)",
+            },
         ],
     },
     {
@@ -212,6 +236,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         key: "notifications",
         label: "Thông báo hệ thống",
         permissions: [{ key: "notifications.read", label: "Xem thông báo hệ thống" }],
+    },
+    {
+        key: "audit",
+        label: "Nhật ký hệ thống",
+        permissions: [{ key: "audit.read", label: "Xem nhật ký hệ thống" }],
     },
 ];
 

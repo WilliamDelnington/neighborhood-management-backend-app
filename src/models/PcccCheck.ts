@@ -1,5 +1,10 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { MUC_NGUY_CO_PCCC, type MucNguyCoPccc } from "@/types";
+import {
+    MUC_NGUY_CO_PCCC,
+    TINH_TRANG_THEO_DOI_PCCC,
+    type MucNguyCoPccc,
+    type TinhTrangTheoDoiPccc,
+} from "@/types";
 
 export interface IPcccCheck extends Document {
     houseId: mongoose.Types.ObjectId;
@@ -12,7 +17,12 @@ export interface IPcccCheck extends Document {
     remediationNeeded?: string;
     inspectionDate: Date;
     inspectorId: mongoose.Types.ObjectId;
-    followUpStatus?: string;
+    followUpStatus: TinhTrangTheoDoiPccc;
+    deadline?: Date;
+    assigneeId?: mongoose.Types.ObjectId;
+    // Danh dau da gui canh bao qua han cho lan deadline hien tai - tranh gui lap
+    // moi lan job kiem tra chay. Duoc xoa (undefined) khi giao lai/doi han moi.
+    deadlineWarnedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -43,7 +53,14 @@ const PcccCheckSchema = new Schema<IPcccCheck>(
             ref: "User",
             required: true,
         },
-        followUpStatus: { type: String },
+        followUpStatus: {
+            type: String,
+            enum: TINH_TRANG_THEO_DOI_PCCC,
+            default: "chua_khac_phuc",
+        },
+        deadline: { type: Date, index: true },
+        assigneeId: { type: Schema.Types.ObjectId, ref: "User" },
+        deadlineWarnedAt: { type: Date },
     },
     { timestamps: true },
 );

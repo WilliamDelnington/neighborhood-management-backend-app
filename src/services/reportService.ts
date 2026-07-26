@@ -20,12 +20,14 @@ import {
     TRANG_THAI_PHAN_ANH_LABEL,
     MUC_NGUY_CO_PCCC_LABEL,
     MUC_DO_AN_NINH_LABEL,
+    TINH_TRANG_THEO_DOI_AN_NINH_LABEL,
     DANG_KY_HOP_LABEL,
     type LoaiCuTru,
     type NhomPhanAnh,
     type TrangThaiPhanAnh,
     type MucNguyCoPccc,
     type MucDoAnNinh,
+    type TinhTrangTheoDoiAnNinh,
     type DangKyHop,
 } from "@/types";
 
@@ -395,6 +397,7 @@ export function buildPcccReportWorkbook(data: PcccReport): ExcelJS.Workbook {
 
 export type SecurityReport = {
     byLevel: { level: string; label: string; count: number }[];
+    byMonitoringStatus: { status: string; label: string; count: number }[];
     rentalHouseholdsCount: number;
     rentalMissingDeclarationCount: number;
     reportedToPoliceCount: number;
@@ -403,22 +406,36 @@ export type SecurityReport = {
 export async function getSecurityReport(): Promise<SecurityReport> {
     const [
         byLevelRaw,
+        byMonitoringStatusRaw,
         rentalHouseholdsCount,
-        rentalMissingDeclarationCount,
+        rentalRecordsForDeclarationCheck,
         reportedToPoliceCount,
     ] = await Promise.all([
         SecurityRecord.aggregate([
             { $group: { _id: "$level", count: { $sum: 1 } } },
         ]),
+        SecurityRecord.aggregate([
+            { $group: { _id: "$monitoringStatus", count: { $sum: 1 } } },
+        ]),
         Household.countDocuments({ ownershipType: "cho_thue" }),
-        // Chi bao gom ban ghi an ninh cua nha cho thue nhung CHUA khai bao tam tru
-        // -> day la chi so khoang trong tuan thu, khong phai tong so nha cho thue.
-        SecurityRecord.countDocuments({
-            ownershipType: "cho_thue",
-            temporaryResidenceDeclared: false,
-        }),
+        // Chi bao gom ban ghi an ninh cua nha cho thue nhung nha lien quan
+        // CHUA co so khai bao cu tru -> day la chi so khoang trong tuan thu,
+        // khong phai tong so nha cho thue.
+        SecurityRecord.find({ ownershipType: "cho_thue" }).populate(
+            "houseId",
+            "residenceDeclarationNumber",
+        ),
         SecurityRecord.countDocuments({ reportedToPolice: true }),
     ]);
+
+    const rentalMissingDeclarationCount = rentalRecordsForDeclarationCheck.filter(
+        r => {
+            const house = r.houseId as unknown as {
+                residenceDeclarationNumber?: string;
+            } | null;
+            return !house?.residenceDeclarationNumber;
+        },
+    ).length;
 
     return {
         byLevel: (Object.keys(MUC_DO_AN_NINH_LABEL) as MucDoAnNinh[]).map(
@@ -431,6 +448,18 @@ export async function getSecurityReport(): Promise<SecurityReport> {
                 };
             },
         ),
+        byMonitoringStatus: (
+            Object.keys(
+                TINH_TRANG_THEO_DOI_AN_NINH_LABEL,
+            ) as TinhTrangTheoDoiAnNinh[]
+        ).map(status => {
+            const found = byMonitoringStatusRaw.find(r => r._id === status);
+            return {
+                status,
+                label: TINH_TRANG_THEO_DOI_AN_NINH_LABEL[status],
+                count: found?.count ?? 0,
+            };
+        }),
         rentalHouseholdsCount,
         rentalMissingDeclarationCount,
         reportedToPoliceCount,
@@ -460,6 +489,15 @@ export function buildSecurityReportWorkbook(
             { header: "Số lượng", key: "count", width: 15 },
         ],
         data.byLevel,
+    );
+    addTableSheet(
+        workbook,
+        "Theo tinh trang theo doi",
+        [
+            { header: "Tình trạng theo dõi", key: "label", width: 20 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byMonitoringStatus,
     );
     return workbook;
 }

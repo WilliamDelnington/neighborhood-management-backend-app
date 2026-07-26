@@ -19,6 +19,15 @@ export async function createSurvey(actorId: string, input: CreateSurveyInput) {
         status: "nhap",
         createdBy: actorId,
     });
+
+    await writeAuditLog({
+        actorId,
+        action: "survey.create",
+        targetModel: "Survey",
+        targetId: survey._id,
+        metadata: { title: survey.title },
+    });
+
     return survey;
 }
 
@@ -33,6 +42,15 @@ export async function updateSurvey(
     Object.assign(survey, patch);
     survey.updatedBy = actorId as any;
     await survey.save();
+
+    await writeAuditLog({
+        actorId,
+        action: "survey.update",
+        targetModel: "Survey",
+        targetId: survey._id,
+        metadata: { patch },
+    });
+
     return survey;
 }
 

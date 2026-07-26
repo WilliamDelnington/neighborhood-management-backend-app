@@ -17,6 +17,7 @@ const SEED_STAFF_PASSWORD = "HoaBinh@2026";
 import {
     User,
     Role,
+    HouseRecord,
     Household,
     Citizen,
     Complaint,
@@ -41,6 +42,7 @@ async function clearDemoData() {
     await Promise.all([
         User.deleteMany({}),
         Role.deleteMany({}),
+        HouseRecord.deleteMany({}),
         Household.deleteMany({}),
         Citizen.deleteMany({}),
         Complaint.deleteMany({}),
@@ -206,11 +208,28 @@ async function seedHouseholds(actorId: string) {
 
     const households = [];
     for (const item of data) {
+        // Moi ho dan mau gan voi MOT nha so rieng (dia chi thuc te khac nhau),
+        // tranh nhieu ho dan cung tro vao mot nha so dung chung - se lam sai
+        // lech cac bao cao/thong ke tinh theo tung nha (vd. mucrisk PCCC, xem
+        // services/pcccService.ts getHouseRiskSummary).
+        const houseCode = await generateSequentialCode(HouseRecord, "NS", 3);
+        // eslint-disable-next-line no-await-in-loop
+        const house = await HouseRecord.create({
+            code: houseCode,
+            cluster: item.cluster,
+            address: item.address,
+            status: "verified",
+            ownerId: actorId,
+            createdBy: actorId,
+            updatedBy: actorId,
+        });
+
         const code = await generateSequentialCode(Household, "HB", 3);
         // eslint-disable-next-line no-await-in-loop
         const household = await Household.create({
             ...item,
             code,
+            houseId: house._id,
             createdBy: actorId,
         });
         households.push(household);
@@ -532,7 +551,7 @@ async function seedPcccAndSecurity(
 
     await PcccCheck.create([
         {
-            householdId: h1._id,
+            houseId: h1.houseId,
             hasFireExtinguisher: true,
             hasEmergencyExit: true,
             riskLevel: "xanh",
@@ -540,7 +559,7 @@ async function seedPcccAndSecurity(
             inspectorId: leaderId,
         },
         {
-            householdId: h2._id,
+            houseId: h2.houseId,
             hasFireExtinguisher: false,
             hasGasStoveOrStorageOrBusiness: true,
             riskLevel: "vang",
@@ -549,7 +568,7 @@ async function seedPcccAndSecurity(
             inspectorId: leaderId,
         },
         {
-            householdId: h3._id,
+            houseId: h3.houseId,
             hasFireExtinguisher: false,
             hasIndoorEvCharging: true,
             isCrowdedRental: true,
@@ -566,16 +585,20 @@ async function seedPcccAndSecurity(
             householdId: h1._id,
             ownershipType: "chinh_chu",
             level: "binh_thuong",
+            monitoringStatus: "binh_thuong",
+            inspectionDate: new Date(),
+            createdBy: policeId,
             updatedBy: policeId,
         },
         {
             householdId: h3._id,
             ownershipType: "cho_thue",
             renterCount: 6,
-            temporaryResidenceDeclared: false,
             level: "can_theo_doi",
-            handlingStatus:
-                "Đã nhắc nhở chủ nhà khai báo tạm trú cho người thuê",
+            monitoringStatus: "dang_theo_doi",
+            note: "Đã nhắc nhở chủ nhà khai báo cư trú cho người thuê",
+            inspectionDate: new Date(),
+            createdBy: policeId,
             updatedBy: policeId,
         },
     ]);

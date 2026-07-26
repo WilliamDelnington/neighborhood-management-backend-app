@@ -37,6 +37,14 @@ export async function createMeeting(
         createdBy: actorId,
     });
 
+    await writeAuditLog({
+        actorId,
+        action: "meeting.create",
+        targetModel: "Meeting",
+        targetId: meeting._id,
+        metadata: { title: meeting.title },
+    });
+
     if (meeting.published) {
         await notifyMeetingPublished(actorId, meeting);
     }
@@ -58,6 +66,14 @@ export async function updateMeeting(
     if (startTime) meeting.startTime = new Date(startTime);
     meeting.updatedBy = actorId as any;
     await meeting.save();
+
+    await writeAuditLog({
+        actorId,
+        action: "meeting.update",
+        targetModel: "Meeting",
+        targetId: meeting._id,
+        metadata: { patch },
+    });
 
     if (!wasPublished && meeting.published) {
         await notifyMeetingPublished(actorId, meeting);

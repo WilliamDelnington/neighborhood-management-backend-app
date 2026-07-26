@@ -17,6 +17,10 @@ export {
     default as ComplaintTimeline,
     type IComplaintTimeline,
 } from "./ComplaintTimeline";
+export {
+    default as SupportTicket,
+    type ISupportTicket,
+} from "./SupportTicket";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
 export { default as Meeting, type IMeeting } from "./Meeting";
 export {

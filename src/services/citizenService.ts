@@ -171,7 +171,7 @@ export async function listCitizens(params: {
 export async function getCitizenById(id: string): Promise<ICitizen> {
     const citizen = await Citizen.findById(id).populate(
         "householdId",
-        "code address cluster",
+        "code address cluster houseId",
     );
     if (!citizen) throw new HttpError("Khong tim thay nhan khau", 404);
     return citizen;
