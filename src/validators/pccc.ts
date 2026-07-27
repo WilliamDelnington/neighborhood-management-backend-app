@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MUC_NGUY_CO_PCCC } from "@/types";
+import { MUC_NGUY_CO_PCCC, TINH_TRANG_THEO_DOI_PCCC } from "@/types";
 
 export const createPcccCheckSchema = z.object({
     houseId: z.string().min(1, "Thieu ma nha"),
@@ -14,9 +14,15 @@ export const createPcccCheckSchema = z.object({
         .string()
         .datetime({ message: "Ngay kiem tra khong hop le" }),
     inspectorId: z.string().optional(),
-    followUpStatus: z.string().optional(),
+    followUpStatus: z.enum(TINH_TRANG_THEO_DOI_PCCC).default("chua_khac_phuc"),
 });
 export type CreatePcccCheckInput = z.infer<typeof createPcccCheckSchema>;
 
 export const updatePcccCheckSchema = createPcccCheckSchema.partial();
 export type UpdatePcccCheckInput = z.infer<typeof updatePcccCheckSchema>;
+
+export const assignPcccCheckSchema = z.object({
+    assigneeId: z.string().min(1),
+    deadline: z.string().datetime().optional(),
+});
+export type AssignPcccCheckInput = z.infer<typeof assignPcccCheckSchema>;

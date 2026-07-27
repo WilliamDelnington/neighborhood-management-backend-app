@@ -8,6 +8,10 @@ export interface IHouseRecord extends Document {
     status: HouseRecordStatus;
     ownerId?: mongoose.Types.ObjectId;
     note?: string;
+    // So khai bao cu tru/tam tru cua nha (do cong an/to dan pho cap) - nguon
+    // du lieu duy nhat, duoc man hinh An ninh & Quan ly cu tru hien thi lai
+    // (khong luu ban sao tren SecurityRecord).
+    residenceDeclarationNumber?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -29,6 +33,7 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
         // admin/nhan vien co quyen quan ly theo cum) duoc thao tac voi nha nay.
         ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
         note: { type: String },
+        residenceDeclarationNumber: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

@@ -149,6 +149,33 @@ export const TRANG_THAI_PHAN_ANH_LABEL: Record<TrangThaiPhanAnh, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Ho tro (Mini App - Ho so ca nhan)
+// ---------------------------------------------------------------------------
+export const LOAI_YEU_CAU_HO_TRO = ["bao_loi", "gop_y"] as const;
+export type LoaiYeuCauHoTro = typeof LOAI_YEU_CAU_HO_TRO[number];
+export const LOAI_YEU_CAU_HO_TRO_LABEL: Record<LoaiYeuCauHoTro, string> = {
+    bao_loi: "Báo lỗi",
+    gop_y: "Góp ý",
+};
+
+export const TRANG_THAI_YEU_CAU_HO_TRO = [
+    "moi",
+    "dang_xu_ly",
+    "da_xu_ly",
+    "dong",
+] as const;
+export type TrangThaiYeuCauHoTro = typeof TRANG_THAI_YEU_CAU_HO_TRO[number];
+export const TRANG_THAI_YEU_CAU_HO_TRO_LABEL: Record<
+    TrangThaiYeuCauHoTro,
+    string
+> = {
+    moi: "Mới",
+    dang_xu_ly: "Đang xử lý",
+    da_xu_ly: "Đã xử lý",
+    dong: "Đóng",
+};
+
+// ---------------------------------------------------------------------------
 // PCCC
 // ---------------------------------------------------------------------------
 export const MUC_NGUY_CO_PCCC = ["xanh", "vang", "do"] as const;
@@ -157,6 +184,21 @@ export const MUC_NGUY_CO_PCCC_LABEL: Record<MucNguyCoPccc, string> = {
     xanh: "Xanh",
     vang: "Vàng",
     do: "Đỏ",
+};
+
+export const TINH_TRANG_THEO_DOI_PCCC = [
+    "chua_khac_phuc",
+    "dang_khac_phuc",
+    "da_khac_phuc",
+] as const;
+export type TinhTrangTheoDoiPccc = typeof TINH_TRANG_THEO_DOI_PCCC[number];
+export const TINH_TRANG_THEO_DOI_PCCC_LABEL: Record<
+    TinhTrangTheoDoiPccc,
+    string
+> = {
+    chua_khac_phuc: "Chưa khắc phục",
+    dang_khac_phuc: "Đang khắc phục",
+    da_khac_phuc: "Đã khắc phục",
 };
 
 // ---------------------------------------------------------------------------
@@ -172,6 +214,23 @@ export const MUC_DO_AN_NINH_LABEL: Record<MucDoAnNinh, string> = {
     binh_thuong: "Bình thường",
     can_theo_doi: "Cần theo dõi",
     khan_cap: "Khẩn cấp",
+};
+
+export const TINH_TRANG_THEO_DOI_AN_NINH = [
+    "binh_thuong",
+    "dang_theo_doi",
+    "da_bao_cong_an",
+    "da_ket_thuc",
+] as const;
+export type TinhTrangTheoDoiAnNinh = typeof TINH_TRANG_THEO_DOI_AN_NINH[number];
+export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
+    TinhTrangTheoDoiAnNinh,
+    string
+> = {
+    binh_thuong: "Bình thường",
+    dang_theo_doi: "Đang theo dõi",
+    da_bao_cong_an: "Đã báo Công an",
+    da_ket_thuc: "Đã kết thúc",
 };
 
 // ---------------------------------------------------------------------------

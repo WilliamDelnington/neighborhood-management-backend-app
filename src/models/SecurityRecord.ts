@@ -2,21 +2,25 @@ import mongoose, { Schema, type Document, type Model } from "mongoose";
 import {
     LOAI_SO_HUU,
     MUC_DO_AN_NINH,
+    TINH_TRANG_THEO_DOI_AN_NINH,
     type LoaiSoHuu,
     type MucDoAnNinh,
+    type TinhTrangTheoDoiAnNinh,
 } from "@/types";
 
 export interface ISecurityRecord extends Document {
-    householdId: mongoose.Types.ObjectId;
+    houseId: mongoose.Types.ObjectId;
     ownershipType: LoaiSoHuu;
     renterCount: number;
-    temporaryResidenceDeclared: boolean;
     hasCamera: boolean;
     hasSecurityComplaint: boolean;
     level: MucDoAnNinh;
     reportedToPolice: boolean;
-    handlingStatus?: string;
+    monitoringStatus: TinhTrangTheoDoiAnNinh;
     note?: string;
+    inspectionDate: Date;
+    createdBy?: mongoose.Types.ObjectId;
+    assigneeId?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -24,9 +28,9 @@ export interface ISecurityRecord extends Document {
 
 const SecurityRecordSchema = new Schema<ISecurityRecord>(
     {
-        householdId: {
+        houseId: {
             type: Schema.Types.ObjectId,
-            ref: "Household",
+            ref: "House",
             required: true,
             index: true,
         },
@@ -36,7 +40,6 @@ const SecurityRecordSchema = new Schema<ISecurityRecord>(
             default: "chinh_chu",
         },
         renterCount: { type: Number, default: 0 },
-        temporaryResidenceDeclared: { type: Boolean, default: false },
         hasCamera: { type: Boolean, default: false },
         hasSecurityComplaint: { type: Boolean, default: false },
         level: {
@@ -46,8 +49,19 @@ const SecurityRecordSchema = new Schema<ISecurityRecord>(
             index: true,
         },
         reportedToPolice: { type: Boolean, default: false },
-        handlingStatus: { type: String },
+        monitoringStatus: {
+            type: String,
+            enum: TINH_TRANG_THEO_DOI_AN_NINH,
+            default: "binh_thuong",
+            index: true,
+        },
         note: { type: String },
+        // Khong danh dau required o schema: ho so cu (truoc khi co truong nay)
+        // van phai .save() duoc binh thuong khi chi sua truong khac. Zod
+        // (validators/security.ts) moi la noi bat buoc gia tri nay khi TAO moi.
+        inspectionDate: { type: Date },
+        createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+        assigneeId: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },
     { timestamps: true },

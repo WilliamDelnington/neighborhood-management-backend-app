@@ -15,6 +15,9 @@
         "citizens:backfill-encryption": "tsx scripts/backfill-encrypt-citizens.ts",
         "households:backfill-member-count": "tsx scripts/backfill-household-member-count.ts",
         "pccc:backfill-house-id": "tsx scripts/backfill-pccc-house-id.ts",
+        "security:backfill-house-id": "tsx scripts/backfill-security-house-id.ts",
+        "security:backfill-handling-status": "tsx scripts/backfill-security-handling-status.ts",
+        "security:backfill-monitoring-status": "tsx scripts/backfill-security-monitoring-status.ts",
         "test": "vitest run"
     },
     "dependencies": {
@@ -23,6 +26,7 @@
         "jsonwebtoken": "^9.0.2",
         "mongoose": "^8.9.5",
         "next": "14.2.35",
+        "node-cron": "^4.6.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
         "zod": "^3.24.1"
@@ -31,6 +35,7 @@
         "@types/bcryptjs": "^2.4.6",
         "@types/jsonwebtoken": "^9.0.7",
         "@types/node": "^20.17.10",
+        "@types/node-cron": "^3.0.11",
         "@types/react": "^18.3.18",
         "dotenv": "^16.4.7",
         "eslint": "^8.57.1",

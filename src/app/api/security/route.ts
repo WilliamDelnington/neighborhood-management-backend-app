@@ -38,7 +38,7 @@ export async function GET(req: Request) {
             page,
             limit,
             level: searchParams.get("level") || undefined,
-            householdId: searchParams.get("householdId") || undefined,
+            houseId: searchParams.get("houseId") || undefined,
             actorUser,
         });
         return apiSuccess(result);

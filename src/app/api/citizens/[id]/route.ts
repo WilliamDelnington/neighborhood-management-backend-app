@@ -26,7 +26,7 @@ async function assertCitizenInScope(
     if (user.roles.includes("admin")) return;
     const household = citizen.householdId as IHousehold;
     const resolvedHousehold =
-        household && typeof household === "object" && "cluster" in household
+        household && typeof household === "object" && "houseId" in household
             ? household
             : await getHouseholdById(String(citizen.householdId));
     await assertHouseholdInScope(user, resolvedHousehold);

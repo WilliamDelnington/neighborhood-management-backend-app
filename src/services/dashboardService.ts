@@ -124,9 +124,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         Survey.find({ status: "dang_mo" }).select("_id"),
         SecurityRecord.countDocuments({
             level: "khan_cap",
-            ...(isClusterScoped
-                ? { householdId: { $in: scopedHouseholdIds } }
-                : {}),
+            ...(isClusterScoped ? { houseId: { $in: scopedHouseIds } } : {}),
         }),
     ]);
 
