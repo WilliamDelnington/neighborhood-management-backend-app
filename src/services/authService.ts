@@ -32,8 +32,8 @@ export async function loginWithZalo(input: ZaloLoginInput) {
             displayName: profile.name || input.name || "Người dùng Zalo",
             avatarUrl: profile.avatarUrl || input.avatarUrl,
             phone: input.phone,
-            roles: ["resident"],
-            primaryRole: "resident",
+            roles: ["house_owner"],
+            primaryRole: "house_owner",
             status: "active",
         });
     } else {
@@ -76,8 +76,8 @@ export async function registerWithPhone(input: PhoneRegisterInput) {
             phone: input.phone,
             passwordHash,
             displayName: input.displayName,
-            roles: ["resident"],
-            primaryRole: "resident",
+            roles: ["house_owner"],
+            primaryRole: "house_owner",
             status: "active",
         });
     } catch (err: any) {

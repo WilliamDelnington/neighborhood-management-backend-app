@@ -38,8 +38,8 @@ const UserSchema = new Schema<IUser>(
         passwordHash: { type: String, select: false },
         // Vai tro la du lieu dong (bang Role), khong con enum tinh - tinh hop le
         // (ton tai, active) duoc kiem tra o service layer (assignRole).
-        roles: { type: [String], default: ["resident"] },
-        primaryRole: { type: String, default: "resident" },
+        roles: { type: [String], default: ["house_owner"] },
+        primaryRole: { type: String, default: "house_owner" },
         status: { type: String, enum: USER_STATUS, default: "active" },
         householdId: { type: Schema.Types.ObjectId, ref: "Household" },
         citizenId: { type: Schema.Types.ObjectId, ref: "Citizen" },

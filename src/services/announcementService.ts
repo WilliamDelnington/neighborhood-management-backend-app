@@ -57,7 +57,7 @@ export async function publishAnnouncement(
         body: announcement.title,
         type: "announcement.published",
         targetRoles: announcement.audienceAll
-            ? ["resident"]
+            ? ["house_owner"]
             : announcement.targetRoles,
         targetClusters: announcement.audienceAll
             ? []

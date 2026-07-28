@@ -70,7 +70,7 @@ export async function openSurvey(
         title: "Khảo sát mới",
         body: survey.title,
         type: "survey.opened",
-        targetRoles: survey.eligibleAll ? ["resident"] : survey.eligibleRoles,
+        targetRoles: survey.eligibleAll ? ["house_owner"] : survey.eligibleRoles,
         targetClusters: survey.eligibleAll ? [] : survey.eligibleClusters,
         relatedModel: "Survey",
         relatedId: survey._id,
@@ -166,7 +166,7 @@ export async function respondToSurvey(
         throw new HttpError("Khảo sát hiện không mở", 400);
     }
 
-    // TODO: khi co du lieu cluster/role cua resident, kiem tra eligibleRoles/eligibleClusters
+    // TODO: khi co du lieu cluster/role cua house_owner, kiem tra eligibleRoles/eligibleClusters
     // de gioi han ai duoc tra loi khao sat nay (hien tai chi kiem tra trang thai mo).
 
     const validQuestionIds = new Set(survey.questions.map(q => String(q._id)));

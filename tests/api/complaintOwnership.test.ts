@@ -29,7 +29,7 @@ async function createComplaintAs(
 
 describe("Quyen so huu phan anh (complaint ownership)", () => {
     it("chu phan anh xem duoc chi tiet phan anh cua chinh minh", async () => {
-        const owner = await createTestUser({ roles: ["resident"] });
+        const owner = await createTestUser({ roles: ["house_owner"] });
         const ownerHeaders = await authHeaders(owner);
         const created = await createComplaintAs(
             String(owner._id),
@@ -48,8 +48,8 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
     });
 
     it("nguoi dan khac khong the xem chi tiet phan anh khong phai cua minh", async () => {
-        const owner = await createTestUser({ roles: ["resident"] });
-        const stranger = await createTestUser({ roles: ["resident"] });
+        const owner = await createTestUser({ roles: ["house_owner"] });
+        const stranger = await createTestUser({ roles: ["house_owner"] });
         const created = await createComplaintAs(
             String(owner._id),
             await authHeaders(owner),
@@ -65,7 +65,7 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
     });
 
     it("can bo (staff) duoc xem chi tiet phan anh cua nguoi khac", async () => {
-        const owner = await createTestUser({ roles: ["resident"] });
+        const owner = await createTestUser({ roles: ["house_owner"] });
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
         const created = await createComplaintAs(
             String(owner._id),
@@ -98,8 +98,8 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
     });
 
     it("GET /api/complaints/mine chi tra ve phan anh cua nguoi dang dang nhap", async () => {
-        const userA = await createTestUser({ roles: ["resident"] });
-        const userB = await createTestUser({ roles: ["resident"] });
+        const userA = await createTestUser({ roles: ["house_owner"] });
+        const userB = await createTestUser({ roles: ["house_owner"] });
         await createComplaintAs(String(userA._id), await authHeaders(userA));
         await createComplaintAs(String(userB._id), await authHeaders(userB));
 
@@ -117,7 +117,7 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
 
     it("to truong duoc gan cum khong xem duoc phan anh cua cum khac (chi tiet + danh sach)", async () => {
         const owner = await createTestUser({
-            roles: ["resident"],
+            roles: ["house_owner"],
             assignedClusters: ["Cum 2"],
         });
         const leader = await createTestUser({
@@ -150,7 +150,7 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
 
     it("can bo UBND co complaints.read_escalated chi xem duoc phan anh cum khac sau khi da chuyen UBND", async () => {
         const owner = await createTestUser({
-            roles: ["resident"],
+            roles: ["house_owner"],
             assignedClusters: ["Cum 2"],
         });
         const committee = await createTestUser({

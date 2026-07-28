@@ -75,7 +75,7 @@ describe("getUserPermissionSet / userHasPermission", () => {
 
 describe("requirePermission / requireAnyPermission / requireAllPermissions", () => {
     it("requirePermission nem HttpError 403 khi thieu quyen", async () => {
-        const user = await makeUser({ roles: ["resident"] });
+        const user = await makeUser({ roles: ["house_owner"] });
         await expect(requirePermission(user, "finance.read")).rejects.toThrow(
             HttpError,
         );

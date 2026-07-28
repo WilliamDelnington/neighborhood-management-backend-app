@@ -107,7 +107,7 @@ export async function listCitizens(params: {
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
-    const isResidentUser = params.actorUser.roles.includes("resident");
+    const isHouseOwnerUser = params.actorUser.roles.includes("house_owner");
     const filter: Record<string, unknown> = {};
 
     if (params.householdId) {
@@ -117,10 +117,10 @@ export async function listCitizens(params: {
             await assertHouseholdInScope(params.actorUser, household);
         }
         filter.householdId = params.householdId;
-    } else if (isResidentUser) {
-        // Resident (chu nha) chi duoc xem nhan khau thuoc cac ho dan nam trong
-        // nha ma minh so huu - khong duoc roi vao clusterScopeFilter ben duoi
-        // (rong voi resident -> se bi hieu nham la xem duoc toan phuong).
+    } else if (isHouseOwnerUser) {
+        // House_owner (chu nha) chi duoc xem nhan khau thuoc cac ho dan nam
+        // trong nha ma minh so huu - khong duoc roi vao clusterScopeFilter ben
+        // duoi (rong voi house_owner -> se bi hieu nham la xem duoc toan phuong).
         filter.householdId = {
             $in: await getOwnedHouseholdIds(params.actorUser),
         };

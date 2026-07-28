@@ -71,15 +71,15 @@ describe("POST /api/roles - tao vai tro", () => {
 describe("GET /api/roles - danh sach vai tro", () => {
     it("tra ve so nguoi dung dang gan cho tung vai tro", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        await createTestUser({ roles: ["resident"] });
+        await createTestUser({ roles: ["house_owner"] });
 
         const res = await listRolesRoute(
             makeRequest("/api/roles", { headers: await authHeaders(admin) }),
         );
         const json = await readJson(res);
         expect(res.status).toBe(200);
-        const residentRole = json.data.find((r: any) => r.key === "resident");
-        expect(residentRole.assignedUserCount).toBe(1);
+        const houseOwnerRole = json.data.find((r: any) => r.key === "house_owner");
+        expect(houseOwnerRole.assignedUserCount).toBe(1);
     });
 });
 

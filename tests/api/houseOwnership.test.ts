@@ -13,7 +13,7 @@ import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
 async function setupOwnerWithHouseholdAndCitizen(clusterName: string) {
     const owner = await createTestUser({
-        roles: ["resident"],
+        roles: ["house_owner"],
         address: `Địa chỉ tại ${clusterName}`,
     });
     const headers = await authHeaders(owner);
@@ -53,8 +53,8 @@ async function setupOwnerWithHouseholdAndCitizen(clusterName: string) {
     return { owner, headers, house, household, citizen };
 }
 
-describe("Quyen so huu nha/ho dan/nhan khau cua resident (house ownership scoping)", () => {
-    it("resident chi thay ho dan cua chinh minh, khong thay ho dan cua resident khac (bug bao cao)", async () => {
+describe("Quyen so huu nha/ho dan/nhan khau cua houseOwner (house ownership scoping)", () => {
+    it("houseOwner chi thay ho dan cua chinh minh, khong thay ho dan cua houseOwner khac (bug bao cao)", async () => {
         const a = await setupOwnerWithHouseholdAndCitizen("Cụm A");
         await setupOwnerWithHouseholdAndCitizen("Cụm B");
 
@@ -69,7 +69,7 @@ describe("Quyen so huu nha/ho dan/nhan khau cua resident (house ownership scopin
         ]);
     });
 
-    it("resident chi thay nhan khau cua chinh minh, khong thay nhan khau cua resident khac", async () => {
+    it("houseOwner chi thay nhan khau cua chinh minh, khong thay nhan khau cua houseOwner khac", async () => {
         const a = await setupOwnerWithHouseholdAndCitizen("Cụm A");
         await setupOwnerWithHouseholdAndCitizen("Cụm B");
 
@@ -107,7 +107,7 @@ describe("Quyen so huu nha/ho dan/nhan khau cua resident (house ownership scopin
         expect(citizenIds).toContain(b.citizen._id);
     });
 
-    it("resident khac khong the goi truc tiep GET /api/households/:id/citizens de xem nhan khau cua ho dan khong phai cua minh", async () => {
+    it("houseOwner khac khong the goi truc tiep GET /api/households/:id/citizens de xem nhan khau cua ho dan khong phai cua minh", async () => {
         const a = await setupOwnerWithHouseholdAndCitizen("Cụm A");
         const b = await setupOwnerWithHouseholdAndCitizen("Cụm B");
 

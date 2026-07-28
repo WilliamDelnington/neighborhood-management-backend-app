@@ -108,7 +108,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.read",
         "notifications.read",
     ],
-    resident: [
+    house_owner: [
         "houses.read",
         "houses.create",
         "houses.update",

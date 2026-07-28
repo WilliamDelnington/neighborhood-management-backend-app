@@ -20,7 +20,7 @@ export type PaginatedData<T> = {
 // tinh. SYSTEM_ROLE_KEYS chi con dung de seed 6 vai tro he thong mac dinh -
 // khong dung lam danh sach day du cac vai tro hop le.
 export const SYSTEM_ROLE_KEYS = [
-    "resident",
+    "house_owner",
     "neighborhood_leader",
     "secretary",
     "regional_police",
@@ -31,7 +31,7 @@ export type Role = string;
 export type PermissionKey = string;
 
 export const ROLE_LABEL: Record<string, string> = {
-    resident: "Người dân",
+    house_owner: "Chủ hộ",
     neighborhood_leader: "Tổ trưởng",
     secretary: "Bí thư",
     regional_police: "Công an khu vực",

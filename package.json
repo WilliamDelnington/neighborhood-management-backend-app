@@ -11,6 +11,7 @@
         "seed": "tsx scripts/seed.ts",
         "seed:proposal": "tsx scripts/create-proposal-accounts.ts",
         "roles:backfill": "tsx scripts/backfill-roles.ts",
+        "roles:migrate-house-owner": "tsx scripts/backfill-resident-to-house-owner.ts",
         "complaints:backfill-clusters": "tsx scripts/backfill-complaint-clusters.ts",
         "citizens:backfill-encryption": "tsx scripts/backfill-encrypt-citizens.ts",
         "households:backfill-member-count": "tsx scripts/backfill-household-member-count.ts",

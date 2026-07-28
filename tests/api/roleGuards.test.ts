@@ -9,9 +9,9 @@ describe("RBAC tren API - GET /api/users (chi admin)", () => {
     });
 
     it("tu choi 403 khi dang nhap nhung khong phai admin", async () => {
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const res = await listUsersRoute(
-            makeRequest("/api/users", { headers: await authHeaders(resident) }),
+            makeRequest("/api/users", { headers: await authHeaders(houseOwner) }),
         );
         expect(res.status).toBe(403);
     });
