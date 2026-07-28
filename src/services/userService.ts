@@ -169,7 +169,7 @@ export async function revokeRole(
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
 
     user.roles = user.roles.filter(r => r !== role);
-    if (user.roles.length === 0) user.roles = ["resident"];
+    if (user.roles.length === 0) user.roles = ["house_owner"];
     if (user.primaryRole === role) user.primaryRole = user.roles[0];
     user.sessionVersion += 1;
     await user.save();

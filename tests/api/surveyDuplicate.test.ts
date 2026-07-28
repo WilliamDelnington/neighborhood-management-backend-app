@@ -39,16 +39,16 @@ async function createOpenSurvey(adminHeaders: Record<string, string>) {
 describe("Ngan chan tra loi khao sat trung lap", () => {
     it("cho phep tra loi lan dau va tu choi lan tra loi thu hai cua cung mot nguoi", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const { surveyId, questionId } = await createOpenSurvey(
             await authHeaders(admin),
         );
-        const residentHeaders = await authHeaders(resident);
+        const houseOwnerHeaders = await authHeaders(houseOwner);
 
         const firstRes = await respondSurveyRoute(
             makeRequest(`/api/surveys/${surveyId}/respond`, {
                 method: "POST",
-                headers: residentHeaders,
+                headers: houseOwnerHeaders,
                 body: {
                     answers: [{ questionId, selectedOptions: ["Đồng ý"] }],
                 },
@@ -60,7 +60,7 @@ describe("Ngan chan tra loi khao sat trung lap", () => {
         const secondRes = await respondSurveyRoute(
             makeRequest(`/api/surveys/${surveyId}/respond`, {
                 method: "POST",
-                headers: residentHeaders,
+                headers: houseOwnerHeaders,
                 body: {
                     answers: [
                         { questionId, selectedOptions: ["Không đồng ý"] },
@@ -74,8 +74,8 @@ describe("Ngan chan tra loi khao sat trung lap", () => {
 
     it("hai nguoi khac nhau van co the tra loi cung mot khao sat", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const residentA = await createTestUser({ roles: ["resident"] });
-        const residentB = await createTestUser({ roles: ["resident"] });
+        const houseOwnerA = await createTestUser({ roles: ["house_owner"] });
+        const houseOwnerB = await createTestUser({ roles: ["house_owner"] });
         const { surveyId, questionId } = await createOpenSurvey(
             await authHeaders(admin),
         );
@@ -83,7 +83,7 @@ describe("Ngan chan tra loi khao sat trung lap", () => {
         const resA = await respondSurveyRoute(
             makeRequest(`/api/surveys/${surveyId}/respond`, {
                 method: "POST",
-                headers: await authHeaders(residentA),
+                headers: await authHeaders(houseOwnerA),
                 body: {
                     answers: [{ questionId, selectedOptions: ["Đồng ý"] }],
                 },
@@ -93,7 +93,7 @@ describe("Ngan chan tra loi khao sat trung lap", () => {
         const resB = await respondSurveyRoute(
             makeRequest(`/api/surveys/${surveyId}/respond`, {
                 method: "POST",
-                headers: await authHeaders(residentB),
+                headers: await authHeaders(houseOwnerB),
                 body: {
                     answers: [{ questionId, selectedOptions: ["Đồng ý"] }],
                 },

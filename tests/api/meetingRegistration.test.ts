@@ -10,9 +10,9 @@ import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
     it("dang ky lai se cap nhat ban ghi cu thay vi tao ban ghi trung lap", async () => {
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const leaderHeaders = await authHeaders(leader);
-        const residentHeaders = await authHeaders(resident);
+        const houseOwnerHeaders = await authHeaders(houseOwner);
 
         const meetingRes = await readJson(
             await createMeetingRoute(
@@ -35,7 +35,7 @@ describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
         const firstRegister = await registerRoute(
             makeRequest(`/api/meetings/${meetingId}/register`, {
                 method: "POST",
-                headers: residentHeaders,
+                headers: houseOwnerHeaders,
                 body: { answer: "khong" },
             }),
             { params: { id: meetingId } },
@@ -45,7 +45,7 @@ describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
         const secondRegister = await registerRoute(
             makeRequest(`/api/meetings/${meetingId}/register`, {
                 method: "POST",
-                headers: residentHeaders,
+                headers: houseOwnerHeaders,
                 body: { answer: "co" },
             }),
             { params: { id: meetingId } },
@@ -54,7 +54,7 @@ describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
 
         const count = await MeetingRegistration.countDocuments({
             meetingId,
-            userId: String(resident._id),
+            userId: String(houseOwner._id),
         });
         expect(count).toBe(1);
 
@@ -72,7 +72,7 @@ describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
 
     it("chi can bo moi duoc xem danh sach dang ky tham du", async () => {
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
 
         const meetingRes = await readJson(
             await createMeetingRoute(
@@ -94,7 +94,7 @@ describe("Dang ky tham du cuoc hop - duy nhat theo meetingId + userId", () => {
 
         const res = await listRegistrationsRoute(
             makeRequest(`/api/meetings/${meetingId}/register`, {
-                headers: await authHeaders(resident),
+                headers: await authHeaders(houseOwner),
             }),
             { params: { id: meetingId } },
         );

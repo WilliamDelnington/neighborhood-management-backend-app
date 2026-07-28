@@ -10,12 +10,12 @@ import type {
 
 async function notifyMeetingPublished(actorId: string, meeting: IMeeting) {
     // Chua co co che phan cum/vai tro rieng cho cuoc hop nen thong bao rong toi
-    // toan bo cu dan (resident); co the thu hep theo targetClusters khi co nhu cau.
+    // toan bo chu ho (house_owner); co the thu hep theo targetClusters khi co nhu cau.
     await createNotification({
         title: "Cuộc họp mới",
         body: `${meeting.title} - ${meeting.location}`,
         type: "meeting.published",
-        targetRoles: ["resident"],
+        targetRoles: ["house_owner"],
         relatedModel: "Meeting",
         relatedId: meeting._id,
         createdBy: actorId,

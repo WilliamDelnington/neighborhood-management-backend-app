@@ -15,8 +15,8 @@ function buildSession(
 ): SessionTokenPayload {
     return {
         userId: "user-1",
-        primaryRole: "resident",
-        roles: ["resident"],
+        primaryRole: "house_owner",
+        roles: ["house_owner"],
         sv: 0,
         ...overrides,
     };
@@ -65,7 +65,7 @@ describe("requireRole", () => {
     });
 
     it("nem loi 403 khi session khong co vai tro nao duoc cho phep", () => {
-        const session = buildSession({ roles: ["resident"] });
+        const session = buildSession({ roles: ["house_owner"] });
         expect(() => requireRole(session, "admin")).toThrow(HttpError);
         try {
             requireRole(session, "admin");
@@ -77,13 +77,13 @@ describe("requireRole", () => {
 
 describe("isAdmin", () => {
     it("tra ve true khi session co vai tro admin", () => {
-        expect(isAdmin(buildSession({ roles: ["admin", "resident"] }))).toBe(
+        expect(isAdmin(buildSession({ roles: ["admin", "house_owner"] }))).toBe(
             true,
         );
     });
 
     it("tra ve false khi session khong co vai tro admin", () => {
-        expect(isAdmin(buildSession({ roles: ["resident"] }))).toBe(false);
+        expect(isAdmin(buildSession({ roles: ["house_owner"] }))).toBe(false);
     });
 });
 

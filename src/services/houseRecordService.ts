@@ -19,11 +19,11 @@ import type {
 /**
  * Nem HttpError(403) neu actor khong phai admin va cluster truyen vao khong
  * nam trong assignedClusters cua actor - dung khi tao/doi cluster cua nha so.
- * Resident khong co assignedClusters va khong phai nhan vien nen duoc bo qua
- * kiem tra nay (ho tu khai bao cum dan cu cua minh khi tu dang ky nha so).
+ * House_owner khong co assignedClusters va khong phai nhan vien nen duoc bo
+ * qua kiem tra nay (ho tu khai bao cum dan cu cua minh khi tu dang ky nha so).
  */
 function assertClusterAssignable(actorUser: IUser, cluster: string): void {
-    if (actorUser.roles.includes("admin") || actorUser.roles.includes("resident")) {
+    if (actorUser.roles.includes("admin") || actorUser.roles.includes("house_owner")) {
         return;
     }
     if (!actorUser.assignedClusters?.includes(cluster)) {
@@ -38,7 +38,7 @@ function assertClusterAssignable(actorUser: IUser, cluster: string): void {
  * Nem HttpError(403) neu user khong duoc phep thao tac voi nha so nay:
  * - admin: luon duoc phep.
  * - chu nha (ownerId trung voi user hien tai): luon duoc phep voi nha cua minh.
- * - resident khac (khong phai chu nha): khong bao gio duoc phep.
+ * - house_owner khac (khong phai chu nha nay): khong bao gio duoc phep.
  * - nhan vien (to truong, bi thu, cong an, can bo UBND): theo assignedClusters
  *   nhu truoc (rong neu khong duoc gan cum cu the).
  */
@@ -48,7 +48,7 @@ export function assertHouseRecordInScope(
 ): void {
     if (user.roles.includes("admin")) return;
     if (houseRecord.ownerId && String(houseRecord.ownerId) === String(user._id)) return;
-    if (user.roles.includes("resident")) {
+    if (user.roles.includes("house_owner")) {
         throw new HttpError(
             "Bạn không có quyền thao tác với nhà số của người khác",
             403,
@@ -88,21 +88,21 @@ export function assertHouseRecordVerifiedForMembers(
 /**
  * Dieu kien loc danh sach nha so theo pham vi cua actor:
  * - admin: xem tat ca.
- * - resident: chi xem nha so ma minh la chu (ownerId), KHONG duoc roi vao
- *   nhanh clusterScopeFilter vi resident luon co assignedClusters rong ->
+ * - house_owner: chi xem nha so ma minh la chu (ownerId), KHONG duoc roi vao
+ *   nhanh clusterScopeFilter vi house_owner luon co assignedClusters rong ->
  *   se bi hieu nham la "khong gioi han" (xem duoc toan bo phuong) neu dung
  *   chung logic voi nhan vien.
  * - nhan vien: nhu truoc, theo assignedClusters (rong = xem toan phuong).
  */
 function houseRecordScopeFilter(user: IUser): Record<string, unknown> {
     if (user.roles.includes("admin")) return {};
-    if (user.roles.includes("resident")) return { ownerId: user._id };
+    if (user.roles.includes("house_owner")) return { ownerId: user._id };
     return clusterScopeFilter(user);
 }
 
 /**
  * Tra ve id cac nha so ma user la chu so huu - dung boi householdService/
- * citizenService de loc ho dan/nhan khau theo cac nha ma resident so huu
+ * citizenService de loc ho dan/nhan khau theo cac nha ma house_owner so huu
  * (khong the dung chung houseRecordScopeFilter o day vi no thao tac tren
  * Household/Citizen, khong phai HouseRecord).
  */
@@ -122,7 +122,7 @@ export async function createHouseRecord(
         code,
         cluster: input.cluster,
         address: input.address,
-        // Nguoi tao nha so duoc coi la chu nha (ap dung cho ca resident tu
+        // Nguoi tao nha so duoc coi la chu nha (ap dung cho ca house_owner tu
         // dang ky lan nhan vien tao ho khi nguoi dan chua co tai khoan).
         ownerId: actorUser._id,
         note: input.note,
@@ -151,16 +151,16 @@ export async function listHouseRecords(params: {
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
-    const isResidentUser = params.actorUser.roles.includes("resident");
+    const isHouseOwnerUser = params.actorUser.roles.includes("house_owner");
     const filter: Record<string, unknown> = {};
 
     if (params.status) {
         filter.status = params.status;
     }
 
-    // Resident luon bi gioi han theo ownerId, khong duoc dung query `cluster`
+    // House_owner luon bi gioi han theo ownerId, khong duoc dung query `cluster`
     // de "mo rong" pham vi xem (ho khong co assignedClusters de doi chieu).
-    if (params.cluster && !isResidentUser) {
+    if (params.cluster && !isHouseOwnerUser) {
         const allowedClusters = params.actorUser.assignedClusters;
         if (
             !isAdminUser &&

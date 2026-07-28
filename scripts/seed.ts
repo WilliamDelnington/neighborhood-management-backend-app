@@ -141,18 +141,18 @@ async function seedUsers() {
         status: "active",
     });
 
-    const resident = await User.create({
-        zaloUserId: "seed-resident",
+    const houseOwner = await User.create({
+        zaloUserId: "seed-house-owner",
         displayName: "Hoàng Văn Dân",
         phone: "0900000006",
         address: "Số 12, Cụm 1, Tổ dân phố Hòa Bình",
-        roles: ["resident"],
-        primaryRole: "resident",
+        roles: ["house_owner"],
+        primaryRole: "house_owner",
         status: "active",
         notificationPermission: true,
     });
 
-    return { admin, leader, secretary, police, committee, resident };
+    return { admin, leader, secretary, police, committee, houseOwner };
 }
 
 async function seedHouseholds(actorId: string) {
@@ -351,12 +351,12 @@ async function seedCitizens(households: any[], actorId: string) {
 
     return {
         citizens,
-        residentHouseholdId: h5._id,
-        residentCitizenId: citizens[9]._id,
+        houseOwnerHouseholdId: h5._id,
+        houseOwnerCitizenId: citizens[9]._id,
     };
 }
 
-async function seedComplaints(residentId: string, leaderId: string) {
+async function seedComplaints(houseOwnerId: string, leaderId: string) {
     const items: Array<{
         category: any;
         title: string;
@@ -413,7 +413,7 @@ async function seedComplaints(residentId: string, leaderId: string) {
             content: item.content,
             area: item.area,
             status: item.status,
-            createdByUserId: residentId,
+            createdByUserId: houseOwnerId,
             assigneeId: item.status === "moi_tiep_nhan" ? undefined : leaderId,
         });
 
@@ -423,7 +423,7 @@ async function seedComplaints(residentId: string, leaderId: string) {
             status: "moi_tiep_nhan",
             note: "Phản ánh đã được tiếp nhận",
             isPublic: true,
-            actorId: residentId,
+            actorId: houseOwnerId,
         });
 
         if (item.status !== "moi_tiep_nhan") {
@@ -472,7 +472,7 @@ async function seedAnnouncements(actorId: string) {
     ]);
 }
 
-async function seedMeetings(actorId: string, residentId: string) {
+async function seedMeetings(actorId: string, houseOwnerId: string) {
     const upcoming = await Meeting.create({
         title: "Họp dân quý III",
         startTime: new Date(Date.now() + 7 * 24 * 3600 * 1000),
@@ -485,7 +485,7 @@ async function seedMeetings(actorId: string, residentId: string) {
 
     await MeetingRegistration.create({
         meetingId: upcoming._id,
-        userId: residentId,
+        userId: houseOwnerId,
         answer: "co",
     });
 
@@ -501,7 +501,7 @@ async function seedMeetings(actorId: string, residentId: string) {
     });
 }
 
-async function seedSurveys(actorId: string, residentId: string) {
+async function seedSurveys(actorId: string, houseOwnerId: string) {
     const survey = await Survey.create({
         title: "Khảo sát mức độ hài lòng về an ninh trật tự",
         description:
@@ -534,7 +534,7 @@ async function seedSurveys(actorId: string, residentId: string) {
     const [q1, q2] = survey.questions;
     await SurveyResponse.create({
         surveyId: survey._id,
-        userId: residentId,
+        userId: houseOwnerId,
         answers: [
             { questionId: q1._id, selectedOptions: ["Đồng ý"] },
             { questionId: q2._id, selectedOptions: ["An ninh trật tự"] },
@@ -737,7 +737,7 @@ async function main() {
     await clearDemoData();
 
     console.log("Đang tạo tài khoản mẫu cho từng vai trò...");
-    const { admin, leader, police, resident } = await seedUsers();
+    const { admin, leader, police, houseOwner } = await seedUsers();
 
     console.log("Đang tạo 6 vai trò hệ thống...");
     await seedRoles(String(admin._id));
@@ -746,26 +746,26 @@ async function main() {
     const households = await seedHouseholds(String(admin._id));
 
     console.log("Đang tạo nhân khẩu mẫu...");
-    const { residentHouseholdId, residentCitizenId } = await seedCitizens(
+    const { houseOwnerHouseholdId, houseOwnerCitizenId } = await seedCitizens(
         households,
         String(admin._id),
     );
-    await User.findByIdAndUpdate(resident._id, {
-        householdId: residentHouseholdId,
-        citizenId: residentCitizenId,
+    await User.findByIdAndUpdate(houseOwner._id, {
+        householdId: houseOwnerHouseholdId,
+        citizenId: houseOwnerCitizenId,
     });
 
     console.log("Đang tạo phản ánh mẫu...");
-    await seedComplaints(String(resident._id), String(leader._id));
+    await seedComplaints(String(houseOwner._id), String(leader._id));
 
     console.log("Đang tạo thông báo mẫu...");
     await seedAnnouncements(String(admin._id));
 
     console.log("Đang tạo cuộc họp mẫu...");
-    await seedMeetings(String(admin._id), String(resident._id));
+    await seedMeetings(String(admin._id), String(houseOwner._id));
 
     console.log("Đang tạo khảo sát mẫu...");
-    await seedSurveys(String(admin._id), String(resident._id));
+    await seedSurveys(String(admin._id), String(houseOwner._id));
 
     console.log("Đang tạo dữ liệu PCCC và an ninh mẫu...");
     await seedPcccAndSecurity(
@@ -794,7 +794,7 @@ async function main() {
     console.log("  secretary                 -> seed-secretary");
     console.log("  regional_police           -> seed-police");
     console.log("  people_committee_official -> seed-committee");
-    console.log("  resident                  -> seed-resident");
+    console.log("  house_owner               -> seed-house-owner");
     console.log(
         "\nDang nhap trang quan tri web (so dien thoai + mat khau, xem @/lib/phone cho dinh dang):",
     );

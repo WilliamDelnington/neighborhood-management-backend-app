@@ -54,16 +54,16 @@ describe("Hien thi cuoc hop nhap (draft) va thong bao khi da dang", () => {
 
     it("khong xem duoc chi tiet cuoc hop nhap qua GET cong khai, nhan vien co quyen meetings.read thi xem duoc", async () => {
         const secretary = await createTestUser({ roles: ["secretary"] });
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const created = await createMeeting(await authHeaders(secretary));
 
-        const asResident = await getMeetingRoute(
+        const asHouseOwner = await getMeetingRoute(
             makeRequest(`/api/meetings/${created.data._id}`, {
-                headers: await authHeaders(resident),
+                headers: await authHeaders(houseOwner),
             }),
             { params: { id: created.data._id } },
         );
-        expect(asResident.status).toBe(404);
+        expect(asHouseOwner.status).toBe(404);
 
         const asSecretary = await getMeetingRoute(
             makeRequest(`/api/meetings/${created.data._id}`, {
@@ -74,9 +74,9 @@ describe("Hien thi cuoc hop nhap (draft) va thong bao khi da dang", () => {
         expect(asSecretary.status).toBe(200);
     });
 
-    it("cuoc hop duoc tao voi published=true se hien cong khai va gui thong bao toi resident", async () => {
+    it("cuoc hop duoc tao voi published=true se hien cong khai va gui thong bao toi houseOwner", async () => {
         const secretary = await createTestUser({ roles: ["secretary"] });
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const created = await createMeeting(await authHeaders(secretary), {
             published: true,
         });
@@ -90,7 +90,7 @@ describe("Hien thi cuoc hop nhap (draft) va thong bao khi da dang", () => {
         ).toBe(true);
 
         const delivery = await NotificationDelivery.findOne({
-            userId: resident._id,
+            userId: houseOwner._id,
         });
         expect(delivery).toBeTruthy();
     });

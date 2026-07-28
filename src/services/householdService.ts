@@ -24,12 +24,12 @@ import type {
  * nam trong assignedClusters cua actor - dung khi tao/doi cluster cua ho dan,
  * de tranh tao ra ho dan "mo coi" ma chinh nguoi tao cung khong con thay duoc
  * (vi clusterScopeFilter se loc theo assignedClusters cho cac truy van sau do).
- * Resident khong co assignedClusters va khong phai nhan vien nen duoc bo qua
- * kiem tra nay (ho tu khai bao cum dan cu cua minh khi tu dang ky ho dan) -
+ * House_owner khong co assignedClusters va khong phai nhan vien nen duoc bo
+ * qua kiem tra nay (ho tu khai bao cum dan cu cua minh khi tu dang ky ho dan) -
  * giong het bypass tuong tu trong houseRecordService.ts.
  */
 function assertClusterAssignable(actorUser: IUser, cluster: string): void {
-    if (actorUser.roles.includes("admin") || actorUser.roles.includes("resident")) {
+    if (actorUser.roles.includes("admin") || actorUser.roles.includes("house_owner")) {
         return;
     }
     if (!actorUser.assignedClusters?.includes(cluster)) {
@@ -44,7 +44,7 @@ function assertClusterAssignable(actorUser: IUser, cluster: string): void {
  * Nem HttpError(404) neu houseId duoc chon khong ton tai, hoac HttpError(403)
  * neu actor khong nam trong pham vi cua nha so do (dung lai
  * assertHouseRecordInScope cua houseRecordService - admin: luon duoc; nhan
- * vien: theo assignedClusters; resident: chi duoc gan ho dan vao nha ma
+ * vien: theo assignedClusters; house_owner: chi duoc gan ho dan vao nha ma
  * chinh ho la chu so huu). Tra ve HouseRecord de goi noi dung derive
  * `cluster` tu do, thay vi tin gia tri client gui len.
  */
@@ -63,12 +63,12 @@ export async function createHousehold(
     actorUser: IUser,
     input: CreateHouseholdInput,
 ): Promise<IHousehold> {
-    // Chu nha (resident) luon phai gan ho dan vao mot nha so co san - khong
-    // con ly do de resident tu go cum dan cu rieng, vi ho dan phu thuoc vao
+    // Chu nha (house_owner) luon phai gan ho dan vao mot nha so co san - khong
+    // con ly do de house_owner tu go cum dan cu rieng, vi ho dan phu thuoc vao
     // nha so va nha so da mang san cum dan cu cua no. Nhan vien/admin van
     // duoc tao ho dan "mo coi" (chua gan nha) de xu ly du lieu cu/nhap tay,
     // giong tinh nang gan nha so sau nay o man chi tiet nha (unassignedOnly).
-    if (actorUser.roles.includes("resident") && !input.houseId) {
+    if (actorUser.roles.includes("house_owner") && !input.houseId) {
         throw new HttpError("Vui lòng chọn nhà số trước khi tạo hộ dân", 400);
     }
 
@@ -129,27 +129,27 @@ export async function listHouseholds(params: {
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
-    const isResidentUser = params.actorUser.roles.includes("resident");
+    const isHouseOwnerUser = params.actorUser.roles.includes("house_owner");
     const filter: Record<string, unknown> = {};
 
     if (params.houseId) {
         // Nguon goc houseId da duoc kiem tra quyen o route goi (vd nested
         // /api/houses/:id/households da assertHouseRecordInScope truoc do), nen ap
-        // dung truc tiep, khong can loc lai theo resident/cluster o day.
+        // dung truc tiep, khong can loc lai theo house_owner/cluster o day.
         filter.houseId = params.houseId;
-    } else if (params.unassigned && !isResidentUser) {
+    } else if (params.unassigned && !isHouseOwnerUser) {
         // "Chua gan nha" chi co y nghia voi nhan vien (man gan ho dan co san) -
-        // resident khong the co ho dan "mo coi" thuoc pham vi cua ho.
+        // house_owner khong the co ho dan "mo coi" thuoc pham vi cua ho.
         filter.houseId = null;
-    } else if (isResidentUser) {
-        // Resident (chu nha) chi duoc xem ho dan thuoc cac nha ma minh so huu -
-        // KHONG duoc roi vao nhanh clusterScopeFilter ben duoi, vi resident luon
-        // co assignedClusters rong va se bi hieu nham la "xem duoc toan phuong".
+    } else if (isHouseOwnerUser) {
+        // House_owner (chu nha) chi duoc xem ho dan thuoc cac nha ma minh so huu -
+        // KHONG duoc roi vao nhanh clusterScopeFilter ben duoi, vi house_owner
+        // luon co assignedClusters rong va se bi hieu nham la "xem duoc toan phuong".
         const ownedHouseIds = await getOwnedHouseRecordIds(params.actorUser._id);
         filter.houseId = { $in: ownedHouseIds };
     }
 
-    if (params.cluster && !isResidentUser) {
+    if (params.cluster && !isHouseOwnerUser) {
         const allowedClusters = params.actorUser.assignedClusters;
         if (
             !isAdminUser &&
@@ -159,7 +159,7 @@ export async function listHouseholds(params: {
             throw new HttpError("Ban khong co quyen xem cum dan cu nay", 403);
         }
         filter.cluster = params.cluster;
-    } else if (!isResidentUser) {
+    } else if (!isHouseOwnerUser) {
         Object.assign(filter, clusterScopeFilter(params.actorUser));
     }
 
@@ -190,8 +190,8 @@ export async function listHouseholds(params: {
 
 /**
  * Tim ho dan cho nguoi dung tu chon ho khau cua minh (onboarding/doi ho khau) -
- * khong yeu cau quyen "households.read" (resident khong co quyen nay theo mac
- * dinh) va chi tra ve cac truong khong nhay cam. Neu khong truyen `cluster`
+ * khong yeu cau quyen "households.read" (house_owner khong co quyen nay theo
+ * mac dinh) va chi tra ve cac truong khong nhay cam. Neu khong truyen `cluster`
  * thi tim tren toan bo cac to dan pho (nguoi dung co the chua chon to dan pho).
  */
 export async function searchHouseholdsForOnboarding(params: {
@@ -242,9 +242,9 @@ export async function getHouseholdById(id: string): Promise<IHousehold> {
  * Kiem tra quyen truy cap ho dan:
  * - admin: luon duoc phep.
  * - chu nha (nha chua ho dan nay co ownerId trung actor): luon duoc phep.
- * - resident khac (khong phai chu nha): khong bao gio duoc phep - phai chan
- *   o day truoc, khong duoc roi xuong kiem tra cum ben duoi vi resident luon
- *   co assignedClusters rong nen se "lot" qua kiem tra do.
+ * - house_owner khac (khong phai chu nha): khong bao gio duoc phep - phai chan
+ *   o day truoc, khong duoc roi xuong kiem tra cum ben duoi vi house_owner
+ *   luon co assignedClusters rong nen se "lot" qua kiem tra do.
  * - nhan vien: theo assignedClusters nhu truoc (rong = xem toan phuong).
  */
 export async function assertHouseholdInScope(
@@ -265,7 +265,7 @@ export async function assertHouseholdInScope(
         }
     }
 
-    if (user.roles.includes("resident")) {
+    if (user.roles.includes("house_owner")) {
         throw new HttpError(
             "Bạn không có quyền thao tác với hộ dân của người khác",
             403,
@@ -285,7 +285,7 @@ export async function assertHouseholdInScope(
 
 /**
  * Tra ve id cac ho dan thuoc cac nha so ma user la chu so huu - dung boi
- * citizenService de loc nhan khau theo pham vi cua resident (chu nha).
+ * citizenService de loc nhan khau theo pham vi cua house_owner (chu nha).
  */
 export async function getOwnedHouseholdIds(user: IUser) {
     const houseIds = await getOwnedHouseRecordIds(user._id);
@@ -303,10 +303,10 @@ export async function updateHousehold(
     const household = await Household.findById(id);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
 
-    // Resident khong duoc go lien ket nha so khoi ho dan cua minh - ho dan
-    // phu thuoc vao nha so, go lien ket se tao ra ho dan "mo coi" ma resident
+    // House_owner khong duoc go lien ket nha so khoi ho dan cua minh - ho dan
+    // phu thuoc vao nha so, go lien ket se tao ra ho dan "mo coi" ma house_owner
     // (khong co assignedClusters) se khong con quan ly duoc nua.
-    if (patch.houseId === null && actorUser.roles.includes("resident")) {
+    if (patch.houseId === null && actorUser.roles.includes("house_owner")) {
         throw new HttpError(
             "Hộ dân phải luôn được liên kết với một nhà số",
             400,

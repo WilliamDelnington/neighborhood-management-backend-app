@@ -13,10 +13,10 @@ import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
 describe("GET /api/roles/permissions", () => {
     it("tu choi khi khong phai admin", async () => {
-        const resident = await createTestUser({ roles: ["resident"] });
+        const houseOwner = await createTestUser({ roles: ["house_owner"] });
         const res = await permissionRegistryRoute(
             makeRequest("/api/roles/permissions", {
-                headers: await authHeaders(resident),
+                headers: await authHeaders(houseOwner),
             }),
         );
         expect(res.status).toBe(403);
@@ -57,7 +57,7 @@ describe("GET /api/roles (danh sach vai tro, tu dong seed 6 vai tro he thong)", 
                 "neighborhood_leader",
                 "people_committee_official",
                 "regional_police",
-                "resident",
+                "house_owner",
                 "secretary",
             ].sort(),
         );
@@ -172,22 +172,22 @@ describe("PATCH/DELETE /api/roles/:id", () => {
                 }),
             ),
         );
-        const residentRole = roles.data.items.find(
-            (r: any) => r.key === "resident",
+        const houseOwnerRole = roles.data.items.find(
+            (r: any) => r.key === "house_owner",
         );
         const res = await deleteRoleRoute(
-            makeRequest(`/api/roles/${residentRole._id}`, {
+            makeRequest(`/api/roles/${houseOwnerRole._id}`, {
                 method: "DELETE",
                 headers: await authHeaders(admin),
             }),
-            { params: { id: residentRole._id } },
+            { params: { id: houseOwnerRole._id } },
         );
         expect(res.status).toBe(400);
     });
 
     it("tu choi xoa vai tro dang duoc gan cho nguoi dung", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const staff = await createTestUser({ roles: ["resident"] });
+        const staff = await createTestUser({ roles: ["house_owner"] });
         const created = await readJson(
             await createRoleRoute(
                 makeRequest("/api/roles", {
@@ -248,7 +248,7 @@ describe("PATCH/DELETE /api/roles/:id", () => {
 describe("POST /api/roles/assign va /api/roles/revoke", () => {
     it("gan vai tro tuy chinh cho user va phan quyen co hieu luc ngay", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const staff = await createTestUser({ roles: ["resident"] });
+        const staff = await createTestUser({ roles: ["house_owner"] });
 
         await createRoleRoute(
             makeRequest("/api/roles", {
@@ -290,7 +290,7 @@ describe("POST /api/roles/assign va /api/roles/revoke", () => {
 
     it("tu choi gan vai tro khong ton tai", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const staff = await createTestUser({ roles: ["resident"] });
+        const staff = await createTestUser({ roles: ["house_owner"] });
         const res = await assignRoleRoute(
             makeRequest("/api/roles/assign", {
                 method: "POST",
@@ -304,7 +304,7 @@ describe("POST /api/roles/assign va /api/roles/revoke", () => {
     it("thu hoi vai tro khoi user", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const staff = await createTestUser({
-            roles: ["resident", "secretary"],
+            roles: ["house_owner", "secretary"],
             primaryRole: "secretary",
         });
 

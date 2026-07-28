@@ -4,7 +4,7 @@ import { GET as meRoute } from "@/app/api/auth/me/route";
 import { makeRequest, readJson } from "../helpers";
 
 describe("POST /api/auth/zalo/login", () => {
-    it("tao tai khoan resident moi va tra ve session token khi lan dau dang nhap", async () => {
+    it("tao tai khoan houseOwner moi va tra ve session token khi lan dau dang nhap", async () => {
         const res = await loginRoute(
             makeRequest("/api/auth/zalo/login", {
                 method: "POST",
@@ -20,7 +20,7 @@ describe("POST /api/auth/zalo/login", () => {
         expect(res.status).toBe(200);
         expect(json.success).toBe(true);
         expect(json.data.token).toBeTypeOf("string");
-        expect(json.data.user.primaryRole).toBe("resident");
+        expect(json.data.user.primaryRole).toBe("house_owner");
         expect(json.data.user.displayName).toBe("Nguyễn Test");
     });
 
