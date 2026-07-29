@@ -19,6 +19,7 @@
         "security:backfill-house-id": "tsx scripts/backfill-security-house-id.ts",
         "security:backfill-handling-status": "tsx scripts/backfill-security-handling-status.ts",
         "security:backfill-monitoring-status": "tsx scripts/backfill-security-monitoring-status.ts",
+        "businesses:backfill-status": "tsx scripts/backfill-business-status.ts",
         "test": "vitest run"
     },
     "dependencies": {

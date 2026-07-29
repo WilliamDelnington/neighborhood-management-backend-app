@@ -75,6 +75,12 @@ export const HOUSE_RECORD_STATUS_LABEL: Record<HouseRecordStatus, string> = {
     locked: "đã khóa",
 };
 
+// Ho kinh doanh dung lai dung 5 trang thai xac thuc cua nha so (cung y nghia,
+// khong can dinh nghia rieng) - xem transitionBusinessStatus.
+export const BUSINESS_STATUS = HOUSE_RECORD_STATUS;
+export type BusinessStatus = HouseRecordStatus;
+export const BUSINESS_STATUS_LABEL = HOUSE_RECORD_STATUS_LABEL;
+
 // ---------------------------------------------------------------------------
 // Ho dan
 // ---------------------------------------------------------------------------
@@ -358,4 +364,20 @@ export type SessionTokenPayload = {
     primaryRole: Role;
     roles: Role[];
     sv: number;
+};
+
+/**
+ * Token rieng, ngan han (xem signUploadToken/verifyUploadToken trong auth.ts)
+ * dung cho luong upload cua openMediaPicker (Zalo Mini App) - client Zalo tu
+ * POST file thang den serverUploadUrl, khong qua request() co san nen khong
+ * chac chan mang theo header Authorization. Token nay duoc nhung vao query
+ * string cua serverUploadUrl thay vi header, va CHI cho phep upload vao dung
+ * mot ban ghi (relatedModel/relatedId) da duoc kiem tra quyen truoc do - khac
+ * han SessionTokenPayload (dang nhap toan bo, song 30 ngay).
+ */
+export type UploadTokenPayload = {
+    purpose: "upload";
+    userId: string;
+    relatedModel: "HouseRecord" | "Business";
+    relatedId: string;
 };

@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
+import { BUSINESS_STATUS, type BusinessStatus } from "@/types";
 
 export interface IBusiness extends Document {
     name: string;
@@ -8,6 +9,7 @@ export interface IBusiness extends Document {
     ownerName?: string;
     phone?: string;
     active: boolean;
+    status: BusinessStatus;
     note?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -29,6 +31,14 @@ const BusinessSchema = new Schema<IBusiness>(
         ownerName: { type: String, trim: true },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
+        // Trang thai xac thuc ho kinh doanh - cung 5 trang thai va luong
+        // chuyen doi nhu nha so (xem transitionBusinessStatus).
+        status: {
+            type: String,
+            enum: BUSINESS_STATUS,
+            default: "unverified",
+            index: true,
+        },
         note: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

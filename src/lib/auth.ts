@@ -1,9 +1,12 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import type { SessionTokenPayload } from "@/types";
+import type { SessionTokenPayload, UploadTokenPayload } from "@/types";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
+// Rieng cho upload token (xem UploadTokenPayload) - ngan han vi chi dung mot
+// lan cho luong openMediaPicker cua Zalo, khong phai phien dang nhap.
+const UPLOAD_TOKEN_EXPIRES_IN = "10m";
 
 if (!JWT_SECRET) {
     throw new Error("Thieu bien moi truong JWT_SECRET");
@@ -18,6 +21,24 @@ export function signSessionToken(payload: SessionTokenPayload): string {
 export function verifySessionToken(token: string): SessionTokenPayload | null {
     try {
         return jwt.verify(token, JWT_SECRET) as SessionTokenPayload;
+    } catch {
+        return null;
+    }
+}
+
+export function signUploadToken(payload: UploadTokenPayload): string {
+    return jwt.sign(payload, JWT_SECRET, {
+        expiresIn: UPLOAD_TOKEN_EXPIRES_IN,
+    } as jwt.SignOptions);
+}
+
+export function verifyUploadToken(token: string): UploadTokenPayload | null {
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET) as UploadTokenPayload;
+        // Phan biet voi SessionTokenPayload (ca hai deu ky bang cung
+        // JWT_SECRET) - token session khong co truong `purpose`.
+        if (decoded.purpose !== "upload") return null;
+        return decoded;
     } catch {
         return null;
     }

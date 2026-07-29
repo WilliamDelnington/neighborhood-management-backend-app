@@ -52,7 +52,7 @@ export async function DELETE(
         const user = await requireUser(req);
         await requirePermission(user, "businesses.delete");
 
-        await deleteBusiness(String(user._id), params.id);
+        await deleteBusiness(user, params.id);
         return apiSuccess(null, "Xoa ho kinh doanh thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
