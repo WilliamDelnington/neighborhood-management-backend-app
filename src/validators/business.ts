@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BUSINESS_STATUS } from "@/types";
 
 export const createBusinessSchema = z.object({
     name: z.string().min(1, "Ten ho kinh doanh khong duoc de trong"),
@@ -16,3 +17,10 @@ export const updateBusinessSchema = createBusinessSchema
     .omit({ houseId: true })
     .partial();
 export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
+
+export const updateBusinessStatusSchema = z.object({
+    status: z.enum(BUSINESS_STATUS),
+});
+export type UpdateBusinessStatusInput = z.infer<
+    typeof updateBusinessStatusSchema
+>;

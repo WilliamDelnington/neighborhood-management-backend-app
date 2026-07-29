@@ -70,6 +70,14 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "businesses.create", label: "Tạo hộ kinh doanh" },
             { key: "businesses.update", label: "Cập nhật hộ kinh doanh" },
             { key: "businesses.delete", label: "Xóa hộ kinh doanh" },
+            {
+                key: "businesses.verify",
+                label: "Duyệt / từ chối hộ kinh doanh",
+            },
+            {
+                key: "businesses.lock",
+                label: "Khóa / mở khóa hộ kinh doanh",
+            },
         ],
     },
     {
