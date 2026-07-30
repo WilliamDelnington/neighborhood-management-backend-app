@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const corsOrigin = process.env.CORS_ORIGIN || "*";
+const corsOrigin =
+    process.env.NODE_ENV === "production"
+        ? process.env.CORS_ORIGIN || "https://hiscustom.io.vn"
+        : "*";
 
 /**
  * Next.js App Router route files chi tra loi cac HTTP method chung export

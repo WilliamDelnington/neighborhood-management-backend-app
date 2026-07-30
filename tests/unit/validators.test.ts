@@ -4,6 +4,8 @@ import { createHouseholdSchema } from "@/validators/household";
 import { registerMeetingSchema } from "@/validators/meeting";
 import { respondSurveySchema } from "@/validators/survey";
 import { zaloLoginSchema } from "@/validators/auth";
+import { reviewBusinessDocumentSchema } from "@/validators/businessDocument";
+import { putDocumentRulesSchema } from "@/validators/businessType";
 
 describe("createComplaintSchema", () => {
     it("chap nhan du lieu hop le", () => {
@@ -109,6 +111,53 @@ describe("respondSurveySchema", () => {
             answers: [{ questionId: "q1", selectedOptions: ["Đồng ý"] }],
         });
         expect(result.answers).toHaveLength(1);
+    });
+});
+
+describe("reviewBusinessDocumentSchema", () => {
+    it("tu choi khi tu choi (rejected) ma khong co ly do", () => {
+        expect(() =>
+            reviewBusinessDocumentSchema.parse({ decision: "rejected" }),
+        ).toThrow();
+    });
+
+    it("tu choi khi ly do la chuoi rong", () => {
+        expect(() =>
+            reviewBusinessDocumentSchema.parse({
+                decision: "rejected",
+                rejectionReason: "   ",
+            }),
+        ).toThrow();
+    });
+
+    it("chap nhan tu choi khi co ly do", () => {
+        const result = reviewBusinessDocumentSchema.parse({
+            decision: "rejected",
+            rejectionReason: "Anh mo, khong doc duoc so giay phep",
+        });
+        expect(result.decision).toBe("rejected");
+    });
+
+    it("chap nhan duyet (approved) khong can ly do", () => {
+        const result = reviewBusinessDocumentSchema.parse({
+            decision: "approved",
+        });
+        expect(result.decision).toBe("approved");
+    });
+});
+
+describe("putDocumentRulesSchema", () => {
+    it("ap dung mac dinh isRequired=true va reviewerRoles=[]", () => {
+        const result = putDocumentRulesSchema.parse({
+            requiredDocuments: [{ documentTypeId: "abc123" }],
+        });
+        expect(result.requiredDocuments[0].isRequired).toBe(true);
+        expect(result.requiredDocuments[0].reviewerRoles).toEqual([]);
+    });
+
+    it("chap nhan mang rong (khong yeu cau giay to nao)", () => {
+        const result = putDocumentRulesSchema.parse({ requiredDocuments: [] });
+        expect(result.requiredDocuments).toHaveLength(0);
     });
 });
 

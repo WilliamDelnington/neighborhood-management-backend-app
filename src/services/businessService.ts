@@ -6,7 +6,7 @@ import {
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
-import { clusterScopeFilter, userHasPermission } from "@/lib/rbac";
+import { clusterScopeFilter } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
 import {
@@ -178,15 +178,12 @@ export async function updateBusiness(
 }
 
 /**
- * Chuyen trang thai xac thuc cua ho kinh doanh - luat giong het
- * transitionHouseRecordStatus (houseRecordService.ts), chi khac "chu ho kinh
- * doanh" duoc suy ra qua nha so lien ket (Business khong co ownerId rieng):
- * - admin: duoc chuyen sang bat ky trang thai nao.
- * - chu nha (ownerId cua HouseRecord lien ket trung actor): chi duoc gui/gui
- *   lai de duyet (unverified|denied -> pending).
- * - nhan vien co quyen "businesses.verify" va nam trong pham vi nha lien ket
- *   (assertHouseRecordInScope): chi duoc duyet/tu choi khi dang "pending".
- * Ho kinh doanh da bi khoa thi khong ai ngoai admin duoc doi trang thai.
+ * Ghi de thu cong trang thai xac thuc cua ho kinh doanh - CHI danh cho admin,
+ * dung cho cac truong hop dac biet (vd reset lai ho so). Luong binh thuong
+ * KHONG con di qua ham nay: nop giay to (createBusinessDocument) tu dong
+ * chuyen unverified -> pending_approval, va duyet/tu choi tung giay to
+ * (reviewBusinessDocument) tu dong tinh lai trang thai tong quat - xem
+ * businessDocumentService.ts. Kiem tra quyen admin da thuc hien o tang route.
  */
 export async function transitionBusinessStatus(
     actorUser: IUser,
@@ -196,63 +193,16 @@ export async function transitionBusinessStatus(
     const business = await Business.findById(id);
     if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
 
-    const houseRecord = await HouseRecord.findById(business.houseId);
-    if (!houseRecord) {
-        throw new HttpError("Khong tim thay nha so cua ho kinh doanh nay", 404);
-    }
-
-    const isAdmin = actorUser.roles.includes("admin");
-    const isOwner =
-        !!houseRecord.ownerId &&
-        String(houseRecord.ownerId) === String(actorUser._id);
-
-    if (!isAdmin) {
-        if (business.status === "locked") {
-            throw new HttpError(
-                "Hộ kinh doanh đã bị khóa, chỉ quản trị viên mới có thể thay đổi trạng thái",
-                403,
-            );
-        }
-
-        if (isOwner) {
-            const canSubmit =
-                targetStatus === "pending" &&
-                ["unverified", "denied"].includes(business.status);
-            if (!canSubmit) {
-                throw new HttpError(
-                    "Chủ hộ kinh doanh chỉ được gửi duyệt từ trạng thái chưa xác thực hoặc bị từ chối",
-                    403,
-                );
-            }
-        } else {
-            if (!(await userHasPermission(actorUser, "businesses.verify"))) {
-                throw new HttpError(
-                    "Bạn không có quyền duyệt/từ chối hộ kinh doanh",
-                    403,
-                );
-            }
-            assertHouseRecordInScope(actorUser, houseRecord);
-            const canVerify =
-                business.status === "pending" &&
-                ["verified", "denied"].includes(targetStatus);
-            if (!canVerify) {
-                throw new HttpError(
-                    "Chỉ được duyệt hoặc từ chối hộ kinh doanh đang chờ duyệt",
-                    403,
-                );
-            }
-        }
-    }
-
     const previousStatus = business.status;
     business.status = targetStatus;
     business.updatedBy = actorUser._id as any;
     await business.save();
 
+    const houseRecord = await HouseRecord.findById(business.houseId);
     if (
-        houseRecord.ownerId &&
+        houseRecord?.ownerId &&
         previousStatus !== targetStatus &&
-        (targetStatus === "verified" || targetStatus === "denied")
+        (targetStatus === "verified" || targetStatus === "need_supplement")
     ) {
         await createNotification({
             title: "Kết quả xác thực hộ kinh doanh",

@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
-const corsOrigin = process.env.CORS_ORIGIN || "*";
+const corsOrigin =
+  process.env.NODE_ENV === "production"
+    ? process.env.CORS_ORIGIN || "https://hiscustom.io.vn"
+    : "*";
 
 const nextConfig = {
   reactStrictMode: true,
