@@ -241,6 +241,10 @@ export function sanitizeUser(user: IUser) {
         status: user.status,
         householdId: user.householdId ? String(user.householdId) : undefined,
         citizenId: user.citizenId ? String(user.citizenId) : undefined,
+        neighborhoodId: user.neighborhoodId
+            ? String(user.neighborhoodId)
+            : undefined,
+        assignedNeighborhoodIds: (user.assignedNeighborhoodIds || []).map(String),
         assignedClusters: user.assignedClusters,
         notificationPermission: user.notificationPermission,
         createdAt: user.createdAt,

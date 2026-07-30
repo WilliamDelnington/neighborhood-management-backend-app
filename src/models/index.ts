@@ -57,5 +57,10 @@ export {
     type INotificationDelivery,
 } from "./NotificationDelivery";
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
+export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
+export {
+    default as NeighborhoodLeaderAssignment,
+    type INeighborhoodLeaderAssignment,
+} from "./NeighborhoodLeaderAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";

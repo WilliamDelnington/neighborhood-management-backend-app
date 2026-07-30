@@ -10,6 +10,7 @@
         "lint": "next lint",
         "seed": "tsx scripts/seed.ts",
         "seed:proposal": "tsx scripts/create-proposal-accounts.ts",
+        "seed:neighborhoods": "tsx scripts/seed-neighborhoods.ts",
         "roles:backfill": "tsx scripts/backfill-roles.ts",
         "roles:migrate-house-owner": "tsx scripts/backfill-resident-to-house-owner.ts",
         "complaints:backfill-clusters": "tsx scripts/backfill-complaint-clusters.ts",

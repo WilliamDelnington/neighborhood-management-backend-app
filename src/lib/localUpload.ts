@@ -37,6 +37,21 @@ export async function saveUploadedFile(
     return { url: `/uploads/${safeSubDir}/${fileName}` };
 }
 
+/**
+ * Chuyen url tuong doi ("/uploads/...") ma saveUploadedFile tra ve thanh URL
+ * day du dua tren origin cua request hien tai - can thiet vi cac component
+ * hien thi tai lieu (AttachmentUploader, RequiredDocumentsPanel) mo url bang
+ * window.open() thay vi qua request() (khong the dinh kem Authorization
+ * header cho request tai file, va cung khong co goc URL nhu request() dung
+ * BASE_URL), nen trinh duyet se phan giai url tuong doi theo goc cua trang
+ * Mini App/web admin dang mo thay vi goc cua backend, dan den 404/403 tu phia
+ * host sai. Bo qua neu url da la tuyet doi (vd du lieu cu da luu goc khac).
+ */
+export function toAbsoluteUploadUrl(url: string, origin: string): string {
+    if (/^https?:\/\//i.test(url)) return url;
+    return new URL(url, origin).toString();
+}
+
 export async function deleteUploadedFile(url: string): Promise<void> {
     if (!url.startsWith("/uploads/")) return;
     const fullPath = path.join(UPLOADS_ROOT, url.slice("/uploads/".length));
