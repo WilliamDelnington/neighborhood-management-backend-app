@@ -9,8 +9,17 @@ export { default as Household, type IHousehold } from "./Household";
 export {
     default as BusinessType,
     type IBusinessType,
+    type IBusinessTypeDocumentRule,
 } from "./BusinessType";
 export { default as Business, type IBusiness } from "./Business";
+export {
+    default as DocumentType,
+    type IDocumentType,
+} from "./DocumentType";
+export {
+    default as BusinessDocument,
+    type IBusinessDocument,
+} from "./BusinessDocument";
 export { default as Citizen, type ICitizen } from "./Citizen";
 export { default as Complaint, type IComplaint } from "./Complaint";
 export {

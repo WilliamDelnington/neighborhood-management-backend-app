@@ -64,7 +64,7 @@ export async function POST(req: Request) {
             if (!houseRecord) return zaloError("Khong tim thay nha so");
             assertHouseRecordInScope(actorUser, houseRecord);
             subDir = `houses/${payload.relatedId}`;
-        } else {
+        } else if (payload.relatedModel === "Business") {
             const business = await Business.findById(payload.relatedId);
             if (!business) return zaloError("Khong tim thay ho kinh doanh");
             const houseRecord = await HouseRecord.findById(business.houseId);
@@ -73,6 +73,24 @@ export async function POST(req: Request) {
             }
             assertHouseRecordInScope(actorUser, houseRecord);
             subDir = `businesses/${payload.relatedId}`;
+        } else {
+            // BusinessDocument: chi chu ho (hoac admin) - kiem tra lai giong
+            // het luc cap token (xem /api/uploads/token/route.ts) vi pham vi
+            // co the da thay doi giua luc cap token va luc upload thuc su.
+            const business = await Business.findById(payload.relatedId);
+            if (!business) return zaloError("Khong tim thay ho kinh doanh");
+            const houseRecord = await HouseRecord.findById(business.houseId);
+            if (!houseRecord) {
+                return zaloError("Khong tim thay nha so cua ho kinh doanh nay");
+            }
+            const isAdmin = actorUser.roles.includes("admin");
+            const isOwner =
+                !!houseRecord.ownerId &&
+                String(houseRecord.ownerId) === String(actorUser._id);
+            if (!isAdmin && !isOwner) {
+                return zaloError("Chi chu ho kinh doanh moi duoc tai len giay to");
+            }
+            subDir = `business-documents/${payload.relatedId}`;
         }
 
         const formData = await req.formData();
@@ -119,7 +137,12 @@ export async function POST(req: Request) {
         return NextResponse.json({
             error: 0,
             message: "Success",
-            data: { urls: [absoluteUrl] },
+            // fileAssetIds: them ngoai khung {error,message,data:{urls}} bat
+            // buoc cua Zalo openMediaPicker - client Zalo chi doc `urls`, nen
+            // them truong nay khong pha vo hop dong cu. Can thiet de client
+            // biet fileAssetId vua tao, dung goi tiep POST
+            // /api/businesses/:id/documents (xem businessDocumentService).
+            data: { urls: [absoluteUrl], fileAssetIds: [String(fileAsset._id)] },
         });
     } catch (err) {
         if (err instanceof HttpError) return zaloError(err.message);

@@ -1,9 +1,10 @@
-import { BusinessType, Business, type IBusinessType } from "@/models";
+import { BusinessType, Business, DocumentType, type IBusinessType } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import type {
     CreateBusinessTypeInput,
     UpdateBusinessTypeInput,
+    PutDocumentRulesInput,
 } from "@/validators/businessType";
 
 export async function listBusinessTypes(
@@ -104,6 +105,51 @@ export async function updateBusinessType(
         targetModel: "BusinessType",
         targetId: businessType._id,
         metadata: { name: businessType.name, active: businessType.active },
+    });
+
+    return businessType;
+}
+
+/**
+ * Thay toan bo dong luat "giay to bat buoc/tuy chon" cua mot loai hinh kinh
+ * doanh. Xac thuc moi documentTypeId ton tai va dang active truoc khi ghi de,
+ * de tranh dong luat tro toi loai giay to da bi xoa/vo hieu hoa.
+ */
+export async function putDocumentRules(
+    actorId: string,
+    id: string,
+    input: PutDocumentRulesInput,
+) {
+    const businessType = await getBusinessTypeById(id);
+
+    const documentTypeIds = input.requiredDocuments.map(r => r.documentTypeId);
+    if (documentTypeIds.length > 0) {
+        const validCount = await DocumentType.countDocuments({
+            _id: { $in: documentTypeIds },
+            active: true,
+        });
+        if (validCount !== new Set(documentTypeIds.map(String)).size) {
+            throw new HttpError(
+                "Mot hoac nhieu loai giay to khong ton tai hoac da bi vo hieu hoa",
+                400,
+            );
+        }
+    }
+
+    const previousRules = businessType.requiredDocuments;
+    businessType.requiredDocuments = input.requiredDocuments as any;
+    businessType.updatedBy = actorId as any;
+    await businessType.save();
+
+    await writeAuditLog({
+        actorId,
+        action: "business_type.update_document_rules",
+        targetModel: "BusinessType",
+        targetId: businessType._id,
+        metadata: {
+            before: previousRules,
+            after: businessType.requiredDocuments,
+        },
     });
 
     return businessType;

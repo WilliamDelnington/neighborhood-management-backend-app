@@ -43,62 +43,42 @@ async function patchStatus(businessId: string, status: string, headers: any) {
     );
 }
 
-describe("Chuyen trang thai xac thuc ho kinh doanh (business verification)", () => {
+/**
+ * Luong xin duyet/duyet/tu choi binh thuong khong con di qua route nay - xem
+ * tests/api/businessDocumentVerification.test.ts. Route nay gio chi la mot
+ * cong cu ghi de thu cong danh cho admin (vd reset lai ho so).
+ */
+describe("Ghi de thu cong trang thai ho kinh doanh (admin-only override)", () => {
     it("moi tao mac dinh la unverified", async () => {
         const { business } = await setupOwnerWithBusiness("Cụm A");
         expect(business.status).toBe("unverified");
     });
 
-    it("chu ho gui duyet duoc (unverified -> pending)", async () => {
+    it("chu ho khong duoc tu doi trang thai (khong phai admin)", async () => {
         const { business, headers } = await setupOwnerWithBusiness("Cụm A");
-        const res = await patchStatus(business._id, "pending", headers);
-        const json = await readJson(res);
-        expect(res.status).toBe(200);
-        expect(json.data.status).toBe("pending");
-    });
-
-    it("chu ho khong duoc tu duyet thang len verified", async () => {
-        const { business, headers } = await setupOwnerWithBusiness("Cụm A");
-        const res = await patchStatus(business._id, "verified", headers);
+        const res = await patchStatus(business._id, "pending_approval", headers);
         expect(res.status).toBe(403);
     });
 
-    it("houseOwner khac khong duoc gui duyet ho kinh doanh khong phai cua minh", async () => {
-        const a = await setupOwnerWithBusiness("Cụm A");
-        const b = await setupOwnerWithBusiness("Cụm B");
-        const res = await patchStatus(a.business._id, "pending", b.headers);
-        expect(res.status).toBe(403);
-    });
-
-    it("nhan vien co quyen businesses.verify duyet duoc khi dang pending va trong pham vi cum", async () => {
-        const { business, headers } = await setupOwnerWithBusiness("Cụm A");
-        await patchStatus(business._id, "pending", headers);
-
+    it("nhan vien co businesses.verify cung khong duoc dung route nay (chi admin)", async () => {
+        const { business } = await setupOwnerWithBusiness("Cụm A");
         const leader = await createTestUser({
             roles: ["neighborhood_leader"],
             permissions: ["businesses.verify"],
-            assignedClusters: ["Cụm A"],
         });
         const leaderHeaders = await authHeaders(leader);
-
         const res = await patchStatus(business._id, "verified", leaderHeaders);
+        expect(res.status).toBe(403);
+    });
+
+    it("admin ghi de duoc sang bat ky trang thai nao", async () => {
+        const { business } = await setupOwnerWithBusiness("Cụm A");
+        const admin = await createTestUser({ roles: ["admin"] });
+        const adminHeaders = await authHeaders(admin);
+
+        const res = await patchStatus(business._id, "verified", adminHeaders);
         const json = await readJson(res);
         expect(res.status).toBe(200);
         expect(json.data.status).toBe("verified");
-    });
-
-    it("nhan vien ngoai pham vi cum khong duyet duoc", async () => {
-        const { business, headers } = await setupOwnerWithBusiness("Cụm A");
-        await patchStatus(business._id, "pending", headers);
-
-        const leader = await createTestUser({
-            roles: ["neighborhood_leader"],
-            permissions: ["businesses.verify"],
-            assignedClusters: ["Cụm B"],
-        });
-        const leaderHeaders = await authHeaders(leader);
-
-        const res = await patchStatus(business._id, "verified", leaderHeaders);
-        expect(res.status).toBe(403);
     });
 });

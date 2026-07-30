@@ -75,11 +75,41 @@ export const HOUSE_RECORD_STATUS_LABEL: Record<HouseRecordStatus, string> = {
     locked: "đã khóa",
 };
 
-// Ho kinh doanh dung lai dung 5 trang thai xac thuc cua nha so (cung y nghia,
-// khong can dinh nghia rieng) - xem transitionBusinessStatus.
-export const BUSINESS_STATUS = HOUSE_RECORD_STATUS;
-export type BusinessStatus = HouseRecordStatus;
-export const BUSINESS_STATUS_LABEL = HOUSE_RECORD_STATUS_LABEL;
+// Ho kinh doanh: trang thai xac thuc theo tung loai giay to (xem
+// businessDocumentService.recomputeStatus) - KHONG con dung chung enum voi
+// nha so nua. "pending_approval" = da co it nhat 1 giay to duoc nop cho
+// nguoi duyet, "need_supplement" = co giay to bat buoc bi tu choi, can bo
+// sung lai. "verified" chi dat duoc khi TAT CA giay to bat buoc da duoc
+// duyet boi dung vai tro phu trach.
+export const BUSINESS_STATUS = [
+    "unverified",
+    "pending_approval",
+    "need_supplement",
+    "verified",
+] as const;
+export type BusinessStatus = typeof BUSINESS_STATUS[number];
+export const BUSINESS_STATUS_LABEL: Record<BusinessStatus, string> = {
+    unverified: "chưa xác thực",
+    pending_approval: "đang chờ duyệt",
+    need_supplement: "cần bổ sung hồ sơ",
+    verified: "đã xác thực",
+};
+
+// Trang thai xac thuc cua tung giay to (BusinessDocument) rieng le.
+export const BUSINESS_DOCUMENT_STATUS = [
+    "pending",
+    "approved",
+    "rejected",
+] as const;
+export type BusinessDocumentStatus = typeof BUSINESS_DOCUMENT_STATUS[number];
+export const BUSINESS_DOCUMENT_STATUS_LABEL: Record<
+    BusinessDocumentStatus,
+    string
+> = {
+    pending: "chờ duyệt",
+    approved: "đã duyệt",
+    rejected: "bị từ chối, cần bổ sung",
+};
 
 // ---------------------------------------------------------------------------
 // Ho dan
@@ -378,6 +408,6 @@ export type SessionTokenPayload = {
 export type UploadTokenPayload = {
     purpose: "upload";
     userId: string;
-    relatedModel: "HouseRecord" | "Business";
+    relatedModel: "HouseRecord" | "Business" | "BusinessDocument";
     relatedId: string;
 };

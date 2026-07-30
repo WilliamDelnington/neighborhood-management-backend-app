@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { POST as createHouseRoute } from "@/app/api/houses/route";
+import { POST as createBusinessRoute } from "@/app/api/businesses/route";
 import { POST as createUploadTokenRoute } from "@/app/api/uploads/token/route";
 import { POST as uploadAttachmentRoute } from "@/app/api/uploads/attachments/route";
 import { GET as listHouseAttachmentsRoute } from "@/app/api/houses/[id]/attachments/route";
@@ -8,7 +9,13 @@ import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 async function setupOwnerWithHouse(clusterName: string) {
     const owner = await createTestUser({
         roles: ["house_owner"],
-        permissions: ["houses.read", "houses.create", "houses.update"],
+        permissions: [
+            "houses.read",
+            "houses.create",
+            "houses.update",
+            "businesses.read",
+            "businesses.create",
+        ],
     });
     const headers = await authHeaders(owner);
 
@@ -112,6 +119,62 @@ describe("Cap token upload va tai file dinh kem (Zalo openMediaPicker flow)", ()
         const uploadRes = await uploadAttachmentRoute(uploadReq);
         const uploadJson = await uploadRes.json();
         expect(uploadJson.error).not.toBe(0);
+    });
+
+    it("chu ho kinh doanh cap duoc token BusinessDocument cho ho cua minh", async () => {
+        const { house, headers } = await setupOwnerWithHouse("Cụm A");
+        const businessRes = await createBusinessRoute(
+            makeRequest("/api/businesses", {
+                method: "POST",
+                headers,
+                body: { name: "Tiệm A", houseId: house._id },
+            }),
+        );
+        const business = (await readJson(businessRes)).data;
+
+        const res = await createUploadTokenRoute(
+            makeRequest("/api/uploads/token", {
+                method: "POST",
+                headers,
+                body: {
+                    relatedModel: "BusinessDocument",
+                    relatedId: business._id,
+                },
+            }),
+        );
+        const json = await readJson(res);
+        expect(res.status).toBe(200);
+        expect(typeof json.data.token).toBe("string");
+    });
+
+    it("nhan vien co businesses.update khong cap duoc token BusinessDocument (chi chu ho)", async () => {
+        const { house, headers } = await setupOwnerWithHouse("Cụm A");
+        const businessRes = await createBusinessRoute(
+            makeRequest("/api/businesses", {
+                method: "POST",
+                headers,
+                body: { name: "Tiệm A", houseId: house._id },
+            }),
+        );
+        const business = (await readJson(businessRes)).data;
+
+        const staff = await createTestUser({
+            roles: ["neighborhood_leader"],
+            permissions: ["businesses.update", "businesses.verify"],
+        });
+        const staffHeaders = await authHeaders(staff);
+
+        const res = await createUploadTokenRoute(
+            makeRequest("/api/uploads/token", {
+                method: "POST",
+                headers: staffHeaders,
+                body: {
+                    relatedModel: "BusinessDocument",
+                    relatedId: business._id,
+                },
+            }),
+        );
+        expect(res.status).toBe(403);
     });
 
     it("tu choi dinh dang file khong duoc ho tro", async () => {

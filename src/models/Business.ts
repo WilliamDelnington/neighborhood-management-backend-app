@@ -31,8 +31,9 @@ const BusinessSchema = new Schema<IBusiness>(
         ownerName: { type: String, trim: true },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
-        // Trang thai xac thuc ho kinh doanh - cung 5 trang thai va luong
-        // chuyen doi nhu nha so (xem transitionBusinessStatus).
+        // Trang thai xac thuc duoc tinh tu ket qua duyet tung giay to bat
+        // buoc (xem businessDocumentService.recomputeStatus), khong con la
+        // mot hanh dong duyet/tu choi thu cong nhu truoc.
         status: {
             type: String,
             enum: BUSINESS_STATUS,

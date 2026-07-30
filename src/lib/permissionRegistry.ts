@@ -104,6 +104,19 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "document_types",
+        label: "Danh mục giấy tờ",
+        permissions: [
+            { key: "document_types.read", label: "Xem danh mục giấy tờ" },
+            { key: "document_types.create", label: "Tạo loại giấy tờ" },
+            {
+                key: "document_types.update",
+                label: "Cập nhật loại giấy tờ",
+            },
+            { key: "document_types.delete", label: "Xóa loại giấy tờ" },
+        ],
+    },
+    {
         key: "complaints",
         label: "Phản ánh",
         permissions: [

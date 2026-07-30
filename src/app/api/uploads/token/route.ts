@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const UPLOAD_TOKEN_TTL_SECONDS = 10 * 60;
 
 const createUploadTokenSchema = z.object({
-    relatedModel: z.enum(["HouseRecord", "Business"]),
+    relatedModel: z.enum(["HouseRecord", "Business", "BusinessDocument"]),
     relatedId: z.string().min(1),
 });
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
             const houseRecord = await HouseRecord.findById(body.relatedId);
             if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
             assertHouseRecordInScope(user, houseRecord);
-        } else {
+        } else if (body.relatedModel === "Business") {
             await requireAnyPermission(user, [
                 "businesses.update",
                 "businesses.verify",
@@ -50,6 +50,30 @@ export async function POST(req: Request) {
                 );
             }
             assertHouseRecordInScope(user, houseRecord);
+        } else {
+            // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
+            // len giay to - khac voi nhanh "Business" o tren (nhan vien co
+            // businesses.update/.verify cung xin duoc token), vi giay to xac
+            // thuc chi do chinh chu ho nop (xem businessDocumentService).
+            const business = await Business.findById(body.relatedId);
+            if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+            const houseRecord = await HouseRecord.findById(business.houseId);
+            if (!houseRecord) {
+                throw new HttpError(
+                    "Khong tim thay nha so cua ho kinh doanh nay",
+                    404,
+                );
+            }
+            const isAdmin = user.roles.includes("admin");
+            const isOwner =
+                !!houseRecord.ownerId &&
+                String(houseRecord.ownerId) === String(user._id);
+            if (!isAdmin && !isOwner) {
+                throw new HttpError(
+                    "Chỉ chủ hộ kinh doanh mới được tải lên giấy tờ",
+                    403,
+                );
+            }
         }
 
         const token = signUploadToken({
