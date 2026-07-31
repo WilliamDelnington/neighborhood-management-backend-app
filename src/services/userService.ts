@@ -47,20 +47,6 @@ export async function listAssignableStaff(roles: RoleType[]) {
     return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
 }
 
-/**
- * Danh sach cac to dan pho (neighborhood) hien co, lay tu assignedClusters cua
- * cac tai khoan neighborhood_leader - day la nguon du lieu day du hon
- * Household.distinct("cluster") vi mot to dan pho co the da co to truong duoc
- * gan truoc khi co ho dan nao duoc nhap (xem scripts/create-proposal-accounts.ts).
- */
-export async function listNeighborhoods(): Promise<string[]> {
-    const clusters = await User.find({
-        roles: "neighborhood_leader",
-    }).distinct("assignedClusters");
-    const collator = new Intl.Collator("vi", { numeric: true });
-    return (clusters as unknown as string[]).sort((a, b) => collator.compare(a, b));
-}
-
 export async function getUserById(id: string) {
     const user = await User.findById(id);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);

@@ -7,8 +7,15 @@ import { LOAI_SO_HUU } from "@/types";
 // tu dong +1/-1 vao Household.memberCount).
 export const createHouseholdSchema = z.object({
     cluster: z.string().min(1, "Cum dan cu khong duoc de trong"),
+    // Street chuan hoa tuong ung voi cluster (chi dung khi ho dan "mo coi",
+    // khong gan nha so - xem streetSync.ts). Client cu khong gui truong nay
+    // van hoat dong binh thuong.
+    streetId: z.string().nullable().optional(),
     address: z.string().min(1, "Dia chi khong duoc de trong"),
     headOfHousehold: z.string().min(1, "Ten chu ho khong duoc de trong"),
+    // Lien ket toi tai khoan house_owner thuc su cua chu ho - null = go lien
+    // ket, undefined = khong doi.
+    headOfHouseholdUserId: z.string().nullable().optional(),
     phone: z.string().optional(),
     ownershipType: z.enum(LOAI_SO_HUU).default("chinh_chu"),
     needsSupport: z.boolean().default(false),

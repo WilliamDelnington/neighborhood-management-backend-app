@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET cong khai: xem danh sach khao sat (co the loc openOnly=1 de chi lay khao sat dang mo).
  * Khong yeu cau dang nhap de duyet danh sach; viec kiem tra dieu kien tra loi (eligibleRoles/
- * eligibleClusters) duoc thuc hien khi goi API tra loi (xem surveyService.respondToSurvey).
+ * eligibleStreetIds/eligibleNeighborhoodIds/eligibleBusinessTypeIds) duoc thuc hien khi goi
+ * API tra loi (xem surveyService.respondToSurvey / lib/surveyEligibility.ts).
  */
 export async function GET(req: Request) {
     try {

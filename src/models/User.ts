@@ -15,6 +15,8 @@ export interface IUser extends Document {
     status: UserStatus;
     householdId?: mongoose.Types.ObjectId;
     citizenId?: mongoose.Types.ObjectId;
+    neighborhoodId?: mongoose.Types.ObjectId;
+    assignedNeighborhoodIds: mongoose.Types.ObjectId[];
     assignedClusters: string[];
     permissions: string[];
     lastLoginAt?: Date;
@@ -43,6 +45,19 @@ const UserSchema = new Schema<IUser>(
         status: { type: String, enum: USER_STATUS, default: "active" },
         householdId: { type: Schema.Types.ObjectId, ref: "Household" },
         citizenId: { type: Schema.Types.ObjectId, ref: "Citizen" },
+        neighborhoodId: {
+            type: Schema.Types.ObjectId,
+            ref: "Neighborhood",
+            index: true,
+        },
+        assignedNeighborhoodIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Neighborhood",
+            default: [],
+        },
+        // Truong tam thoi (transitional) - cum dan cu dang dang du lieu tu do,
+        // giu lai de tuong thich nguoc cho den khi du lieu duoc migrate day du
+        // sang Neighborhood (xem Neighborhood.ts / neighborhoodService.ts).
         assignedClusters: { type: [String], default: [] },
         permissions: { type: [String], default: [] },
         lastLoginAt: { type: Date },

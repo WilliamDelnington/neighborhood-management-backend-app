@@ -5,6 +5,7 @@ export interface IBusiness extends Document {
     name: string;
     houseId: mongoose.Types.ObjectId;
     cluster: string;
+    streetId?: mongoose.Types.ObjectId;
     businessType?: mongoose.Types.ObjectId;
     ownerName?: string;
     phone?: string;
@@ -27,6 +28,9 @@ const BusinessSchema = new Schema<IBusiness>(
             index: true,
         },
         cluster: { type: String, required: true, index: true },
+        // Chuan hoa cua `cluster` (xem src/lib/streetSync.ts), sao chep tu
+        // HouseRecord lien ket luc tao, giong cluster.
+        streetId: { type: Schema.Types.ObjectId, ref: "Street", index: true },
         businessType: { type: Schema.Types.ObjectId, ref: "BusinessType" },
         ownerName: { type: String, trim: true },
         phone: { type: String, trim: true },

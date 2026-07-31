@@ -2,12 +2,14 @@ import {
     Household,
     Citizen,
     HouseRecord,
+    User,
     type IHousehold,
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { clusterScopeFilter } from "@/lib/rbac";
+import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
 import {
     assertHouseRecordInScope,
@@ -38,6 +40,30 @@ function assertClusterAssignable(actorUser: IUser, cluster: string): void {
             403,
         );
     }
+}
+
+/**
+ * Nem HttpError neu userId duoc chon lam chu ho khong hop le: khong ton tai,
+ * khong dang hoat dong, hoac khong co vai tro house_owner - dung khi lien ket
+ * headOfHouseholdUserId (giong pattern kiem tra to truong trong
+ * neighborhoodService.assignNeighborhoodLeader).
+ */
+async function validateHeadOfHouseholdUser(userId: string): Promise<IUser> {
+    const user = await User.findById(userId);
+    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (user.status !== "active") {
+        throw new HttpError(
+            "Chi co the gan tai khoan dang hoat dong lam chu ho",
+            422,
+        );
+    }
+    if (!user.roles.includes("house_owner")) {
+        throw new HttpError(
+            "Nguoi dung duoc chon phai co vai tro Chu ho",
+            422,
+        );
+    }
+    return user;
 }
 
 /**
@@ -82,20 +108,39 @@ export async function createHousehold(
         // nhan vien duyet.
         assertHouseRecordVerifiedForMembers(actorUser, houseRecord);
     }
-    // Cum dan cu luon lay theo nha so lien ket (neu co) de tranh ho dan va
-    // nha so lech cum voi nhau; chi khi khong co nha so lien ket (ho dan mo
-    // coi, chi nhan vien/admin duoc tao) thi moi dung cluster client gui len.
-    const cluster = houseRecord ? houseRecord.cluster : input.cluster;
+    // Cum dan cu/duong pho luon lay theo nha so lien ket (neu co) de tranh ho
+    // dan va nha so lech nhau; chi khi khong co nha so lien ket (ho dan mo
+    // coi, chi nhan vien/admin duoc tao) thi moi dung cluster/streetId client
+    // gui len.
+    const { cluster, streetId } = houseRecord
+        ? {
+              cluster: houseRecord.cluster,
+              streetId: houseRecord.streetId
+                  ? String(houseRecord.streetId)
+                  : undefined,
+          }
+        : await resolveStreetClusterPair(input);
     if (!houseRecord) {
-        assertClusterAssignable(actorUser, input.cluster);
+        assertClusterAssignable(actorUser, cluster);
     }
+
+    // Neu co chon chu ho la mot tai khoan thuc su, dung ten hien thi cua tai
+    // khoan do lam headOfHousehold (text) thay vi gia tri client gui - tranh
+    // hai truong lech nhau.
+    const headOfHouseholdUser = input.headOfHouseholdUserId
+        ? await validateHeadOfHouseholdUser(input.headOfHouseholdUserId)
+        : null;
 
     const code = await generateSequentialCode(Household, "HB", 3);
     const household = await Household.create({
         code,
         cluster,
+        streetId,
         address: input.address,
-        headOfHousehold: input.headOfHousehold,
+        headOfHousehold: headOfHouseholdUser
+            ? headOfHouseholdUser.displayName
+            : input.headOfHousehold,
+        headOfHouseholdUserId: headOfHouseholdUser?._id,
         phone: input.phone,
         // memberCount KHONG duoc gan tu input - luon bat dau tu 0 (mac dinh
         // schema) va chi duoc +1/-1 boi citizenService khi Citizen duoc them/
@@ -107,6 +152,16 @@ export async function createHousehold(
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });
+
+    if (headOfHouseholdUser && !headOfHouseholdUser.householdId) {
+        await User.updateOne(
+            { _id: headOfHouseholdUser._id },
+            { householdId: household._id },
+        );
+    }
+    if (headOfHouseholdUser) {
+        await household.populate("headOfHouseholdUserId", "displayName phone");
+    }
 
     await writeAuditLog({
         actorId: String(actorUser._id),
@@ -124,6 +179,7 @@ export async function listHouseholds(params: {
     limit: number;
     search?: string;
     cluster?: string;
+    streetId?: string;
     houseId?: string;
     unassigned?: boolean;
     actorUser: IUser;
@@ -149,16 +205,23 @@ export async function listHouseholds(params: {
         filter.houseId = { $in: ownedHouseIds };
     }
 
-    if (params.cluster && !isHouseOwnerUser) {
+    if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
         const allowedClusters = params.actorUser.assignedClusters;
+        const targetCluster = params.streetId
+            ? (await resolveClusterForStreet(params.streetId)).cluster
+            : (params.cluster as string);
         if (
             !isAdminUser &&
             allowedClusters?.length &&
-            !allowedClusters.includes(params.cluster)
+            !allowedClusters.includes(targetCluster)
         ) {
             throw new HttpError("Ban khong co quyen xem cum dan cu nay", 403);
         }
-        filter.cluster = params.cluster;
+        if (params.streetId) {
+            filter.streetId = params.streetId;
+        } else {
+            filter.cluster = params.cluster;
+        }
     } else if (!isHouseOwnerUser) {
         Object.assign(filter, clusterScopeFilter(params.actorUser));
     }
@@ -233,7 +296,10 @@ export async function searchHouseholdsForOnboarding(params: {
 }
 
 export async function getHouseholdById(id: string): Promise<IHousehold> {
-    const household = await Household.findById(id);
+    const household = await Household.findById(id).populate(
+        "headOfHouseholdUserId",
+        "displayName phone",
+    );
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
     return household;
 }
@@ -330,11 +396,40 @@ export async function updateHousehold(
             // bi doi trang thai boi admin).
             assertHouseRecordVerifiedForMembers(actorUser, houseRecord!);
         }
-        // Cum dan cu luon dong bo theo nha so lien ket (moi hoac giu nguyen),
-        // bo qua bat ky gia tri cluster nao client gui kem trong patch.
-        patch = { ...patch, cluster: houseRecord!.cluster };
-    } else if (patch.cluster !== undefined) {
-        assertClusterAssignable(actorUser, patch.cluster);
+        // Cum dan cu/duong pho luon dong bo theo nha so lien ket (moi hoac giu
+        // nguyen), bo qua bat ky gia tri cluster/streetId nao client gui kem
+        // trong patch.
+        patch = {
+            ...patch,
+            cluster: houseRecord!.cluster,
+            streetId: houseRecord!.streetId
+                ? String(houseRecord!.streetId)
+                : undefined,
+        };
+    } else if (patch.cluster !== undefined || patch.streetId !== undefined) {
+        const resolved = await resolveStreetClusterPair(patch);
+        assertClusterAssignable(actorUser, resolved.cluster);
+        patch = { ...patch, cluster: resolved.cluster, streetId: resolved.streetId };
+    }
+
+    // headOfHouseholdUserId: null = go lien ket (giu nguyen headOfHousehold
+    // text hien tai), string = lien ket toi tai khoan house_owner hop le va
+    // dong bo lai headOfHousehold tu displayName cua tai khoan do.
+    if (patch.headOfHouseholdUserId) {
+        const headOfHouseholdUser = await validateHeadOfHouseholdUser(
+            patch.headOfHouseholdUserId,
+        );
+        patch = {
+            ...patch,
+            headOfHouseholdUserId: String(headOfHouseholdUser._id),
+            headOfHousehold: patch.headOfHousehold ?? headOfHouseholdUser.displayName,
+        };
+        if (!headOfHouseholdUser.householdId) {
+            await User.updateOne(
+                { _id: headOfHouseholdUser._id },
+                { householdId: household._id },
+            );
+        }
     }
 
     // Chi gan cac truong thuc su co mat trong patch (partial schema van tra ve
@@ -346,6 +441,9 @@ export async function updateHousehold(
     }
     household.updatedBy = actorUser._id as any;
     await household.save();
+    if (household.headOfHouseholdUserId) {
+        await household.populate("headOfHouseholdUserId", "displayName phone");
+    }
 
     await writeAuditLog({
         actorId: String(actorUser._id),

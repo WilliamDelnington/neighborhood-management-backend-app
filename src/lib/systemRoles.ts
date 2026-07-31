@@ -9,6 +9,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     admin: ALL_PERMISSION_KEYS,
     neighborhood_leader: [
         "dashboard.read",
+        "neighborhoods.read",
+        "streets.read",
         "houses.read",
         "houses.verify",
         "households.read",

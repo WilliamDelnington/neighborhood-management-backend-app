@@ -5,11 +5,8 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { createNeighborhoodSchema } from "@/validators/neighborhood";
-import {
-    createNeighborhood,
-    listNeighborhoods,
-} from "@/services/neighborhoodService";
+import { createStreetSchema } from "@/validators/street";
+import { createStreet, listStreets } from "@/services/streetService";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +14,16 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "neighborhoods.read");
+        await requirePermission(user, "streets.read");
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const activeParam = searchParams.get("active");
-        const result = await listNeighborhoods({
+        const result = await listStreets({
             page,
             limit,
             search: searchParams.get("search") || undefined,
             active: activeParam === null ? undefined : activeParam === "true",
-            leaderUserId: searchParams.get("leaderUserId") || undefined,
-            actorUser: user,
         });
         return apiSuccess(result);
     } catch (err) {
@@ -40,11 +35,11 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "neighborhoods.manage");
+        await requirePermission(user, "streets.manage");
 
-        const body = createNeighborhoodSchema.parse(await req.json());
-        const neighborhood = await createNeighborhood(String(user._id), body);
-        return apiSuccess(neighborhood, "Tao to dan pho thanh cong", 201);
+        const body = createStreetSchema.parse(await req.json());
+        const street = await createStreet(String(user._id), body);
+        return apiSuccess(street, "Tao duong/pho thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

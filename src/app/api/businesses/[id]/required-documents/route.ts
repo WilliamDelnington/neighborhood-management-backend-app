@@ -2,6 +2,7 @@ import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
 import { getRequiredDocuments } from "@/services/businessDocumentService";
+import { toAbsoluteUploadUrl } from "@/lib/localUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,17 @@ export async function GET(
         await requirePermission(actorUser, "businesses.read");
 
         const result = await getRequiredDocuments(actorUser, params.id);
+        const origin = new URL(req.url).origin;
+        const fixUrl = (doc: (typeof result.items)[number]["activeDocument"]) => {
+            const fileAsset = doc?.fileAssetId as any;
+            if (fileAsset && typeof fileAsset === "object" && fileAsset.url) {
+                fileAsset.url = toAbsoluteUploadUrl(fileAsset.url, origin);
+            }
+        };
+        result.items.forEach(item => {
+            fixUrl(item.activeDocument);
+            item.history.forEach(fixUrl);
+        });
         return apiSuccess(result);
     } catch (err) {
         return apiErrorFromException(err);

@@ -44,6 +44,7 @@ export async function createBusiness(
         name: input.name,
         houseId: input.houseId,
         cluster: houseRecord.cluster,
+        streetId: houseRecord.streetId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
         phone: input.phone,
@@ -83,11 +84,16 @@ export async function listBusinesses(params: {
     page?: number;
     limit?: number;
     search?: string;
+    status?: BusinessStatus;
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
     const limit = params.limit || 20;
     const filter: Record<string, unknown> = {};
+
+    if (params.status) {
+        filter.status = params.status;
+    }
 
     if (params.houseId) {
         filter.houseId = params.houseId;

@@ -1,7 +1,11 @@
-import { Survey, SurveyResponse, type ISurvey } from "@/models";
+import { Survey, SurveyResponse, type ISurvey, type IUser } from "@/models";
 import { HttpError } from "@/lib/response";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
+import {
+    isSurveyEligible,
+    resolveUserEligibilityContext,
+} from "@/lib/surveyEligibility";
 import type {
     CreateSurveyInput,
     RespondSurveyInput,
@@ -15,6 +19,9 @@ export async function createSurvey(actorId: string, input: CreateSurveyInput) {
         questions: input.questions,
         eligibleRoles: input.eligibleRoles || [],
         eligibleClusters: input.eligibleClusters || [],
+        eligibleStreetIds: input.eligibleStreetIds || [],
+        eligibleNeighborhoodIds: input.eligibleNeighborhoodIds || [],
+        eligibleBusinessTypeIds: input.eligibleBusinessTypeIds || [],
         eligibleAll: input.eligibleAll,
         status: "nhap",
         createdBy: actorId,
@@ -155,10 +162,11 @@ export async function getSurveyById(id: string) {
 }
 
 export async function respondToSurvey(
-    userId: string,
+    actorUser: IUser,
     surveyId: string,
     input: RespondSurveyInput,
 ) {
+    const userId = String(actorUser._id);
     const survey = await Survey.findById(surveyId);
     if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
 
@@ -166,8 +174,13 @@ export async function respondToSurvey(
         throw new HttpError("Khảo sát hiện không mở", 400);
     }
 
-    // TODO: khi co du lieu cluster/role cua house_owner, kiem tra eligibleRoles/eligibleClusters
-    // de gioi han ai duoc tra loi khao sat nay (hien tai chi kiem tra trang thai mo).
+    const context = await resolveUserEligibilityContext(actorUser);
+    if (!isSurveyEligible(survey, actorUser, context)) {
+        throw new HttpError(
+            "Ban khong thuoc doi tuong duoc tra loi khao sat nay",
+            403,
+        );
+    }
 
     const validQuestionIds = new Set(survey.questions.map(q => String(q._id)));
     for (const answer of input.answers) {
