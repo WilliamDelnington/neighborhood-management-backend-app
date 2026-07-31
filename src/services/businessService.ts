@@ -44,6 +44,7 @@ export async function createBusiness(
         name: input.name,
         houseId: input.houseId,
         cluster: houseRecord.cluster,
+        streetId: houseRecord.streetId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
         phone: input.phone,

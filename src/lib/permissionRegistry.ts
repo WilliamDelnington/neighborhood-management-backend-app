@@ -74,6 +74,17 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "streets",
+        label: "Đường / phố",
+        permissions: [
+            { key: "streets.read", label: "Xem đường/phố" },
+            {
+                key: "streets.manage",
+                label: "Quản trị đường/phố (tạo, cập nhật)",
+            },
+        ],
+    },
+    {
         key: "businesses",
         label: "Hộ kinh doanh",
         permissions: [

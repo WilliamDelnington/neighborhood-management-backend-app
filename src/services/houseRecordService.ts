@@ -2,12 +2,14 @@ import {
     HouseRecord,
     Household,
     Business,
+    Neighborhood,
     type IHouseRecord,
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { clusterScopeFilter, userHasPermission } from "@/lib/rbac";
+import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
 import { HOUSE_RECORD_STATUS_LABEL, type HouseRecordStatus } from "@/types";
@@ -15,6 +17,11 @@ import type {
     CreateHouseRecordInput,
     UpdateHouseRecordInput,
 } from "@/validators/houseRecord";
+
+const HOUSE_RECORD_POPULATE = [
+    { path: "streetId", select: "name code" },
+    { path: "neighborhoodId", select: "name code" },
+];
 
 /**
  * Nem HttpError(403) neu actor khong phai admin va cluster truyen vao khong
@@ -101,6 +108,21 @@ function houseRecordScopeFilter(user: IUser): Record<string, unknown> {
 }
 
 /**
+ * Nem HttpError(404) neu neighborhoodId duoc chon khong ton tai - to dan pho
+ * gan truc tiep vao tung nha so (khong suy ra tu Street, vi mot duong/pho co
+ * the chay qua nhieu to dan pho).
+ */
+async function assertNeighborhoodExists(
+    neighborhoodId?: string | null,
+): Promise<void> {
+    if (!neighborhoodId) return;
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) {
+        throw new HttpError("Khong tim thay to dan pho", 404);
+    }
+}
+
+/**
  * Tra ve id cac nha so ma user la chu so huu - dung boi householdService/
  * citizenService de loc ho dan/nhan khau theo cac nha ma house_owner so huu
  * (khong the dung chung houseRecordScopeFilter o day vi no thao tac tren
@@ -115,12 +137,16 @@ export async function createHouseRecord(
     actorUser: IUser,
     input: CreateHouseRecordInput,
 ): Promise<IHouseRecord> {
-    assertClusterAssignable(actorUser, input.cluster);
+    const { cluster, streetId } = await resolveStreetClusterPair(input);
+    assertClusterAssignable(actorUser, cluster);
+    await assertNeighborhoodExists(input.neighborhoodId);
 
     const code = await generateSequentialCode(HouseRecord, "NS", 3);
     const houseRecord = await HouseRecord.create({
         code,
-        cluster: input.cluster,
+        cluster,
+        streetId,
+        neighborhoodId: input.neighborhoodId || undefined,
         address: input.address,
         // Nguoi tao nha so duoc coi la chu nha (ap dung cho ca house_owner tu
         // dang ky lan nhan vien tao ho khi nguoi dan chua co tai khoan).
@@ -139,6 +165,7 @@ export async function createHouseRecord(
         metadata: { code: houseRecord.code },
     });
 
+    await houseRecord.populate(HOUSE_RECORD_POPULATE);
     return houseRecord;
 }
 
@@ -147,6 +174,8 @@ export async function listHouseRecords(params: {
     limit: number;
     search?: string;
     cluster?: string;
+    streetId?: string;
+    neighborhoodId?: string;
     status?: HouseRecordStatus;
     actorUser: IUser;
 }) {
@@ -158,20 +187,37 @@ export async function listHouseRecords(params: {
         filter.status = params.status;
     }
 
-    // House_owner luon bi gioi han theo ownerId, khong duoc dung query `cluster`
-    // de "mo rong" pham vi xem (ho khong co assignedClusters de doi chieu).
-    if (params.cluster && !isHouseOwnerUser) {
+    // House_owner luon bi gioi han theo ownerId, khong duoc dung query
+    // `cluster`/`streetId` de "mo rong" pham vi xem (ho khong co
+    // assignedClusters de doi chieu).
+    if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
         const allowedClusters = params.actorUser.assignedClusters;
+        // Kiem tra quyen theo cluster (assignedClusters van dua tren ten
+        // cluster, chua co assignedStreetIds rieng) - neu loc theo streetId
+        // thi resolve nguoc ve ten cluster tuong ung de doi chieu.
+        const targetCluster = params.streetId
+            ? (await resolveClusterForStreet(params.streetId)).cluster
+            : (params.cluster as string);
         if (
             !isAdminUser &&
             allowedClusters?.length &&
-            !allowedClusters.includes(params.cluster)
+            !allowedClusters.includes(targetCluster)
         ) {
             throw new HttpError("Ban khong co quyen xem cum dan cu nay", 403);
         }
-        filter.cluster = params.cluster;
+        if (params.streetId) {
+            filter.streetId = params.streetId;
+        } else {
+            filter.cluster = params.cluster;
+        }
     } else {
         Object.assign(filter, houseRecordScopeFilter(params.actorUser));
+    }
+
+    // To dan pho la thuoc tinh rieng cua tung nha so (khong lien quan
+    // assignedClusters), nen loc them (AND) chu khong thay the scope o tren.
+    if (params.neighborhoodId) {
+        filter.neighborhoodId = params.neighborhoodId;
     }
 
     if (params.search) {
@@ -185,7 +231,8 @@ export async function listHouseRecords(params: {
         HouseRecord.find(filter)
             .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
+            .limit(params.limit)
+            .populate(HOUSE_RECORD_POPULATE),
         HouseRecord.countDocuments(filter),
     ]);
 
@@ -199,7 +246,8 @@ export async function listHouseRecords(params: {
 }
 
 export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
-    const houseRecord = await HouseRecord.findById(id);
+    const houseRecord =
+        await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
     return houseRecord;
 }
@@ -219,8 +267,13 @@ export async function updateHouseRecord(
         );
     }
 
-    if (patch.cluster !== undefined) {
-        assertClusterAssignable(actorUser, patch.cluster);
+    if (patch.cluster !== undefined || patch.streetId !== undefined) {
+        const resolved = await resolveStreetClusterPair(patch);
+        assertClusterAssignable(actorUser, resolved.cluster);
+        patch = { ...patch, cluster: resolved.cluster, streetId: resolved.streetId };
+    }
+    if (patch.neighborhoodId) {
+        await assertNeighborhoodExists(patch.neighborhoodId);
     }
 
     for (const [key, value] of Object.entries(patch)) {
@@ -238,6 +291,8 @@ export async function updateHouseRecord(
         targetId: houseRecord._id,
         metadata: patch,
     });
+
+    await houseRecord.populate(HOUSE_RECORD_POPULATE);
 
     return houseRecord;
 }
@@ -345,6 +400,7 @@ export async function transitionHouseRecordStatus(
         metadata: { status: targetStatus },
     });
 
+    await houseRecord.populate(HOUSE_RECORD_POPULATE);
     return houseRecord;
 }
 

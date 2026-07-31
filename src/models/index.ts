@@ -58,6 +58,7 @@ export {
 } from "./NotificationDelivery";
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
 export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
+export { default as Street, type IStreet } from "./Street";
 export {
     default as NeighborhoodLeaderAssignment,
     type INeighborhoodLeaderAssignment,

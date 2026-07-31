@@ -4,6 +4,8 @@ import { HOUSE_RECORD_STATUS, type HouseRecordStatus } from "@/types";
 export interface IHouseRecord extends Document {
     code: string;
     cluster: string;
+    streetId?: mongoose.Types.ObjectId;
+    neighborhoodId?: mongoose.Types.ObjectId;
     address: string;
     status: HouseRecordStatus;
     ownerId?: mongoose.Types.ObjectId;
@@ -22,6 +24,19 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
     {
         code: { type: String, required: true, unique: true, index: true },
         cluster: { type: String, required: true, index: true },
+        // Chuan hoa cua `cluster` (xem src/lib/streetSync.ts) - HouseRecord la
+        // nguon "su that" cua cluster/streetId, Household/Business chi sao
+        // chep lai tu day.
+        streetId: { type: Schema.Types.ObjectId, ref: "Street", index: true },
+        // Mot duong/pho co the chay qua nhieu to dan pho, nen to dan pho phai
+        // gan truc tiep vao tung nha so (dia chi cu the), khong the suy ra tu
+        // Street. Khong tu dong resolve/tao nhu streetId - admin gan thu cong
+        // qua man quan ly nha so.
+        neighborhoodId: {
+            type: Schema.Types.ObjectId,
+            ref: "Neighborhood",
+            index: true,
+        },
         address: { type: String, required: true },
         status: {
             type: String,

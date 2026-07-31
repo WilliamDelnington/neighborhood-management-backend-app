@@ -24,6 +24,9 @@ export interface ISurvey extends Document {
     closeDate?: Date;
     eligibleRoles: Role[];
     eligibleClusters: string[];
+    eligibleStreetIds: mongoose.Types.ObjectId[];
+    eligibleNeighborhoodIds: mongoose.Types.ObjectId[];
+    eligibleBusinessTypeIds: mongoose.Types.ObjectId[];
     eligibleAll: boolean;
     createdBy: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -55,7 +58,24 @@ const SurveySchema = new Schema<ISurvey>(
         openDate: { type: Date },
         closeDate: { type: Date },
         eligibleRoles: { type: [String], default: [] },
+        // Legacy - khong con dung de gioi han (xem eligibleStreetIds thay
+        // the), giu lai de khong pha vo du lieu khao sat da tao truoc do.
         eligibleClusters: { type: [String], default: [] },
+        eligibleStreetIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Street",
+            default: [],
+        },
+        eligibleNeighborhoodIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Neighborhood",
+            default: [],
+        },
+        eligibleBusinessTypeIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "BusinessType",
+            default: [],
+        },
         eligibleAll: { type: Boolean, default: true },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

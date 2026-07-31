@@ -15,6 +15,9 @@ export const createSurveySchema = z.object({
     questions: z.array(surveyQuestionSchema).min(1, "Can it nhat mot cau hoi"),
     eligibleRoles: z.array(z.enum(SYSTEM_ROLE_KEYS)).optional(),
     eligibleClusters: z.array(z.string()).optional(),
+    eligibleStreetIds: z.array(z.string()).optional(),
+    eligibleNeighborhoodIds: z.array(z.string()).optional(),
+    eligibleBusinessTypeIds: z.array(z.string()).optional(),
     eligibleAll: z.boolean().default(true),
 });
 export type CreateSurveyInput = z.infer<typeof createSurveySchema>;

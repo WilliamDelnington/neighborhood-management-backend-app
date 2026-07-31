@@ -21,6 +21,7 @@
         "security:backfill-handling-status": "tsx scripts/backfill-security-handling-status.ts",
         "security:backfill-monitoring-status": "tsx scripts/backfill-security-monitoring-status.ts",
         "businesses:backfill-status": "tsx scripts/backfill-business-status.ts",
+        "streets:backfill": "tsx scripts/backfill-streets.ts",
         "test": "vitest run"
     },
     "dependencies": {

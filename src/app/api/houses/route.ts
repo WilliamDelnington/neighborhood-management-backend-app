@@ -44,6 +44,8 @@ export async function GET(req: Request) {
             limit,
             search: searchParams.get("search") || undefined,
             cluster: searchParams.get("cluster") || undefined,
+            streetId: searchParams.get("streetId") || undefined,
+            neighborhoodId: searchParams.get("neighborhoodId") || undefined,
             status,
             actorUser: user,
         });
