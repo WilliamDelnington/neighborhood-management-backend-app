@@ -38,6 +38,7 @@ export async function GET(req: Request) {
             page,
             limit,
             level: searchParams.get("level") || undefined,
+            monitoringStatus: searchParams.get("monitoringStatus") || undefined,
             houseId: searchParams.get("houseId") || undefined,
             actorUser,
         });

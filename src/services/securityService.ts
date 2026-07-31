@@ -78,11 +78,13 @@ export async function listSecurityRecords(params: {
     page: number;
     limit: number;
     level?: string;
+    monitoringStatus?: string;
     houseId?: string;
     actorUser: IUser;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.level) filter.level = params.level;
+    if (params.monitoringStatus) filter.monitoringStatus = params.monitoringStatus;
 
     if (params.houseId) {
         filter.houseId = params.houseId;

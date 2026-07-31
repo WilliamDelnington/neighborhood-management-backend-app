@@ -26,9 +26,26 @@ export async function GET(req: Request) {
             activeParam === null
                 ? undefined
                 : activeParam === "1" || activeParam === "true";
+        const hasIssueDateParam = searchParams.get("hasIssueDate");
+        const hasIssueDate =
+            hasIssueDateParam === null
+                ? undefined
+                : hasIssueDateParam === "1" || hasIssueDateParam === "true";
+        const hasExpiryDateParam = searchParams.get("hasExpiryDate");
+        const hasExpiryDate =
+            hasExpiryDateParam === null
+                ? undefined
+                : hasExpiryDateParam === "1" || hasExpiryDateParam === "true";
         const { page, limit } = paginationParams(searchParams);
 
-        const result = await listDocumentTypes({ search, active, page, limit });
+        const result = await listDocumentTypes({
+            search,
+            active,
+            hasIssueDate,
+            hasExpiryDate,
+            page,
+            limit,
+        });
         return apiSuccess(result);
     } catch (err) {
         return apiErrorFromException(err);

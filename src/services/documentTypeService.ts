@@ -15,12 +15,20 @@ export async function listDocumentTypes(
     params: {
         search?: string;
         active?: boolean;
+        hasIssueDate?: boolean;
+        hasExpiryDate?: boolean;
         page?: number;
         limit?: number;
     } = {},
 ) {
     const filter: Record<string, unknown> = {};
     if (params.active !== undefined) filter.active = params.active;
+    if (params.hasIssueDate !== undefined) {
+        filter.hasIssueDate = params.hasIssueDate;
+    }
+    if (params.hasExpiryDate !== undefined) {
+        filter.hasExpiryDate = params.hasExpiryDate;
+    }
     if (params.search) {
         filter.name = { $regex: params.search, $options: "i" };
     }
