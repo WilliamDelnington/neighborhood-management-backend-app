@@ -5,6 +5,7 @@ import { updateAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
 import {
+    assertAnnouncementInScope,
     deleteAnnouncement,
     getAnnouncementById,
     updateAnnouncement,
@@ -42,6 +43,7 @@ export async function PATCH(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "announcements.update");
+        assertAnnouncementInScope(actorUser, await getAnnouncementById(params.id, false));
         const body = updateAnnouncementSchema.parse(await req.json());
         const announcement = await updateAnnouncement(
             String(actorUser._id),
@@ -62,6 +64,7 @@ export async function DELETE(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "announcements.update");
+        assertAnnouncementInScope(actorUser, await getAnnouncementById(params.id, false));
         await deleteAnnouncement(String(actorUser._id), params.id);
         return apiSuccess(null, "Xoa thong bao thanh cong");
     } catch (err) {

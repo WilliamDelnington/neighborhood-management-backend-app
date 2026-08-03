@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { HOUSE_RECORD_STATUS, type HouseRecordStatus } from "@/types";
+import { HOUSE_RECORD_STATUS, OWNER_TYPE, type HouseRecordStatus, type OwnerType } from "@/types";
 
 export interface IHouseRecord extends Document {
     code: string;
@@ -8,6 +8,11 @@ export interface IHouseRecord extends Document {
     neighborhoodId?: mongoose.Types.ObjectId;
     address: string;
     status: HouseRecordStatus;
+    // ownerId tro toi User (ownerType="user") hoac Organization
+    // (ownerType="organization") - khong dung `ref` tinh vi co the tro toi 2
+    // collection khac nhau, resolve thu cong trong service layer (giong
+    // pattern FileAsset.relatedModel/relatedId).
+    ownerType: OwnerType;
     ownerId?: mongoose.Types.ObjectId;
     note?: string;
     // So khai bao cu tru/tam tru cua nha (do cong an/to dan pho cap) - nguon
@@ -44,9 +49,16 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
             default: "unverified",
             index: true,
         },
-        // Nguoi tao nha so - duoc coi la chu nha, chi minh nguoi nay (hoac
-        // admin/nhan vien co quyen quan ly theo cum) duoc thao tac voi nha nay.
-        ownerId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+        // Nguoi/to chuc tao nha so - duoc coi la chu nha, chi minh chu nha nay
+        // (hoac admin/nhan vien co quyen quan ly theo cum) duoc thao tac voi
+        // nha nay. Xem ownerType o tren de biet ownerId tro toi User hay
+        // Organization.
+        ownerType: {
+            type: String,
+            enum: OWNER_TYPE,
+            default: "user",
+        },
+        ownerId: { type: Schema.Types.ObjectId, index: true },
         note: { type: String },
         residenceDeclarationNumber: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },

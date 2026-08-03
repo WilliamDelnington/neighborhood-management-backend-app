@@ -1,14 +1,16 @@
+import type { Types } from "mongoose";
 import {
     HouseRecord,
     Household,
     Business,
+    Organization,
     Neighborhood,
     type IHouseRecord,
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
-import { clusterScopeFilter, userHasPermission } from "@/lib/rbac";
+import { clusterScopeFilter, areaScopeFilter, userHasPermission } from "@/lib/rbac";
 import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
@@ -42,24 +44,65 @@ function assertClusterAssignable(actorUser: IUser, cluster: string): void {
 }
 
 /**
+ * Tra ve id cua User thuc su "dung sau" chu so huu cua nha so - dung de so
+ * sanh voi actor hien tai va de gui thong bao:
+ * - ownerType="user": chinh ownerId.
+ * - ownerType="organization": representativeUserId cua Organization do (to
+ *   chuc khong tu dang nhap duoc - xem authService.ts, chi User moi co
+ *   session), tra ve undefined neu khong tim thay to chuc.
+ */
+export async function resolveOwnerActingUserId(
+    houseRecord: IHouseRecord,
+): Promise<Types.ObjectId | undefined> {
+    if (!houseRecord.ownerId) return undefined;
+    if (houseRecord.ownerType === "organization") {
+        const organization = await Organization.findById(
+            houseRecord.ownerId,
+        ).select("representativeUserId");
+        return organization?.representativeUserId;
+    }
+    return houseRecord.ownerId as Types.ObjectId;
+}
+
+/**
  * Nem HttpError(403) neu user khong duoc phep thao tac voi nha so nay:
  * - admin: luon duoc phep.
- * - chu nha (ownerId trung voi user hien tai): luon duoc phep voi nha cua minh.
+ * - chu nha (ownerId trung voi user hien tai, hoac user la nguoi dai dien cua
+ *   to chuc chu nha - xem resolveOwnerActingUserId): luon duoc phep voi nha
+ *   cua minh.
  * - house_owner khac (khong phai chu nha nay): khong bao gio duoc phep.
  * - nhan vien (to truong, bi thu, cong an, can bo UBND): theo assignedClusters
  *   nhu truoc (rong neu khong duoc gan cum cu the).
  */
-export function assertHouseRecordInScope(
+export async function assertHouseRecordInScope(
     user: IUser,
     houseRecord: IHouseRecord,
-): void {
+): Promise<void> {
     if (user.roles.includes("admin")) return;
-    if (houseRecord.ownerId && String(houseRecord.ownerId) === String(user._id)) return;
+    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
+    if (ownerActingUserId && String(ownerActingUserId) === String(user._id)) {
+        return;
+    }
     if (user.roles.includes("house_owner")) {
         throw new HttpError(
             "Bạn không có quyền thao tác với nhà số của người khác",
             403,
         );
+    }
+    if (user.roles.includes("neighborhood_leader")) {
+        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+            .filter(Boolean)
+            .map(String);
+        if (
+            !houseRecord.neighborhoodId ||
+            !ids.includes(String(houseRecord.neighborhoodId))
+        ) {
+            throw new HttpError(
+                "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
+                403,
+            );
+        }
+        return;
     }
     if (
         user.assignedClusters?.length &&
@@ -95,16 +138,45 @@ export function assertHouseRecordVerifiedForMembers(
 /**
  * Dieu kien loc danh sach nha so theo pham vi cua actor:
  * - admin: xem tat ca.
- * - house_owner: chi xem nha so ma minh la chu (ownerId), KHONG duoc roi vao
- *   nhanh clusterScopeFilter vi house_owner luon co assignedClusters rong ->
- *   se bi hieu nham la "khong gioi han" (xem duoc toan bo phuong) neu dung
- *   chung logic voi nhan vien.
+ * - house_owner: chi xem nha so ma minh la chu - hoac truc tiep (ownerType
+ *   "user", ownerId=user._id) hoac gian tiep qua to chuc ma minh la nguoi dai
+ *   dien (ownerType "organization") - KHONG duoc roi vao nhanh
+ *   clusterScopeFilter vi house_owner luon co assignedClusters rong -> se bi
+ *   hieu nham la "khong gioi han" (xem duoc toan bo phuong) neu dung chung
+ *   logic voi nhan vien.
  * - nhan vien: nhu truoc, theo assignedClusters (rong = xem toan phuong).
  */
-function houseRecordScopeFilter(user: IUser): Record<string, unknown> {
+async function houseRecordScopeFilter(
+    user: IUser,
+): Promise<Record<string, unknown>> {
     if (user.roles.includes("admin")) return {};
-    if (user.roles.includes("house_owner")) return { ownerId: user._id };
-    return clusterScopeFilter(user);
+    if (user.roles.includes("house_owner")) {
+        return ownedHouseRecordFilter(user._id);
+    }
+    return areaScopeFilter(user);
+}
+
+/**
+ * Dieu kien Mongo tra ve cac nha so ma userId so huu - truc tiep (ownerType
+ * "user") hoac qua to chuc ma userId la nguoi dai dien (ownerType
+ * "organization"). Dung chung boi houseRecordScopeFilter va
+ * getOwnedHouseRecordIds de tranh lech logic giua hai noi.
+ */
+async function ownedHouseRecordFilter(
+    userId: unknown,
+): Promise<Record<string, unknown>> {
+    const organizations = await Organization.find({
+        representativeUserId: userId,
+    }).select("_id");
+    return {
+        $or: [
+            { ownerType: "user", ownerId: userId },
+            {
+                ownerType: "organization",
+                ownerId: { $in: organizations.map(o => o._id) },
+            },
+        ],
+    };
 }
 
 /**
@@ -129,8 +201,35 @@ async function assertNeighborhoodExists(
  * Household/Citizen, khong phai HouseRecord).
  */
 export async function getOwnedHouseRecordIds(userId: unknown) {
-    const houseRecords = await HouseRecord.find({ ownerId: userId }).select("_id");
+    const filter = await ownedHouseRecordFilter(userId);
+    const houseRecords = await HouseRecord.find(filter).select("_id");
     return houseRecords.map(h => h._id);
+}
+
+/**
+ * Nem HttpError neu organizationId duoc chon lam chu nha khong hop le: khong
+ * ton tai, da bi vo hieu hoa, hoac actor khong phai nguoi dai dien cua to
+ * chuc do - chi nguoi dai dien moi duoc dang ky nha dung ten to chuc minh
+ * (giong pattern validateHeadOfHouseholdUser cua householdService.ts).
+ */
+async function assertOrganizationOwnable(
+    actorUser: IUser,
+    organizationId: string,
+): Promise<void> {
+    const organization = await Organization.findById(organizationId);
+    if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
+    if (!organization.active) {
+        throw new HttpError(
+            "To chuc da bi vo hieu hoa, khong the dang ky nha so moi",
+            422,
+        );
+    }
+    if (String(organization.representativeUserId) !== String(actorUser._id)) {
+        throw new HttpError(
+            "Ban khong phai nguoi dai dien cua to chuc nay",
+            403,
+        );
+    }
 }
 
 export async function createHouseRecord(
@@ -141,6 +240,10 @@ export async function createHouseRecord(
     assertClusterAssignable(actorUser, cluster);
     await assertNeighborhoodExists(input.neighborhoodId);
 
+    if (input.organizationId) {
+        await assertOrganizationOwnable(actorUser, input.organizationId);
+    }
+
     const code = await generateSequentialCode(HouseRecord, "NS", 3);
     const houseRecord = await HouseRecord.create({
         code,
@@ -148,9 +251,11 @@ export async function createHouseRecord(
         streetId,
         neighborhoodId: input.neighborhoodId || undefined,
         address: input.address,
-        // Nguoi tao nha so duoc coi la chu nha (ap dung cho ca house_owner tu
-        // dang ky lan nhan vien tao ho khi nguoi dan chua co tai khoan).
-        ownerId: actorUser._id,
+        // Nguoi (hoac to chuc, neu co chon organizationId) tao nha so duoc
+        // coi la chu nha (ap dung cho ca house_owner tu dang ky lan nhan vien
+        // tao ho khi nguoi dan chua co tai khoan).
+        ownerType: input.organizationId ? "organization" : "user",
+        ownerId: input.organizationId || actorUser._id,
         note: input.note,
         residenceDeclarationNumber: input.residenceDeclarationNumber,
         createdBy: actorUser._id,
@@ -187,10 +292,20 @@ export async function listHouseRecords(params: {
         filter.status = params.status;
     }
 
+    const isNeighborhoodLeader = params.actorUser.roles.includes(
+        "neighborhood_leader",
+    );
     // House_owner luon bi gioi han theo ownerId, khong duoc dung query
     // `cluster`/`streetId` de "mo rong" pham vi xem (ho khong co
-    // assignedClusters de doi chieu).
-    if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
+    // assignedClusters de doi chieu). To truong (neighborhood_leader) cung
+    // khong duoc di qua nhanh cluster/streetId ben duoi, vi nhanh do doi chieu
+    // theo assignedClusters (thuong rong voi to truong) - se vo tinh bo qua
+    // scope theo Neighborhood.
+    if (isNeighborhoodLeader && !isHouseOwnerUser) {
+        Object.assign(filter, areaScopeFilter(params.actorUser));
+        if (params.streetId) filter.streetId = params.streetId;
+        else if (params.cluster) filter.cluster = params.cluster;
+    } else if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
         const allowedClusters = params.actorUser.assignedClusters;
         // Kiem tra quyen theo cluster (assignedClusters van dua tren ten
         // cluster, chua co assignedStreetIds rieng) - neu loc theo streetId
@@ -211,7 +326,7 @@ export async function listHouseRecords(params: {
             filter.cluster = params.cluster;
         }
     } else {
-        Object.assign(filter, houseRecordScopeFilter(params.actorUser));
+        Object.assign(filter, await houseRecordScopeFilter(params.actorUser));
     }
 
     // To dan pho la thuoc tinh rieng cua tung nha so (khong lien quan
@@ -318,9 +433,9 @@ export async function transitionHouseRecordStatus(
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
 
     const isAdmin = actorUser.roles.includes("admin");
+    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
     const isOwner =
-        !!houseRecord.ownerId &&
-        String(houseRecord.ownerId) === String(actorUser._id);
+        !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
 
     if (!isAdmin) {
         if (houseRecord.status === "locked") {
@@ -352,7 +467,7 @@ export async function transitionHouseRecordStatus(
                     403,
                 );
             }
-            assertHouseRecordInScope(actorUser, houseRecord);
+            await assertHouseRecordInScope(actorUser, houseRecord);
             const canVerify =
                 houseRecord.status === "pending" &&
                 ["verified", "denied"].includes(targetStatus);
@@ -370,12 +485,12 @@ export async function transitionHouseRecordStatus(
     houseRecord.updatedBy = actorUser._id as any;
     await houseRecord.save();
 
-    // Bao cho chu nha biet ket qua duyet ho so - chi khi da co chu (owner)
-    // xac dinh, chi voi ket qua cuoi cung (verified/denied), va chi khi trang
-    // thai thuc su thay doi (tranh spam thong bao neu admin gui lai cung mot
-    // trang thai).
+    // Bao cho chu nha (hoac nguoi dai dien to chuc chu nha) biet ket qua duyet
+    // ho so - chi khi xac dinh duoc nguoi nhan, chi voi ket qua cuoi cung
+    // (verified/denied), va chi khi trang thai thuc su thay doi (tranh spam
+    // thong bao neu admin gui lai cung mot trang thai).
     if (
-        houseRecord.ownerId &&
+        ownerActingUserId &&
         previousStatus !== targetStatus &&
         (targetStatus === "verified" || targetStatus === "denied")
     ) {
@@ -385,7 +500,7 @@ export async function transitionHouseRecordStatus(
                 HOUSE_RECORD_STATUS_LABEL[targetStatus]
             }`,
             type: "house_record.status_changed",
-            targetUserIds: [houseRecord.ownerId],
+            targetUserIds: [ownerActingUserId],
             relatedModel: "HouseRecord",
             relatedId: houseRecord._id,
             createdBy: actorUser._id,

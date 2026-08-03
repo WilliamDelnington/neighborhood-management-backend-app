@@ -33,3 +33,10 @@ export function createRateLimiter(maxAttempts: number, windowMs: number) {
 }
 
 export const loginRateLimiter = createRateLimiter(5, 15 * 60 * 1000);
+
+// Gioi han so lan GUI OTP (khong phai so lan NHAP ma - xem otpVerifyRateLimiter)
+// theo tung (purpose, so dien thoai) - chong spam gui SMS/ZNS. So lan nhap sai
+// ma con duoc gioi han rieng, ben trong chinh OtpChallenge.attempts (ben vung
+// hon, khong mat khi restart process) - xem services/otpService.ts.
+export const otpRequestRateLimiter = createRateLimiter(3, 10 * 60 * 1000);
+export const otpVerifyRateLimiter = createRateLimiter(10, 10 * 60 * 1000);

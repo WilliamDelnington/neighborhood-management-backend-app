@@ -1,3 +1,4 @@
+import type mongoose from "mongoose";
 import {
     Complaint,
     ComplaintTimeline,
@@ -10,7 +11,7 @@ import { HttpError } from "@/lib/response";
 import { generateYearlyCode } from "@/lib/utils";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
-import { clusterScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter } from "@/lib/rbac";
 import { TRANG_THAI_PHAN_ANH_LABEL } from "@/types";
 import type {
     AssignComplaintInput,
@@ -49,6 +50,36 @@ export async function resolveComplaintCluster(
 }
 
 /**
+ * Tuong tu resolveComplaintCluster nhung suy ra to dan pho (neighborhoodId)
+ * de denormalize vao Complaint.neighborhoodId - dung cho areaScopeFilter khi
+ * actor la neighborhood_leader. Uu tien ho khau, roi den nhan khau (join qua
+ * ho khau), cuoi cung la to dan pho cua chinh nguoi tao (truong hop nhan vien
+ * tu gui phan anh).
+ */
+export async function resolveComplaintNeighborhoodId(
+    user: IUser,
+): Promise<mongoose.Types.ObjectId | undefined> {
+    if (user.householdId) {
+        const household = await Household.findById(user.householdId).select(
+            "neighborhoodId",
+        );
+        if (household?.neighborhoodId) return household.neighborhoodId;
+    }
+    if (user.citizenId) {
+        const citizen = await Citizen.findById(user.citizenId).populate(
+            "householdId",
+            "neighborhoodId",
+        );
+        const household = citizen?.householdId as
+            | { neighborhoodId?: mongoose.Types.ObjectId }
+            | undefined;
+        if (household?.neighborhoodId) return household.neighborhoodId;
+    }
+    if (user.neighborhoodId) return user.neighborhoodId;
+    return undefined;
+}
+
+/**
  * Dieu kien Mongo loc phan anh theo pham vi. Neu actor duoc cap
  * complaints.read_escalated, pham vi la "da chuyen UBND, cong voi cum duoc
  * phan cong (neu co)" - KHONG ke thua quy uoc "assignedClusters rong = khong
@@ -68,14 +99,18 @@ function complaintScopeFilter(
         if (clusters.length) or.push({ cluster: { $in: clusters } });
         return { $or: or };
     }
-    return clusterScopeFilter(actorUser);
+    return areaScopeFilter(actorUser);
 }
 
 /**
  * Nem HttpError(403) neu actor khong duoc phep xem chi tiet phan anh nay
- * ngoai pham vi phu trach. Phan anh cu chua co cluster (truoc khi co tinh
- * nang nay, khong backfill duoc) van xem duoc qua link truc tiep - chi bi
- * loai khoi danh sach (xem complaintScopeFilter), khong bi chan hoan toan.
+ * ngoai pham vi phu trach. Voi nhan vien theo cluster (legacy): phan anh cu
+ * chua co cluster van xem duoc qua link truc tiep - chi bi loai khoi danh
+ * sach (xem complaintScopeFilter), khong bi chan hoan toan. Voi
+ * neighborhood_leader: nguoc lai, khong xac dinh duoc pham vi (to truong
+ * chua duoc gan to dan pho, hoac phan anh khong xac dinh duoc neighborhoodId)
+ * nghia la TU CHOI - giong quy uoc cua Household/PcccCheck/SecurityRecord/
+ * HouseRecord, khong ke thua su khoan dung cua nhanh cluster.
  */
 export function assertComplaintInScope(
     actorUser: IUser,
@@ -98,6 +133,30 @@ export function assertComplaintInScope(
             403,
         );
     }
+    if (actorUser.roles.includes("neighborhood_leader")) {
+        // Khac voi cluster (quy uoc cu: khong xac dinh duoc = cho xem), voi
+        // neighborhoodId dung quy uoc chat hon giong Household/PcccCheck/
+        // SecurityRecord/HouseRecord: khong xac dinh duoc pham vi (to truong
+        // chua duoc gan to dan pho, hoac phan anh khong xac dinh duoc
+        // neighborhoodId) nghia la TU CHOI, khong phai cho qua.
+        const ids = [
+            actorUser.neighborhoodId,
+            ...(actorUser.assignedNeighborhoodIds || []),
+        ]
+            .filter(Boolean)
+            .map(String);
+        if (
+            !complaint.neighborhoodId ||
+            !ids.includes(String(complaint.neighborhoodId))
+        ) {
+            throw new HttpError(
+                "Ban khong co quyen xem phan anh nay (ngoai pham vi phu trach)",
+                403,
+            );
+        }
+        return;
+    }
+
     if (!clusters.length) return;
     if (complaint.cluster && !clusters.includes(complaint.cluster)) {
         throw new HttpError(
@@ -114,6 +173,7 @@ export async function createComplaint(
     const userId = String(actorUser._id);
     const code = await generateYearlyCode(Complaint, "HB-PA");
     const cluster = await resolveComplaintCluster(actorUser);
+    const neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
     const complaint = await Complaint.create({
         code,
         category: input.category,
@@ -123,6 +183,7 @@ export async function createComplaint(
         images: input.images || [],
         status: "moi_tiep_nhan",
         cluster,
+        neighborhoodId,
         createdByUserId: userId,
     });
 

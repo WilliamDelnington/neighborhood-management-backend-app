@@ -1,8 +1,13 @@
-import { Role as RoleModel, RoleAssignment, User } from "@/models";
+import { Role as RoleModel, RoleAssignment, User, type IUser } from "@/models";
 import { HttpError } from "@/lib/response";
+import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
-import type { AssignRoleInput, UpdateUserInput } from "@/validators/user";
+import type {
+    AssignRoleInput,
+    CreateHouseOwnerInput,
+    UpdateUserInput,
+} from "@/validators/user";
 import type { Role as RoleType } from "@/types";
 
 export async function listUsers(params: {
@@ -45,6 +50,51 @@ export async function listAssignableStaff(roles: RoleType[]) {
         .select("displayName")
         .sort({ displayName: 1 });
     return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
+}
+
+/**
+ * To truong (hoac admin) tao tai khoan chu ho thay, dat san so dien thoai +
+ * mat khau ban dau - cung logic tao User voi authService.registerWithPhone
+ * (tu dang ky), chi khac actor va co ghi nhan createdBy. Chu ho dang nhap
+ * bang chinh so dien thoai/mat khau nay (xem authService.loginWithPhone).
+ */
+export async function createHouseOwnerByStaff(
+    actorUser: IUser,
+    input: CreateHouseOwnerInput,
+) {
+    const existing = await User.findOne({ phone: input.phone });
+    if (existing) {
+        throw new HttpError("So dien thoai da duoc su dung", 409);
+    }
+
+    const passwordHash = await hashPassword(input.password);
+    let user: IUser;
+    try {
+        user = await User.create({
+            phone: input.phone,
+            passwordHash,
+            displayName: input.displayName,
+            address: input.address,
+            roles: ["house_owner"],
+            primaryRole: "house_owner",
+            status: "active",
+            createdBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("So dien thoai da duoc su dung", 409);
+        }
+        throw err;
+    }
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.create_house_owner",
+        targetModel: "User",
+        targetId: user._id,
+    });
+
+    return sanitizeUser(user);
 }
 
 export async function getUserById(id: string) {

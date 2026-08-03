@@ -3,7 +3,10 @@ import { connectDB } from "@/lib/mongodb";
 import { HttpError } from "@/lib/response";
 import { getBearerToken, verifyUploadToken } from "@/lib/auth";
 import { HouseRecord, Business, FileAsset, User } from "@/models";
-import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import {
+    assertHouseRecordInScope,
+    resolveOwnerActingUserId,
+} from "@/services/houseRecordService";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
         if (payload.relatedModel === "HouseRecord") {
             const houseRecord = await HouseRecord.findById(payload.relatedId);
             if (!houseRecord) return zaloError("Khong tim thay nha so");
-            assertHouseRecordInScope(actorUser, houseRecord);
+            await assertHouseRecordInScope(actorUser, houseRecord);
             subDir = `houses/${payload.relatedId}`;
         } else if (payload.relatedModel === "Business") {
             const business = await Business.findById(payload.relatedId);
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
             if (!houseRecord) {
                 return zaloError("Khong tim thay nha so cua ho kinh doanh nay");
             }
-            assertHouseRecordInScope(actorUser, houseRecord);
+            await assertHouseRecordInScope(actorUser, houseRecord);
             subDir = `businesses/${payload.relatedId}`;
         } else {
             // BusinessDocument: chi chu ho (hoac admin) - kiem tra lai giong
@@ -84,9 +87,9 @@ export async function POST(req: Request) {
                 return zaloError("Khong tim thay nha so cua ho kinh doanh nay");
             }
             const isAdmin = actorUser.roles.includes("admin");
+            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
             const isOwner =
-                !!houseRecord.ownerId &&
-                String(houseRecord.ownerId) === String(actorUser._id);
+                !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
             if (!isAdmin && !isOwner) {
                 return zaloError("Chi chu ho kinh doanh moi duoc tai len giay to");
             }

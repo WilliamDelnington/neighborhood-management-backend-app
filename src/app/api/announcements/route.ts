@@ -5,6 +5,7 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
+import type { IUser } from "@/models";
 import { createAnnouncementSchema } from "@/validators/announcement";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,9 @@ export async function GET(req: Request) {
         const { page, limit } = paginationParams(searchParams);
 
         let publicOnly = true;
+        let actorUser: IUser | undefined;
         if (searchParams.get("admin") === "1") {
-            const actorUser = await requireUser(req);
+            actorUser = await requireUser(req);
             await requirePermission(actorUser, "announcements.read");
             publicOnly = false;
         }
@@ -37,6 +39,7 @@ export async function GET(req: Request) {
             status: searchParams.get("status") || undefined,
             category: searchParams.get("category") || undefined,
             publicOnly,
+            actorUser,
         });
         return apiSuccess(result);
     } catch (err) {
@@ -50,10 +53,7 @@ export async function POST(req: Request) {
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "announcements.create");
         const body = createAnnouncementSchema.parse(await req.json());
-        const announcement = await createAnnouncement(
-            String(actorUser._id),
-            body,
-        );
+        const announcement = await createAnnouncement(actorUser, body);
         return apiSuccess(announcement, "Tao thong bao thanh cong", 201);
     } catch (err) {
         return apiErrorFromException(err);

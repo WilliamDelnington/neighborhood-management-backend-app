@@ -66,7 +66,12 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
 
     it("can bo (staff) duoc xem chi tiet phan anh cua nguoi khac", async () => {
         const owner = await createTestUser({ roles: ["house_owner"] });
-        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        // regional_police (khong bi scope theo to dan pho trong tinh nang nay,
+        // van dung clusterScopeFilter voi quy uoc "rong = khong gioi han") -
+        // KHONG dung neighborhood_leader o day: to truong chua duoc gan to dan
+        // pho gio bi tu choi mac dinh (xem assertComplaintInScope), khac quy
+        // uoc cu cua cluster ma bai test nay dang muon kiem tra.
+        const staff = await createTestUser({ roles: ["regional_police"] });
         const created = await createComplaintAs(
             String(owner._id),
             await authHeaders(owner),
@@ -74,7 +79,7 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
 
         const res = await getComplaintRoute(
             makeRequest(`/api/complaints/${created.data._id}`, {
-                headers: await authHeaders(leader),
+                headers: await authHeaders(staff),
             }),
             { params: { id: created.data._id } },
         );

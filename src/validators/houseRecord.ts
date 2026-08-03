@@ -13,6 +13,10 @@ const houseRecordBaseSchema = z.object({
     address: z.string().min(1, "Dia chi khong duoc de trong"),
     note: z.string().optional(),
     residenceDeclarationNumber: z.string().optional(),
+    // Neu co: nha so duoc dang ky duoi ten to chuc nay (actor phai la nguoi
+    // dai dien - xem houseRecordService.assertOrganizationOwnable). Neu
+    // khong: chu nha la chinh actor (hanh vi cu, khong doi).
+    organizationId: z.string().nullable().optional(),
 });
 
 export const createHouseRecordSchema = houseRecordBaseSchema.refine(

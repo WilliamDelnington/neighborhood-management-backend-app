@@ -210,3 +210,42 @@ export function clusterScopeFilter(
     if (!user.assignedClusters || user.assignedClusters.length === 0) return {};
     return { [clusterField]: { $in: user.assignedClusters } };
 }
+
+/**
+ * Xay dung dieu kien Mongo de loc du lieu theo to dan pho (Neighborhood) duoc
+ * phan cong. Khac voi clusterScopeFilter: khong co to dan pho nao duoc gan
+ * (neighborhoodId + assignedNeighborhoodIds deu rong) nghia la KHONG THAY GI
+ * ca, chu khong phai xem tat ca - cung quy uoc voi
+ * neighborhoodService.ownNeighborhoodIds, vi to truong chua duoc gan to dan
+ * pho da bi chan vao thang o frontend (RequireNeighborhoodAssignment), backend
+ * nen tu choi thay vi ngam dinh khong gioi han.
+ */
+export function neighborhoodScopeFilter(
+    user: IUser,
+    neighborhoodField = "neighborhoodId",
+): Record<string, unknown> {
+    if (user.roles.includes("admin")) return {};
+    const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])].filter(
+        Boolean,
+    );
+    if (ids.length === 0) return { _id: { $in: [] } };
+    return { [neighborhoodField]: { $in: ids } };
+}
+
+/**
+ * Diem goi chung cho scope theo khu vuc: to truong (neighborhood_leader) duoc
+ * loc theo Neighborhood (xem neighborhoodScopeFilter), cac vai tro con lai giu
+ * nguyen hanh vi loc theo cluster nhu truoc (clusterScopeFilter) - viec mo
+ * rong scope-theo-neighborhood cho cac vai tro khac la quyet dinh rieng, chua
+ * lam trong lan nay.
+ */
+export function areaScopeFilter(
+    user: IUser,
+    opts: { clusterField?: string; neighborhoodField?: string } = {},
+): Record<string, unknown> {
+    if (user.roles.includes("admin")) return {};
+    if (user.roles.includes("neighborhood_leader")) {
+        return neighborhoodScopeFilter(user, opts.neighborhoodField ?? "neighborhoodId");
+    }
+    return clusterScopeFilter(user, opts.clusterField ?? "cluster");
+}

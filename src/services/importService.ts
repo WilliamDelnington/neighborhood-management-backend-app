@@ -1,7 +1,8 @@
 import ExcelJS from "exceljs";
-import { Household, Citizen, ImportJob, type IImportJob } from "@/models";
+import { Household, Citizen, Street, ImportJob, type IImportJob } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
+import { generateStreetCode } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
 import {
     GIOI_TINH,
@@ -29,6 +30,18 @@ import {
 //   | Đảng viên | Đoàn viên
 //   - "Mã hộ" phai la ma ho da ton tai trong he thong (vd HB001), duoc doi chieu
 //     truoc khi cho phep commit.
+//
+// Import duong/pho:
+//   Tên đường/phố | Mã đường/phố | Trạng thái
+//   - "Mã đường/phố" khong bat buoc: neu de trong, ma duoc tu sinh tu ten
+//     (giong cach Street duoc tu tao khi mot Household/House dung cluster tu
+//     do chua tung ton tai - xem lib/streetSync.ts generateStreetCode). Neu co
+//     nhap, ma phai duy nhat (ca trong file va trong he thong).
+//   - "Trạng thái" chap nhan Đang hoạt động/Ngừng hoạt động hoac true/false/
+//     có/không, mac dinh dang hoat dong (giong quy uoc "Cần hỗ trợ" o tren).
+//   - Cac cot khac ngoai 3 cot tren trong file Excel (vd ghi chu tu do) KHONG
+//     duoc doc/luu - chi 3 cot duoc khai bao trong STREET_COLUMNS moi anh
+//     huong den du lieu import.
 // ---------------------------------------------------------------------------
 
 const HOUSEHOLD_COLUMNS = {
@@ -55,6 +68,12 @@ const CITIZEN_COLUMNS = {
     isDisabledOrSupportNeeded: "Người khuyết tật",
     isPartyMember: "Đảng viên",
     isUnionMember: "Đoàn viên",
+} as const;
+
+const STREET_COLUMNS = {
+    name: "Tên đường/phố",
+    code: "Mã đường/phố",
+    active: "Trạng thái",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -135,6 +154,29 @@ function parseBoolean(raw: unknown): boolean {
     if (typeof raw === "boolean") return raw;
     const normalized = normalizeEnumInput(cellToString(raw));
     return ["co", "true", "1", "x", "yes", "y"].includes(normalized);
+}
+
+const INACTIVE_STATUS_VALUES = [
+    "ngung_hoat_dong",
+    "khong_hoat_dong",
+    "khong",
+    "false",
+    "0",
+    "inactive",
+];
+
+/**
+ * Rieng cho cot "Trạng thái" cua Street (khac ngu nghia Co/Khong cua
+ * parseBoolean): rong = dang hoat dong (giong mac dinh active:true cua
+ * schema); chi tra ve false khi gia tri ro rang the hien "ngung hoat dong" -
+ * tranh vo tinh khoa mot dong hop le vi ghi khac cach viet ma khong nhan dien
+ * duoc.
+ */
+function parseStreetActiveCell(raw: unknown): boolean {
+    const str = cellToString(raw).trim();
+    if (!str) return true;
+    const normalized = normalizeEnumInput(str);
+    return !INACTIVE_STATUS_VALUES.includes(normalized);
 }
 
 function parseDateCell(value: unknown): Date | undefined {
@@ -477,6 +519,255 @@ export async function commitCitizenImport(
         targetModel: "ImportJob",
         targetId: job._id,
         metadata: { type: "citizen", count: committedCount },
+    });
+
+    return job;
+}
+
+// ---------------------------------------------------------------------------
+// Import duong/pho
+// ---------------------------------------------------------------------------
+
+export type StreetColumnMapping = {
+    name: string;
+    code?: string;
+    active?: string;
+};
+
+/**
+ * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
+ * STREET_COLUMNS co dinh - nguoi dung se chon cot ung voi tung truong o buoc
+ * sau (xem applyStreetImportMapping), vi nhan cot trong file thuc te khong
+ * phai luc nao cung khop voi nhan mong doi.
+ */
+export async function uploadStreetImportFile(
+    actorId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+): Promise<IImportJob> {
+    const { headers, rows } = await readWorksheetRows(fileBuffer);
+
+    const rawRows = rows.map(row => {
+        const values: Record<string, string> = {};
+        for (const header of headers) {
+            if (header in row.values) {
+                values[header] = cellToString(row.values[header]).trim();
+            }
+        }
+        return { rowNumber: row.rowNumber, values };
+    });
+
+    // Goi y mapping: doi chieu header phat hien duoc voi nhan mong doi trong
+    // STREET_COLUMNS (khong phan biet hoa/thuong/dau) - chi la goi y ban dau,
+    // nguoi dung co the sua o buoc chon cot.
+    const suggestedMapping: Record<string, string> = {};
+    for (const [field, expectedLabel] of Object.entries(STREET_COLUMNS)) {
+        const match = headers.find(
+            h => normalizeEnumInput(h) === normalizeEnumInput(expectedLabel),
+        );
+        if (match) suggestedMapping[field] = match;
+    }
+
+    const job = await ImportJob.create({
+        type: "street",
+        status: "awaiting_mapping",
+        fileName,
+        totalRows: rows.length,
+        validRows: 0,
+        headers,
+        rawRows,
+        suggestedMapping,
+        columnMapping: {},
+        rowErrors: [],
+        previewData: [],
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+/**
+ * Buoc 2 (chon cot): ap dung mapping do nguoi dung xac nhan (cot nao la ten,
+ * cot nao la ma, cot nao la trang thai) len du lieu tho da luu o buoc upload,
+ * roi chay lai dung logic validate/preview nhu truoc (bat buoc ten, chong
+ * trung ten/ma trong file va trong he thong, tu sinh ma neu khong chon cot
+ * ma). Co the goi lai nhieu lan (vd nguoi dung sua mapping) mien la job chua
+ * commit.
+ */
+export async function applyStreetImportMapping(
+    importJobId: string,
+    mapping: StreetColumnMapping,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (job.type !== "street") {
+        throw new HttpError("Import job nay khong phai loai duong/pho", 400);
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+    }
+
+    const headers = job.headers;
+    if (!mapping.name || !headers.includes(mapping.name)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Tên đường/phố'",
+            422,
+        );
+    }
+    if (mapping.code && !headers.includes(mapping.code)) {
+        throw new HttpError("Cột đã chọn cho 'Mã đường/phố' không hợp lệ", 422);
+    }
+    if (mapping.active && !headers.includes(mapping.active)) {
+        throw new HttpError("Cột đã chọn cho 'Trạng thái' không hợp lệ", 422);
+    }
+    const mappedHeaders = [mapping.name, mapping.code, mapping.active].filter(
+        Boolean,
+    ) as string[];
+    if (new Set(mappedHeaders).size !== mappedHeaders.length) {
+        throw new HttpError(
+            "Không thể chọn cùng một cột cho nhiều trường dữ liệu khác nhau",
+            422,
+        );
+    }
+
+    const rows = job.rawRows;
+
+    // Tra cuu truoc (mot lan, khong lap tung dong) de doi chieu trung ma/ten
+    // voi du lieu da co trong he thong - giong ky thuat build Map mot lan cua
+    // previewCitizenImport cho householdCode.
+    const namesInSheet = new Set<string>();
+    const codesInSheet = new Set<string>();
+    for (const row of rows) {
+        const name = row.values[mapping.name] || "";
+        const code = mapping.code ? row.values[mapping.code] || "" : "";
+        if (name) namesInSheet.add(name);
+        if (code) codesInSheet.add(code);
+    }
+    const existingStreets = await Street.find({
+        $or: [
+            { name: { $in: Array.from(namesInSheet) } },
+            { code: { $in: Array.from(codesInSheet) } },
+        ],
+    }).select("name code");
+    const existingNames = new Set(existingStreets.map(s => s.name));
+    const existingCodes = new Set(existingStreets.map(s => s.code));
+
+    // Trung lap TRONG chinh file (hai dong cung ten/ma) cung phai bi chan,
+    // khong chi trung voi DB - theo doi cac ten/ma da "dung" boi mot dong hop
+    // le truoc do trong cung lan preview nay.
+    const seenNames = new Set<string>();
+    const seenCodes = new Set<string>();
+
+    const errors: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    for (const row of rows) {
+        const name = (row.values[mapping.name] || "").trim();
+        const codeInput = (mapping.code ? row.values[mapping.code] : "") || "";
+        const active = mapping.active
+            ? parseStreetActiveCell(row.values[mapping.active])
+            : true;
+
+        const rowErrors: string[] = [];
+        if (!name) rowErrors.push("Thiếu 'Tên đường/phố'");
+
+        if (name) {
+            if (existingNames.has(name) || seenNames.has(name)) {
+                rowErrors.push(`Tên đường/phố "${name}" đã tồn tại`);
+            } else {
+                seenNames.add(name);
+            }
+        }
+
+        let code = codeInput.trim();
+        if (code) {
+            if (existingCodes.has(code) || seenCodes.has(code)) {
+                rowErrors.push(`Mã đường/phố "${code}" đã tồn tại`);
+            } else {
+                seenCodes.add(code);
+            }
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        if (!code) {
+            // eslint-disable-next-line no-await-in-loop
+            code = await generateStreetCode(name);
+            // generateStreetCode chi doi chieu voi Street da co trong DB, chua
+            // biet ve cac ma vua duoc sinh cho CAC DONG KHAC trong cung lan
+            // preview nay (vd hai ten khac nhau nhung cung rut gon ve mot ma) -
+            // them hau to so dong de dam bao duy nhat trong pham vi file.
+            if (seenCodes.has(code) || existingCodes.has(code)) {
+                code = `${code}_R${row.rowNumber}`;
+            }
+            seenCodes.add(code);
+        }
+
+        previewData.push({ name, code, active });
+    }
+
+    job.columnMapping = mapping;
+    job.rowErrors = errors;
+    job.previewData = previewData;
+    job.validRows = previewData.length;
+    job.status = errors.length === 0 ? "validated" : "previewing";
+    await job.save();
+
+    return job;
+}
+
+export async function commitStreetImport(
+    actorId: string,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (job.type !== "street") {
+        throw new HttpError("Import job nay khong phai loai duong/pho", 400);
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+    }
+    if (job.status === "awaiting_mapping") {
+        throw new HttpError(
+            "Vui long chon cot du lieu (mapping) truoc khi commit",
+            400,
+        );
+    }
+    if (job.rowErrors.length > 0) {
+        throw new HttpError(
+            "Du lieu con loi, vui long sua va tao lai preview truoc khi commit",
+            400,
+        );
+    }
+
+    let committedCount = 0;
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        // eslint-disable-next-line no-await-in-loop
+        await Street.create({
+            name: row.name,
+            code: row.code,
+            active: row.active,
+            createdBy: actorId,
+            updatedBy: actorId,
+        });
+        committedCount += 1;
+    }
+
+    job.status = "committed";
+    job.committedCount = committedCount;
+    await job.save();
+
+    await writeAuditLog({
+        actorId,
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: job._id,
+        metadata: { type: "street", count: committedCount },
     });
 
     return job;

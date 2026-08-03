@@ -15,6 +15,7 @@ export interface IComplaint extends Document {
     images: string[];
     status: TrangThaiPhanAnh;
     cluster?: string;
+    neighborhoodId?: mongoose.Types.ObjectId;
     createdByUserId: mongoose.Types.ObjectId;
     assigneeId?: mongoose.Types.ObjectId;
     expectedCompletionDate?: Date;
@@ -43,6 +44,14 @@ const ComplaintSchema = new Schema<IComplaint>(
         // de loc theo pham vi phu trach (clusterScopeFilter). Khong bat buoc va
         // khong nhan tu client - xem resolveComplaintCluster trong complaintService.
         cluster: { type: String, index: true },
+        // Denormalized tuong tu cluster, suy tu Household.neighborhoodId/
+        // User.neighborhoodId cua nguoi tao tai thoi diem gui phan anh - dung
+        // de loc theo to dan pho cho neighborhood_leader (areaScopeFilter).
+        neighborhoodId: {
+            type: Schema.Types.ObjectId,
+            ref: "Neighborhood",
+            index: true,
+        },
         createdByUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",

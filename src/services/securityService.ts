@@ -1,7 +1,7 @@
 import { HouseRecord, SecurityRecord, type ISecurityRecord } from "@/models";
 import type { IUser } from "@/models/User";
 import { HttpError } from "@/lib/response";
-import { clusterScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter } from "@/lib/rbac";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import { MUC_DO_AN_NINH_LABEL } from "@/types";
@@ -17,7 +17,8 @@ const UPDATABLE_BOOLEAN_FIELDS = [
     "reportedToPolice",
 ] as const;
 
-const HOUSE_POPULATE_FIELDS = "code address cluster residenceDeclarationNumber";
+const HOUSE_POPULATE_FIELDS =
+    "code address cluster neighborhoodId residenceDeclarationNumber";
 
 async function notifyUrgentLevel(
     record: ISecurityRecord,
@@ -89,7 +90,7 @@ export async function listSecurityRecords(params: {
     if (params.houseId) {
         filter.houseId = params.houseId;
     } else if (!params.actorUser.roles.includes("admin")) {
-        const scopeFilter = clusterScopeFilter(params.actorUser);
+        const scopeFilter = areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
             filter.houseId = { $in: houses.map(h => h._id) };
@@ -136,10 +137,27 @@ export function assertSecurityRecordInScope(
     record: { houseId: unknown },
 ): void {
     if (user.roles.includes("admin")) return;
-    if (!user.assignedClusters?.length) return;
     const house = record.houseId as {
         cluster?: string;
+        neighborhoodId?: unknown;
     } | null;
+
+    if (user.roles.includes("neighborhood_leader")) {
+        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+            .filter(Boolean)
+            .map(String);
+        const neighborhoodId =
+            house && typeof house === "object" ? house.neighborhoodId : undefined;
+        if (!neighborhoodId || !ids.includes(String(neighborhoodId))) {
+            throw new HttpError(
+                "Ban khong co quyen thao tac voi ho so ngoai to dan pho duoc phan cong",
+                403,
+            );
+        }
+        return;
+    }
+
+    if (!user.assignedClusters?.length) return;
     const cluster = house && typeof house === "object" ? house.cluster : undefined;
     if (cluster && !user.assignedClusters.includes(cluster)) {
         throw new HttpError(

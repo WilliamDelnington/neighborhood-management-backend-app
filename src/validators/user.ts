@@ -1,5 +1,14 @@
 import { z } from "zod";
 import { USER_STATUS } from "@/types";
+import { phoneRegisterSchema } from "@/validators/auth";
+
+// Nhan vien (to truong/admin) tao tai khoan chu ho thay - cung dinh dang voi
+// registerWithPhone (phone+password tu dang ky), chi khac o cho ai la actor
+// va co them dia chi tuy chon (xem userService.createHouseOwnerByStaff).
+export const createHouseOwnerSchema = phoneRegisterSchema.extend({
+    address: z.string().optional(),
+});
+export type CreateHouseOwnerInput = z.infer<typeof createHouseOwnerSchema>;
 
 export const updateUserSchema = z.object({
     displayName: z.string().min(1).optional(),

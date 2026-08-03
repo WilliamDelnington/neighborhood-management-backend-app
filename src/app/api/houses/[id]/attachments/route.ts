@@ -25,7 +25,7 @@ export async function GET(
         await requirePermission(user, "houses.read");
 
         const houseRecord = await getHouseRecordById(params.id);
-        assertHouseRecordInScope(user, houseRecord);
+        await assertHouseRecordInScope(user, houseRecord);
 
         const attachments = await listAttachments("HouseRecord", params.id);
         const origin = new URL(req.url).origin;

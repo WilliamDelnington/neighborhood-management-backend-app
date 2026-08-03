@@ -17,6 +17,11 @@ export interface IAnnouncement extends Document {
     targetRoles: Role[];
     targetClusters: string[];
     audienceAll: boolean;
+    // Pham vi TAC GIA (ai duoc sua/xoa/xem trong danh sach quan tri) khi nguoi
+    // tao la neighborhood_leader - khac hoan toan voi targetClusters (doi
+    // tuong doc gia). undefined = tao boi admin/secretary, khong bi gioi han
+    // theo to dan pho.
+    neighborhoodId?: mongoose.Types.ObjectId;
     publishedAt?: Date;
     createdBy: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -40,6 +45,11 @@ const AnnouncementSchema = new Schema<IAnnouncement>(
         targetRoles: { type: [String], default: [] },
         targetClusters: { type: [String], default: [] },
         audienceAll: { type: Boolean, default: true },
+        neighborhoodId: {
+            type: Schema.Types.ObjectId,
+            ref: "Neighborhood",
+            index: true,
+        },
         publishedAt: { type: Date },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

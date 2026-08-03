@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
+import type { Role } from "@/types";
 
 export interface IMeeting extends Document {
     title: string;
@@ -8,6 +9,11 @@ export interface IMeeting extends Document {
     minutes?: string;
     attachments: string[];
     published: boolean;
+    eligibleRoles: Role[];
+    eligibleStreetIds: mongoose.Types.ObjectId[];
+    eligibleNeighborhoodIds: mongoose.Types.ObjectId[];
+    eligibleBusinessTypeIds: mongoose.Types.ObjectId[];
+    eligibleAll: boolean;
     createdBy: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -23,6 +29,23 @@ const MeetingSchema = new Schema<IMeeting>(
         minutes: { type: String },
         attachments: { type: [String], default: [] },
         published: { type: Boolean, default: false },
+        eligibleRoles: { type: [String], default: [] },
+        eligibleStreetIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Street",
+            default: [],
+        },
+        eligibleNeighborhoodIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "Neighborhood",
+            default: [],
+        },
+        eligibleBusinessTypeIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "BusinessType",
+            default: [],
+        },
+        eligibleAll: { type: Boolean, default: true },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

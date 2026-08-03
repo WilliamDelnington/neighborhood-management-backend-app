@@ -9,13 +9,11 @@ import type {
 } from "@/validators/meeting";
 
 async function notifyMeetingPublished(actorId: string, meeting: IMeeting) {
-    // Chua co co che phan cum/vai tro rieng cho cuoc hop nen thong bao rong toi
-    // toan bo chu ho (house_owner); co the thu hep theo targetClusters khi co nhu cau.
     await createNotification({
         title: "Cuộc họp mới",
         body: `${meeting.title} - ${meeting.location}`,
         type: "meeting.published",
-        targetRoles: ["house_owner"],
+        targetRoles: meeting.eligibleAll ? ["house_owner"] : meeting.eligibleRoles,
         relatedModel: "Meeting",
         relatedId: meeting._id,
         createdBy: actorId,
@@ -34,6 +32,11 @@ export async function createMeeting(
         minutes: input.minutes,
         attachments: input.attachments || [],
         published: input.published,
+        eligibleRoles: input.eligibleRoles || [],
+        eligibleStreetIds: input.eligibleStreetIds || [],
+        eligibleNeighborhoodIds: input.eligibleNeighborhoodIds || [],
+        eligibleBusinessTypeIds: input.eligibleBusinessTypeIds || [],
+        eligibleAll: input.eligibleAll,
         createdBy: actorId,
     });
 

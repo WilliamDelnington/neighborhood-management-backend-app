@@ -5,10 +5,25 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { listUsers } from "@/services/userService";
+import { createHouseOwnerByStaff, listUsers } from "@/services/userService";
+import { createHouseOwnerSchema } from "@/validators/user";
 import type { Role } from "@/types";
 
 export const dynamic = "force-dynamic";
+
+export async function POST(req: Request) {
+    try {
+        await connectDB();
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "users.create");
+
+        const body = createHouseOwnerSchema.parse(await req.json());
+        const user = await createHouseOwnerByStaff(actorUser, body);
+        return apiSuccess(user, "Tao tai khoan chu ho thanh cong", 201);
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}
 
 export async function GET(req: Request) {
     try {

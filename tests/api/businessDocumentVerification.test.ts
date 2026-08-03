@@ -227,6 +227,55 @@ describe("Xac thuc ho kinh doanh theo tung giay to (business document verificati
         expect(reviewRes.status).toBe(403);
     });
 
+    it("reviewerRoles rong: neighborhood_leader va secretary van bi tu choi khi duyet (403), du co role mac dinh (khong override permissions)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const adminHeaders = await authHeaders(admin);
+        const { documentType, businessType } = await setupBusinessTypeWithRule(
+            adminHeaders,
+            [],
+        );
+        const { headers, business } = await setupOwnerWithBusiness(
+            "Cụm A",
+            businessType._id,
+        );
+        const fileAssetId = await uploadBusinessDocumentFile(
+            business._id,
+            headers,
+        );
+        const docRes = await createBusinessDocumentRoute(
+            makeRequest(`/api/businesses/${business._id}/documents`, {
+                method: "POST",
+                headers,
+                body: { documentTypeId: documentType._id, fileAssetId },
+            }),
+            { params: { id: business._id } },
+        );
+        const businessDocument = (await readJson(docRes)).data;
+
+        for (const role of ["neighborhood_leader", "secretary"] as const) {
+            const staff = await createTestUser({ roles: [role] });
+            const staffHeaders = await authHeaders(staff);
+
+            const reviewRes = await reviewBusinessDocumentRoute(
+                makeRequest(
+                    `/api/businesses/${business._id}/documents/${businessDocument._id}/review`,
+                    {
+                        method: "PUT",
+                        headers: staffHeaders,
+                        body: { decision: "approved" },
+                    },
+                ),
+                {
+                    params: {
+                        id: business._id,
+                        documentId: businessDocument._id,
+                    },
+                },
+            );
+            expect(reviewRes.status).toBe(403);
+        }
+    });
+
     it("dung vai tro phu trach duyet duoc -> business chuyen verified khi da du giay to bat buoc", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);

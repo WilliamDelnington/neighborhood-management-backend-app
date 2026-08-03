@@ -31,7 +31,8 @@ export type Role = string;
 export type PermissionKey = string;
 
 export const ROLE_LABEL: Record<string, string> = {
-    house_owner: "Chủ hộ",
+    house_owner: "Chủ sở hữu",
+    household_head: "Chủ hộ",
     neighborhood_leader: "Tổ trưởng",
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
@@ -47,14 +48,44 @@ export const USER_STATUS_LABEL: Record<UserStatus, string> = {
     locked: "Đã khóa",
 };
 
+// Luu y: scopeType/scopeValues cua RoleAssignment hien chi la snapshot audit
+// ghi lai luc cap quyen - khong co cho nao trong code doc lai de tinh scope
+// truy cap thuc te. Co che thuc thi thuc su cho "neighborhood" la
+// User.neighborhoodId/assignedNeighborhoodIds ket hop
+// rbac.neighborhoodScopeFilter/areaScopeFilter.
 export const SCOPE_TYPES = [
     "all",
     "cluster",
+    "neighborhood",
     "household",
     "complaint",
     "module",
 ] as const;
 export type ScopeType = typeof SCOPE_TYPES[number];
+
+// ---------------------------------------------------------------------------
+// Chu so huu (nha so co the thuoc ca nhan hoac to chuc)
+// ---------------------------------------------------------------------------
+export const OWNER_TYPE = ["user", "organization"] as const;
+export type OwnerType = typeof OWNER_TYPE[number];
+export const OWNER_TYPE_LABEL: Record<OwnerType, string> = {
+    user: "Cá nhân",
+    organization: "Tổ chức",
+};
+
+export const ORGANIZATION_TYPE = [
+    "cong_ty",
+    "hop_tac_xa",
+    "co_quan_nha_nuoc",
+    "khac",
+] as const;
+export type OrganizationType = typeof ORGANIZATION_TYPE[number];
+export const ORGANIZATION_TYPE_LABEL: Record<OrganizationType, string> = {
+    cong_ty: "Công ty",
+    hop_tac_xa: "Hợp tác xã",
+    co_quan_nha_nuoc: "Cơ quan nhà nước",
+    khac: "Khác",
+};
 
 // ---------------------------------------------------------------------------
 // Nha so
@@ -375,10 +406,12 @@ export const IMPORT_JOB_TYPE = [
     "household",
     "citizen",
     "party_member",
+    "street",
 ] as const;
 export type ImportJobType = typeof IMPORT_JOB_TYPE[number];
 
 export const IMPORT_JOB_STATUS = [
+    "awaiting_mapping",
     "previewing",
     "validated",
     "committed",

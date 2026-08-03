@@ -27,7 +27,7 @@ export async function GET(
         await requirePermission(user, "households.read");
 
         const houseRecord = await getHouseRecordById(params.id);
-        assertHouseRecordInScope(user, houseRecord);
+        await assertHouseRecordInScope(user, houseRecord);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
