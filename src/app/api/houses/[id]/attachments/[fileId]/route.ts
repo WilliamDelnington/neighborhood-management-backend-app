@@ -22,7 +22,7 @@ export async function DELETE(
         await requireAnyPermission(user, ["houses.update", "houses.verify"]);
 
         const houseRecord = await getHouseRecordById(params.id);
-        assertHouseRecordInScope(user, houseRecord);
+        await assertHouseRecordInScope(user, houseRecord);
 
         await deleteAttachment(
             String(user._id),

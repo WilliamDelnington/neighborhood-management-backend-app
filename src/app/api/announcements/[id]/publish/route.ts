@@ -1,7 +1,11 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { publishAnnouncement } from "@/services/announcementService";
+import {
+    assertAnnouncementInScope,
+    getAnnouncementById,
+    publishAnnouncement,
+} from "@/services/announcementService";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +17,7 @@ export async function POST(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "announcements.publish");
+        assertAnnouncementInScope(actorUser, await getAnnouncementById(params.id, false));
         const announcement = await publishAnnouncement(
             String(actorUser._id),
             params.id,

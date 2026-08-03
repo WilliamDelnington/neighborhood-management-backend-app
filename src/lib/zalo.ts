@@ -1,8 +1,12 @@
-import { createHmac } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { HttpError } from "@/lib/response";
 
 const ZALO_ENV = process.env.ZALO_ENV || "sandbox";
 const ZALO_APP_SECRET = process.env.ZALO_APP_SECRET;
+// Khoa bi mat rieng cua Official Account gan voi Mini App (lay tu trang quan
+// tri OA, KHAC voi ZALO_APP_SECRET cua Mini App o tren) - chi dung de xac thuc
+// header X-ZEvent-Signature cua webhook, khong dung cho Graph API.
+const ZALO_OA_SECRET_KEY = process.env.ZALO_OA_SECRET_KEY;
 
 export type ZaloVerifiedProfile = {
     zaloUserId: string;
@@ -69,4 +73,47 @@ export async function verifyZaloAccessToken(
         avatarUrl: claimedProfile?.avatarUrl,
         verifiedVia: "sandbox",
     };
+}
+
+/**
+ * Xac thuc header `X-ZEvent-Signature` cua webhook Zalo (OA/Mini App).
+ *
+ * Cong thuc theo Zalo: mac = SHA256(app_id + rawBody + timestamp + oaSecretKey)
+ * - `rawBody` la chuoi JSON NGUYEN VAN Zalo gui (khong duoc parse/re-stringify
+ *   lai, vi thu tu key/khoang trang khac di se lam sai lech hash), `app_id` va
+ *   `timestamp` lay tu chinh field trong body do, `oaSecretKey` la "Khoa bi
+ *   mat" cua Official Account gan voi Mini App (KHAC voi App Secret Key dung
+ *   cho Graph API o verifyZaloAccessToken). Zalo dung SHA256 thuan, KHONG phai
+ *   HMAC-SHA256 (khong dung secret lam key cho ham bam).
+ *
+ * ZALO_OA_SECRET_KEY chua cau hinh (vd: dang dev truoc khi co OA that) se lam
+ * ham nay luon tra ve false - buoc phai cau hinh that truoc khi dua webhook
+ * len production (xem validateZaloWebhookConfig trong lib/config.ts).
+ */
+export function verifyZaloWebhookSignature(
+    rawBody: string,
+    appId: string,
+    timestamp: string,
+    signatureHeader: string | null,
+): boolean {
+    if (!ZALO_OA_SECRET_KEY || !signatureHeader || !appId || !timestamp) {
+        return false;
+    }
+
+    const expectedHex = createHash("sha256")
+        .update(appId + rawBody + timestamp + ZALO_OA_SECRET_KEY)
+        .digest("hex");
+    const received = signatureHeader.startsWith("mac=")
+        ? signatureHeader.slice("mac=".length)
+        : signatureHeader;
+
+    const expectedBuf = Buffer.from(expectedHex, "hex");
+    const receivedBuf = Buffer.from(received, "hex");
+    if (
+        expectedBuf.length !== receivedBuf.length ||
+        expectedBuf.length === 0
+    ) {
+        return false;
+    }
+    return timingSafeEqual(expectedBuf, receivedBuf);
 }

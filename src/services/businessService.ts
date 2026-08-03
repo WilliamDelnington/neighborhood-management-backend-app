@@ -6,12 +6,13 @@ import {
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
-import { clusterScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
 import {
     assertHouseRecordInScope,
     getOwnedHouseRecordIds,
+    resolveOwnerActingUserId,
 } from "@/services/houseRecordService";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/types";
 import type {
@@ -37,7 +38,7 @@ export async function createBusiness(
 ): Promise<IBusiness> {
     const houseRecord = await HouseRecord.findById(input.houseId);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
-    assertHouseRecordInScope(actorUser, houseRecord);
+    await assertHouseRecordInScope(actorUser, houseRecord);
     await assertBusinessTypeExists(input.businessType);
 
     const business = await Business.create({
@@ -45,6 +46,7 @@ export async function createBusiness(
         houseId: input.houseId,
         cluster: houseRecord.cluster,
         streetId: houseRecord.streetId,
+        neighborhoodId: houseRecord.neighborhoodId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
         phone: input.phone,
@@ -106,7 +108,7 @@ export async function listBusinesses(params: {
             );
             filter.houseId = { $in: ownedHouseIds };
         } else if (!isAdminUser) {
-            Object.assign(filter, clusterScopeFilter(params.actorUser));
+            Object.assign(filter, areaScopeFilter(params.actorUser));
         }
     }
 
@@ -157,7 +159,7 @@ export async function updateBusiness(
     if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
 
     const houseRecord = await HouseRecord.findById(business.houseId);
-    if (houseRecord) assertHouseRecordInScope(actorUser, houseRecord);
+    if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
 
     if (patch.businessType) {
         await assertBusinessTypeExists(patch.businessType);
@@ -205,8 +207,11 @@ export async function transitionBusinessStatus(
     await business.save();
 
     const houseRecord = await HouseRecord.findById(business.houseId);
+    const ownerActingUserId = houseRecord
+        ? await resolveOwnerActingUserId(houseRecord)
+        : undefined;
     if (
-        houseRecord?.ownerId &&
+        ownerActingUserId &&
         previousStatus !== targetStatus &&
         (targetStatus === "verified" || targetStatus === "need_supplement")
     ) {
@@ -216,7 +221,7 @@ export async function transitionBusinessStatus(
                 BUSINESS_STATUS_LABEL[targetStatus]
             }`,
             type: "business.status_changed",
-            targetUserIds: [houseRecord.ownerId],
+            targetUserIds: [ownerActingUserId],
             relatedModel: "Business",
             relatedId: business._id,
             createdBy: actorUser._id,
@@ -242,7 +247,7 @@ export async function deleteBusiness(
     if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
 
     const houseRecord = await HouseRecord.findById(business.houseId);
-    if (houseRecord) assertHouseRecordInScope(actorUser, houseRecord);
+    if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
 
     await business.deleteOne();
 

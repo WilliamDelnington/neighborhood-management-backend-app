@@ -25,7 +25,7 @@ export async function GET(
         const business = await Business.findById(params.id);
         if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
         const houseRecord = await HouseRecord.findById(business.houseId);
-        if (houseRecord) assertHouseRecordInScope(user, houseRecord);
+        if (houseRecord) await assertHouseRecordInScope(user, houseRecord);
 
         const attachments = await listAttachments("Business", params.id);
         const origin = new URL(req.url).origin;

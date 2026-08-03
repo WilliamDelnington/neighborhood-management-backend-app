@@ -5,6 +5,7 @@ export interface IHousehold extends Document {
     code: string;
     cluster: string;
     streetId?: mongoose.Types.ObjectId;
+    neighborhoodId?: mongoose.Types.ObjectId;
     address: string;
     headOfHousehold: string;
     headOfHouseholdUserId?: mongoose.Types.ObjectId;
@@ -27,6 +28,14 @@ const HouseholdSchema = new Schema<IHousehold>(
         // Chuan hoa cua `cluster` (xem src/lib/streetSync.ts) - duoc dong bo
         // tu dong, khong nhap tay truc tiep qua form cu.
         streetId: { type: Schema.Types.ObjectId, ref: "Street", index: true },
+        // Suy tu HouseRecord.neighborhoodId cua houseId luc tao (xem
+        // householdService.ts) - HouseRecord.neighborhoodId duoc admin gan thu
+        // cong nen truong nay co the con trong voi nha chua duoc gan.
+        neighborhoodId: {
+            type: Schema.Types.ObjectId,
+            ref: "Neighborhood",
+            index: true,
+        },
         address: { type: String, required: true },
         headOfHousehold: { type: String, required: true },
         // Lien ket toi tai khoan thuc su cua chu ho (phai co role house_owner) -

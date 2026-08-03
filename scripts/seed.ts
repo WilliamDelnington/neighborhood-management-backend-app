@@ -5,8 +5,74 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 import mongoose from "mongoose";
+import readline from "readline";
 import { connectDB } from "@/lib/mongodb";
 import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
+
+/**
+ * Chan cung (KHONG co co bypass nao, khac voi confirmSeed() ben duoi) neu
+ * NODE_ENV=production - script nay xoa toan bo du lieu demo
+ * (Household/Citizen/HouseRecord/Complaint/...) va khong duoc thiet ke de
+ * chay tren du lieu that. Cung mau kiem tra voi
+ * lib/config.ts:validateAuthConfig(). --yes/-y/SEED_SKIP_CONFIRM chi bo qua
+ * BUOC HOI XAC NHAN o confirmSeed(), KHONG bo qua duoc kiem tra nay.
+ */
+function assertNotProduction(): void {
+    if (process.env.NODE_ENV === "production") {
+        throw new Error(
+            "Tu choi chay: NODE_ENV=production. npm run seed xoa toan bo du " +
+                "lieu demo (Household/Citizen/HouseRecord/Complaint/...) va " +
+                "khong duoc phep chay tren moi truong production. Neu day la " +
+                "moi truong dev/staging bi gan nham NODE_ENV=production, sua " +
+                "lai bien moi truong roi chay lai.",
+        );
+    }
+}
+
+/**
+ * Hoi xac nhan truoc khi chay - script nay van xoa-va-tao-lai toan bo du lieu
+ * demo (Household, Citizen, HouseRecord, Complaint...), chi rieng User la
+ * duoc upsert (xem clearDemoData/seedUsers). Bo qua hoi neu chay voi co
+ * `--yes`/`-y`, hoac bien moi truong SEED_SKIP_CONFIRM=true (vd chay tu CI/
+ * script tu dong khong co stdin tuong tac).
+ */
+async function confirmSeed(): Promise<boolean> {
+    const skip =
+        process.argv.includes("--yes") ||
+        process.argv.includes("-y") ||
+        process.env.SEED_SKIP_CONFIRM === "true";
+    if (skip) return true;
+
+    console.log(
+        "\n⚠️  CẢNH BÁO: npm run seed sẽ XÓA VÀ TẠO LẠI toàn bộ dữ liệu demo sau:",
+    );
+    console.log(
+        "   Household, Citizen, HouseRecord, Complaint, ComplaintTimeline, Announcement,",
+    );
+    console.log(
+        "   Meeting, MeetingRegistration, Survey, SurveyResponse, PcccCheck, SecurityRecord,",
+    );
+    console.log(
+        "   FinanceTransaction, FileAsset, Notification, NotificationDelivery, Setting, Role.",
+    );
+    console.log(
+        "   (7 tài khoản mẫu sẽ được CẬP NHẬT LẠI - không xóa; các tài khoản khác,",
+    );
+    console.log(
+        "   ví dụ 21 tổ trưởng, không bị ảnh hưởng.)",
+    );
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    const answer = await new Promise<string>(resolve => {
+        rl.question("\nBạn có chắc chắn muốn tiếp tục? (y/N): ", resolve);
+    });
+    rl.close();
+
+    return /^y(es)?$/i.test(answer.trim());
+}
 
 /**
  * Mat khau dev/test dung chung cho moi tai khoan can bo duoc seed, de dang nhap
@@ -14,33 +80,61 @@ import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
  * thoai + mat khau thay vi Zalo. CHI dung cho moi truong dev/demo.
  */
 const SEED_STAFF_PASSWORD = "HoaBinh@2026";
-import {
-    User,
-    Role,
-    HouseRecord,
-    Household,
-    Citizen,
-    Complaint,
-    ComplaintTimeline,
-    Announcement,
-    Meeting,
-    MeetingRegistration,
-    Survey,
-    SurveyResponse,
-    PcccCheck,
-    SecurityRecord,
-    FinanceTransaction,
-    FileAsset,
-    Notification,
-    NotificationDelivery,
-    Setting,
-} from "../src/models";
+
+// Import dong (khong import tinh o dau file) - "../src/models" re-export ca
+// Citizen, va Citizen keo theo @/lib/encryption doc bien moi truong
+// ENCRYPTION_KEY NGAY LUC IMPORT (module top-level). TypeScript/tsx bien dich
+// import tinh (import ... from ...) thanh require() va HOIST len dau file bat
+// ke vi tri viet trong source, nen neu import barrel nay o dang tinh, no se
+// chay TRUOC ca loadEnv() o tren, gay loi "Thieu bien moi truong ENCRYPTION_KEY"
+// - giong ly do scripts/backfill-roles.ts va scripts/seed-neighborhoods.ts phai
+// import dong. Cac bien duoi day duoc gan gia tri that trong main(), sau khi
+// loadEnv() da chay.
+type ModelsModule = typeof import("../src/models");
+let User: ModelsModule["User"];
+let Role: ModelsModule["Role"];
+let HouseRecord: ModelsModule["HouseRecord"];
+let Household: ModelsModule["Household"];
+let Citizen: ModelsModule["Citizen"];
+let Complaint: ModelsModule["Complaint"];
+let ComplaintTimeline: ModelsModule["ComplaintTimeline"];
+let Announcement: ModelsModule["Announcement"];
+let Meeting: ModelsModule["Meeting"];
+let MeetingRegistration: ModelsModule["MeetingRegistration"];
+let Survey: ModelsModule["Survey"];
+let SurveyResponse: ModelsModule["SurveyResponse"];
+let PcccCheck: ModelsModule["PcccCheck"];
+let SecurityRecord: ModelsModule["SecurityRecord"];
+let FinanceTransaction: ModelsModule["FinanceTransaction"];
+let FileAsset: ModelsModule["FileAsset"];
+let Notification: ModelsModule["Notification"];
+let NotificationDelivery: ModelsModule["NotificationDelivery"];
+let Setting: ModelsModule["Setting"];
+let Neighborhood: ModelsModule["Neighborhood"];
+// @/lib/streetSync imports "@/models" (barrel) tu no cung bi anh huong boi
+// van de hoist o tren - phai import dong cung luc voi cac model.
+let resolveStreetForCluster: typeof import("@/lib/streetSync").resolveStreetForCluster;
+
 import { SYSTEM_ROLE_PERMISSIONS } from "../src/lib/systemRoles";
 import { ROLE_LABEL } from "../src/types";
 
+// Anh xa cum dan cu tu do (du lieu mau cu) sang so thu tu to dan pho chinh
+// thuc (TDP-01, TDP-02...) - chi dung cho seed du lieu mau, KHONG phai co che
+// chung (neighborhoodId van la truong admin gan thu cong cho nha so thuc te,
+// vi mot duong/pho co the chay qua nhieu to dan pho - xem models/HouseRecord.ts).
+const CLUSTER_TO_NEIGHBORHOOD_SEQUENCE: Record<string, number> = {
+    "Cụm 1": 1,
+    "Cụm 2": 2,
+};
+
 async function clearDemoData() {
+    // KHONG xoa User o day: truoc day User.deleteMany({}) xoa TOAN BO tai
+    // khoan trong DB (khong chi 7 tai khoan mau), tung lam mat 21 tai khoan
+    // to truong that (va bat ky tai khoan chu ho nao khac) moi lan chay lai
+    // seed. seedUsers() gio tu upsert 7 tai khoan mau theo `phone` (xem
+    // upsertDemoUser) thay vi xoa-roi-tao-lai, nen an toan de chay nhieu lan
+    // ma khong dong den tai khoan nao khac ngoai 7 tai khoan mau nay.
     await Promise.all([
-        User.deleteMany({}),
         Role.deleteMany({}),
         HouseRecord.deleteMany({}),
         Household.deleteMany({}),
@@ -78,6 +172,44 @@ async function seedRoles(actorId: string) {
     );
 }
 
+/**
+ * Tao hoac cap nhat lai (KHONG xoa-roi-tao-lai) mot tai khoan mau, dinh danh
+ * boi `phone` (unique) - an toan de chay lai nhieu lan va khong dong den bat
+ * ky tai khoan nao khac ngoai dung 7 so dien thoai mau (0900000001..07). Xem
+ * ghi chu o clearDemoData() de biet ly do doi tu User.deleteMany({}).
+ */
+async function upsertDemoUser(fields: {
+    zaloUserId: string;
+    displayName: string;
+    phone: string;
+    passwordHash?: string;
+    address?: string;
+    roles: string[];
+    primaryRole: string;
+    assignedClusters?: string[];
+    notificationPermission?: boolean;
+}) {
+    const existing = await User.findOne({ phone: fields.phone });
+    if (existing) {
+        existing.zaloUserId = fields.zaloUserId;
+        existing.displayName = fields.displayName;
+        if (fields.passwordHash) existing.passwordHash = fields.passwordHash;
+        existing.address = fields.address;
+        existing.roles = fields.roles;
+        existing.primaryRole = fields.primaryRole;
+        if (fields.assignedClusters) {
+            existing.assignedClusters = fields.assignedClusters;
+        }
+        if (fields.notificationPermission !== undefined) {
+            existing.notificationPermission = fields.notificationPermission;
+        }
+        existing.status = "active";
+        await existing.save();
+        return existing;
+    }
+    return User.create({ ...fields, status: "active" });
+}
+
 async function seedUsers() {
     // Import dong (khong import tinh o dau file) vi @/lib/auth kiem tra bien
     // moi truong JWT_SECRET ngay khi module duoc load - cac import tinh se bi
@@ -86,7 +218,7 @@ async function seedUsers() {
     const { hashPassword } = await import("@/lib/auth");
     const staffPasswordHash = await hashPassword(SEED_STAFF_PASSWORD);
 
-    const admin = await User.create({
+    const admin = await upsertDemoUser({
         zaloUserId: "seed-admin",
         displayName: "Quản trị viên Hòa Bình",
         phone: "0900000001",
@@ -94,11 +226,10 @@ async function seedUsers() {
         address: "Nhà văn hóa Tổ dân phố Hòa Bình",
         roles: ["admin"],
         primaryRole: "admin",
-        status: "active",
         notificationPermission: true,
     });
 
-    const leader = await User.create({
+    const leader = await upsertDemoUser({
         zaloUserId: "seed-leader",
         displayName: "Nguyễn Văn Tổ Trưởng",
         phone: "0900000002",
@@ -107,52 +238,60 @@ async function seedUsers() {
         roles: ["neighborhood_leader"],
         primaryRole: "neighborhood_leader",
         assignedClusters: ["Cụm 1", "Cụm 2"],
-        status: "active",
         notificationPermission: true,
     });
 
-    const secretary = await User.create({
+    const secretary = await upsertDemoUser({
         zaloUserId: "seed-secretary",
         displayName: "Trần Thị Bí Thư",
         phone: "0900000003",
         passwordHash: staffPasswordHash,
         roles: ["secretary"],
         primaryRole: "secretary",
-        status: "active",
     });
 
-    const police = await User.create({
+    const police = await upsertDemoUser({
         zaloUserId: "seed-police",
         displayName: "Lê Văn Công An",
         phone: "0900000004",
         passwordHash: staffPasswordHash,
         roles: ["regional_police"],
         primaryRole: "regional_police",
-        status: "active",
     });
 
-    const committee = await User.create({
+    const committee = await upsertDemoUser({
         zaloUserId: "seed-committee",
         displayName: "Phạm Thị Cán Bộ UBND",
         phone: "0900000005",
         passwordHash: staffPasswordHash,
         roles: ["people_committee_official"],
         primaryRole: "people_committee_official",
-        status: "active",
     });
 
-    const houseOwner = await User.create({
+    const houseOwner = await upsertDemoUser({
         zaloUserId: "seed-house-owner",
         displayName: "Hoàng Văn Dân",
         phone: "0900000006",
         address: "Số 12, Cụm 1, Tổ dân phố Hòa Bình",
         roles: ["house_owner"],
         primaryRole: "house_owner",
-        status: "active",
         notificationPermission: true,
     });
 
-    return { admin, leader, secretary, police, committee, houseOwner };
+    // Chu ho cua mot ho dan khac song trong CUNG nha so voi houseOwner (0900000006)
+    // - vd. ho thue tro - de phan biet voi house_owner (chu nha). Dang nhap qua
+    // Zalo (khong co passwordHash) giong houseOwner, dai dien cho "Nguoi dan".
+    const householdHead = await upsertDemoUser({
+        zaloUserId: "seed-household-head",
+        displayName: "Đỗ Văn Hạnh",
+        phone: "0900000007",
+        address: "Số 22, ngõ 8, Cụm 2",
+        roles: ["household_head"],
+        primaryRole: "household_head",
+        notificationPermission: true,
+    });
+
+    return { admin, leader, secretary, police, committee, houseOwner, householdHead };
 }
 
 async function seedHouseholds(actorId: string) {
@@ -207,16 +346,29 @@ async function seedHouseholds(actorId: string) {
     ];
 
     const households = [];
+    let houseOwnerHouseId: mongoose.Types.ObjectId | undefined;
     for (const item of data) {
         // Moi ho dan mau gan voi MOT nha so rieng (dia chi thuc te khac nhau),
         // tranh nhieu ho dan cung tro vao mot nha so dung chung - se lam sai
         // lech cac bao cao/thong ke tinh theo tung nha (vd. mucrisk PCCC, xem
         // services/pcccService.ts getHouseRiskSummary).
         const houseCode = await generateSequentialCode(HouseRecord, "NS", 3);
+        // Dong bo cluster <-> streetId giong het duong di qua createHouseRecord
+        // service (xem lib/streetSync.ts) - de nha so mau khong bi "mo coi"
+        // duong/pho nhu truoc khi tao thang qua HouseRecord.create().
+        // eslint-disable-next-line no-await-in-loop
+        const { streetId } = await resolveStreetForCluster(item.cluster);
+        const neighborhoodSequence = CLUSTER_TO_NEIGHBORHOOD_SEQUENCE[item.cluster];
+        // eslint-disable-next-line no-await-in-loop
+        const neighborhood = neighborhoodSequence
+            ? await Neighborhood.findOne({ sequence: neighborhoodSequence })
+            : null;
         // eslint-disable-next-line no-await-in-loop
         const house = await HouseRecord.create({
             code: houseCode,
             cluster: item.cluster,
+            streetId,
+            neighborhoodId: neighborhood?._id,
             address: item.address,
             status: "verified",
             ownerId: actorId,
@@ -233,12 +385,33 @@ async function seedHouseholds(actorId: string) {
             createdBy: actorId,
         });
         households.push(household);
+        if (item.address === "Số 22, ngõ 8, Cụm 2") houseOwnerHouseId = house._id;
     }
+
+    // Ho dan thu hai cung tru trong nha so cua houseOwner (0900000006) - vd. ho
+    // thue tro song chung nha voi chu nha - dai dien boi tai khoan mau vai tro
+    // household_head. Dung lai houseId co san, KHONG tao HouseRecord moi.
+    const householdHeadCode = await generateSequentialCode(Household, "HB", 3);
+    const householdHeadHousehold = await Household.create({
+        cluster: "Cụm 2",
+        address: "Số 22, ngõ 8, Cụm 2",
+        headOfHousehold: "Đỗ Văn Hạnh",
+        phone: "0900000007",
+        memberCount: 1,
+        ownershipType: "cho_thue" as const,
+        needsSupport: false,
+        note: "Hộ thuê trọ, sống cùng nhà với chủ nhà",
+        code: householdHeadCode,
+        houseId: houseOwnerHouseId,
+        createdBy: actorId,
+    });
+    households.push(householdHeadHousehold);
+
     return households;
 }
 
 async function seedCitizens(households: any[], actorId: string) {
-    const [h1, h2, h3, h4, h5] = households;
+    const [h1, h2, h3, h4, h5, h6] = households;
 
     const citizensData = [
         {
@@ -329,6 +502,15 @@ async function seedCitizens(households: any[], actorId: string) {
             cccd: "001090005111",
             birthDate: new Date("1990-10-10"),
         },
+        {
+            fullName: "Đỗ Văn Hạnh",
+            householdId: h6._id,
+            gender: "nam",
+            relationToHead: "Chủ hộ",
+            residenceType: "tam_tru",
+            cccd: "001090006111",
+            birthDate: new Date("1985-11-20"),
+        },
     ];
 
     const citizens = [];
@@ -353,6 +535,8 @@ async function seedCitizens(households: any[], actorId: string) {
         citizens,
         houseOwnerHouseholdId: h5._id,
         houseOwnerCitizenId: citizens[9]._id,
+        householdHeadHouseholdId: h6._id,
+        householdHeadCitizenId: citizens[10]._id,
     };
 }
 
@@ -582,7 +766,7 @@ async function seedPcccAndSecurity(
 
     await SecurityRecord.create([
         {
-            householdId: h1._id,
+            houseId: h1.houseId,
             ownershipType: "chinh_chu",
             level: "binh_thuong",
             monitoringStatus: "binh_thuong",
@@ -591,7 +775,7 @@ async function seedPcccAndSecurity(
             updatedBy: policeId,
         },
         {
-            householdId: h3._id,
+            houseId: h3.houseId,
             ownershipType: "cho_thue",
             renterCount: 6,
             level: "can_theo_doi",
@@ -732,27 +916,69 @@ async function seedNotifications(adminId: string) {
 }
 
 async function main() {
+    assertNotProduction();
+
+    const confirmed = await confirmSeed();
+    if (!confirmed) {
+        console.log("\nĐã hủy - không có dữ liệu nào bị thay đổi.");
+        process.exit(0);
+    }
+
+    ({
+        User,
+        Role,
+        HouseRecord,
+        Household,
+        Citizen,
+        Complaint,
+        ComplaintTimeline,
+        Announcement,
+        Meeting,
+        MeetingRegistration,
+        Survey,
+        SurveyResponse,
+        PcccCheck,
+        SecurityRecord,
+        FinanceTransaction,
+        FileAsset,
+        Notification,
+        NotificationDelivery,
+        Setting,
+        Neighborhood,
+    } = await import("../src/models"));
+    ({ resolveStreetForCluster } = await import("@/lib/streetSync"));
+
     await connectDB();
     console.log("Đang xóa dữ liệu demo cũ...");
     await clearDemoData();
 
     console.log("Đang tạo tài khoản mẫu cho từng vai trò...");
-    const { admin, leader, police, houseOwner } = await seedUsers();
+    const { admin, leader, police, houseOwner, householdHead } =
+        await seedUsers();
 
-    console.log("Đang tạo 6 vai trò hệ thống...");
+    console.log("Đang tạo 7 vai trò hệ thống...");
     await seedRoles(String(admin._id));
 
     console.log("Đang tạo hộ dân mẫu...");
-    const households = await seedHouseholds(String(admin._id));
+    // Chu nha (ownerId) la house_owner mau, khong phai admin - admin van xem
+    // duoc moi nha so (bypass moi kiem tra scope), nhung "chu so huu" thuc su
+    // phai la tai khoan house_owner de du lieu mau phan anh dung mo hinh so huu.
+    const households = await seedHouseholds(String(houseOwner._id));
 
     console.log("Đang tạo nhân khẩu mẫu...");
-    const { houseOwnerHouseholdId, houseOwnerCitizenId } = await seedCitizens(
-        households,
-        String(admin._id),
-    );
+    const {
+        houseOwnerHouseholdId,
+        houseOwnerCitizenId,
+        householdHeadHouseholdId,
+        householdHeadCitizenId,
+    } = await seedCitizens(households, String(admin._id));
     await User.findByIdAndUpdate(houseOwner._id, {
         householdId: houseOwnerHouseholdId,
         citizenId: houseOwnerCitizenId,
+    });
+    await User.findByIdAndUpdate(householdHead._id, {
+        householdId: householdHeadHouseholdId,
+        citizenId: householdHeadCitizenId,
     });
 
     console.log("Đang tạo phản ánh mẫu...");
@@ -795,6 +1021,7 @@ async function main() {
     console.log("  regional_police           -> seed-police");
     console.log("  people_committee_official -> seed-committee");
     console.log("  house_owner               -> seed-house-owner");
+    console.log("  household_head            -> seed-household-head");
     console.log(
         "\nDang nhap trang quan tri web (so dien thoai + mat khau, xem @/lib/phone cho dinh dang):",
     );

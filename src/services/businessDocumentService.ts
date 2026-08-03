@@ -14,7 +14,10 @@ import { HttpError } from "@/lib/response";
 import { userHasPermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
-import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import {
+    assertHouseRecordInScope,
+    resolveOwnerActingUserId,
+} from "@/services/houseRecordService";
 import type { BusinessDocumentStatus, BusinessStatus } from "@/types";
 import type { CreateBusinessDocumentInput } from "@/validators/businessDocument";
 
@@ -126,7 +129,7 @@ export async function getRequiredDocuments(
     businessId: string,
 ): Promise<{ business: IBusiness; items: RequiredDocumentItem[] }> {
     const { business, houseRecord } = await loadBusinessContext(businessId);
-    assertHouseRecordInScope(actorUser, houseRecord);
+    await assertHouseRecordInScope(actorUser, houseRecord);
 
     const businessType = business.businessType
         ? await BusinessType.findById(business.businessType).populate(
@@ -187,9 +190,9 @@ export async function createBusinessDocument(
     const { business, houseRecord } = await loadBusinessContext(businessId);
 
     const isAdmin = actorUser.roles.includes("admin");
+    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
     const isOwner =
-        !!houseRecord.ownerId &&
-        String(houseRecord.ownerId) === String(actorUser._id);
+        !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
     if (!isAdmin && !isOwner) {
         throw new HttpError(
             "Chỉ chủ hộ kinh doanh mới được nộp giấy tờ",
@@ -290,7 +293,7 @@ export async function reviewBusinessDocument(
     }
 
     if (!actorUser.roles.includes("admin")) {
-        assertHouseRecordInScope(actorUser, houseRecord);
+        await assertHouseRecordInScope(actorUser, houseRecord);
     }
     await assertReviewerRoleForRule(actorUser, rule);
 
@@ -319,13 +322,14 @@ export async function reviewBusinessDocument(
     business.updatedBy = actorUser._id as any;
     await business.save();
 
-    if (houseRecord.ownerId && previousStatus !== nextStatus) {
+    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
+    if (ownerActingUserId && previousStatus !== nextStatus) {
         if (decision === "rejected") {
             await createNotification({
                 title: "Giấy tờ cần bổ sung",
                 body: `Một giấy tờ của hộ kinh doanh ${business.name} bị từ chối: ${rejectionReason}`,
                 type: "business_document.rejected",
-                targetUserIds: [houseRecord.ownerId],
+                targetUserIds: [ownerActingUserId],
                 relatedModel: "Business",
                 relatedId: business._id,
                 createdBy: actorUser._id,
@@ -336,7 +340,7 @@ export async function reviewBusinessDocument(
                 title: "Kết quả xác thực hộ kinh doanh",
                 body: `Hộ kinh doanh ${business.name} của bạn đã được xác thực`,
                 type: "business.status_changed",
-                targetUserIds: [houseRecord.ownerId],
+                targetUserIds: [ownerActingUserId],
                 relatedModel: "Business",
                 relatedId: business._id,
                 createdBy: actorUser._id,

@@ -25,6 +25,7 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         label: "Người dùng",
         permissions: [
             { key: "users.read", label: "Xem người dùng" },
+            { key: "users.create", label: "Tạo tài khoản chủ hộ" },
             { key: "users.update", label: "Cập nhật người dùng" },
             { key: "users.assign_roles", label: "Gán / thu hồi vai trò" },
         ],
@@ -123,6 +124,15 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
                 label: "Cập nhật loại hình kinh doanh",
             },
             { key: "business_types.delete", label: "Xóa loại hình kinh doanh" },
+        ],
+    },
+    {
+        key: "organizations",
+        label: "Tổ chức (chủ nhà)",
+        permissions: [
+            { key: "organizations.read", label: "Xem tổ chức" },
+            { key: "organizations.create", label: "Tạo tổ chức" },
+            { key: "organizations.update", label: "Cập nhật tổ chức" },
         ],
     },
     {

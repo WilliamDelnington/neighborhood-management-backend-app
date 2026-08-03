@@ -9,6 +9,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     admin: ALL_PERMISSION_KEYS,
     neighborhood_leader: [
         "dashboard.read",
+        "users.create",
         "neighborhoods.read",
         "streets.read",
         "houses.read",
@@ -17,7 +18,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "business_types.read",
         "businesses.read",
-        "businesses.verify",
+        // Khong co businesses.verify: neighborhood_leader chi duoc xem tien do
+        // duyet ho kinh doanh, khong duoc duyet/tu choi giay to (xem
+        // businessDocumentService.assertReviewerRoleForRule - fallback rong
+        // reviewerRoles se tu choi vai tro nay thay vi cho qua).
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
@@ -44,7 +48,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "business_types.read",
         "businesses.read",
-        "businesses.verify",
+        // Khong co businesses.verify: secretary chi xem duoc tien do duyet ho
+        // kinh doanh, khong duoc duyet/tu choi giay to (xem cung ghi chu o
+        // neighborhood_leader ben tren).
         "meetings.read",
         "meetings.create",
         "meetings.update",
@@ -114,11 +120,35 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "notifications.read",
     ],
     house_owner: [
+        "organizations.read",
+        "organizations.create",
+        "organizations.update",
         "houses.read",
         "houses.create",
         "houses.update",
         "households.read",
         "households.create",
+        "households.update",
+        "citizens.read",
+        "citizens.create",
+        "citizens.update",
+        "citizens.delete",
+        "complaints.create",
+        "complaints.read_own",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "meetings.register",
+        "surveys.respond",
+        "files.read",
+        "notifications.read",
+    ],
+    // Chu ho (dung dau hop khau) khac house_owner (chu nha/nguoi dang ky nha):
+    // mot nha co the co nhieu ho dan (vd. chinh chu + nguoi thue), moi ho co
+    // chu ho rieng quan ly nhan khau cua ho minh nhung khong so huu/cap nhat
+    // ban ghi nha (houses.*) - viec do thuoc ve house_owner.
+    household_head: [
+        "houses.read",
+        "households.read",
         "households.update",
         "citizens.read",
         "citizens.create",

@@ -5,6 +5,7 @@ export {
     type IRoleAssignment,
 } from "./RoleAssignment";
 export { default as HouseRecord, type IHouseRecord } from "./HouseRecord";
+export { default as Organization, type IOrganization } from "./Organization";
 export { default as Household, type IHousehold } from "./Household";
 export {
     default as BusinessType,
@@ -65,3 +66,13 @@ export {
 } from "./NeighborhoodLeaderAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
+export {
+    default as OtpChallenge,
+    type IOtpChallenge,
+    type OtpPurpose,
+    OTP_PURPOSES,
+} from "./OtpChallenge";
+export {
+    default as ZaloWebhookEvent,
+    type IZaloWebhookEvent,
+} from "./ZaloWebhookEvent";

@@ -50,7 +50,12 @@ export async function resolveStreetClusterPair(input: {
  * Sinh ma duong/pho tu ten khi backfill/tu dong tao (khong co ma nguoi dung
  * nhap tay) - bo dau, thay khoang trang bang "_", them hau to so neu trung.
  */
-async function generateStreetCode(name: string): Promise<string> {
+/**
+ * Sinh ma duong/pho tu ten (bo dau, viet hoa, thay ky tu khong hop le bang
+ * "_", them hau to so neu trung) - dung khi tao Street tu cluster tu do (ham
+ * nay) va khi import Excel khong co cot ma (xem importService.ts).
+ */
+export async function generateStreetCode(name: string): Promise<string> {
     const base =
         name
             .normalize("NFD")

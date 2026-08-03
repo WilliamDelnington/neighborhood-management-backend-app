@@ -1,5 +1,6 @@
-import { Announcement, type IAnnouncement } from "@/models";
+import { Announcement, type IAnnouncement, type IUser } from "@/models";
 import { HttpError } from "@/lib/response";
+import { areaScopeFilter } from "@/lib/rbac";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import type {
@@ -8,7 +9,7 @@ import type {
 } from "@/validators/announcement";
 
 export async function createAnnouncement(
-    actorId: string,
+    actorUser: IUser,
     input: CreateAnnouncementInput,
 ) {
     const announcement = await Announcement.create({
@@ -20,10 +21,40 @@ export async function createAnnouncement(
         targetRoles: input.targetRoles || [],
         targetClusters: input.targetClusters || [],
         audienceAll: input.audienceAll,
+        // Pham vi tac gia: chi gan khi nguoi tao la to truong (xem
+        // to-dan-pho-cua-minh), admin/secretary tao thong bao khong bi gioi han.
+        neighborhoodId: actorUser.roles.includes("neighborhood_leader")
+            ? actorUser.neighborhoodId
+            : undefined,
         status: "nhap",
-        createdBy: actorId,
+        createdBy: actorUser._id,
     });
     return announcement;
+}
+
+/**
+ * Nem HttpError(403) neu neighborhood_leader co gan neighborhoodId cua rieng
+ * minh (khi tao) khong nam trong to dan pho duoc phan cong hien tai - dung
+ * cho sua/xoa/xuat ban. Admin/secretary khong bi gioi han (giu nguyen hanh vi
+ * hien tai, chua mo rong scope cho cac vai tro nay trong lan nay).
+ */
+export function assertAnnouncementInScope(
+    user: IUser,
+    announcement: IAnnouncement,
+): void {
+    if (!user.roles.includes("neighborhood_leader")) return;
+    const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+        .filter(Boolean)
+        .map(String);
+    if (
+        !announcement.neighborhoodId ||
+        !ids.includes(String(announcement.neighborhoodId))
+    ) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi thong bao ngoai to dan pho duoc phan cong",
+            403,
+        );
+    }
 }
 
 export async function updateAnnouncement(
@@ -83,6 +114,7 @@ export async function listAnnouncements(params: {
     status?: string;
     category?: string;
     publicOnly?: boolean;
+    actorUser?: IUser;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.publicOnly) {
@@ -91,6 +123,14 @@ export async function listAnnouncements(params: {
         filter.status = params.status;
     }
     if (params.category) filter.category = params.category;
+    // Chi to truong bi gioi han theo to dan pho tren man quan tri
+    // (admin=1) - admin/secretary xem duoc tat ca nhu truoc.
+    if (
+        !params.publicOnly &&
+        params.actorUser?.roles.includes("neighborhood_leader")
+    ) {
+        Object.assign(filter, areaScopeFilter(params.actorUser));
+    }
 
     const [items, total] = await Promise.all([
         Announcement.find(filter)

@@ -1,7 +1,7 @@
 import { FileAsset, HouseRecord, PcccCheck, type IPcccCheck } from "@/models";
 import type { IUser } from "@/models/User";
 import { HttpError } from "@/lib/response";
-import { clusterScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter } from "@/lib/rbac";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
@@ -95,7 +95,7 @@ export async function listPcccChecks(params: {
     if (params.houseId) {
         filter.houseId = params.houseId;
     } else if (!params.actorUser.roles.includes("admin")) {
-        const scopeFilter = clusterScopeFilter(params.actorUser);
+        const scopeFilter = areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
             filter.houseId = { $in: houses.map(h => h._id) };
@@ -107,7 +107,7 @@ export async function listPcccChecks(params: {
             .sort({ inspectionDate: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
-            .populate("houseId", "code address cluster")
+            .populate("houseId", "code address cluster neighborhoodId")
             .populate("inspectorId", "displayName")
             .populate("assigneeId", "displayName"),
         PcccCheck.countDocuments(filter),
@@ -124,7 +124,7 @@ export async function listPcccChecks(params: {
 
 export async function getPcccCheckById(id: string) {
     const check = await PcccCheck.findById(id)
-        .populate("houseId", "code address cluster")
+        .populate("houseId", "code address cluster neighborhoodId")
         .populate("inspectorId", "displayName")
         .populate("assigneeId", "displayName");
     if (!check)
@@ -141,10 +141,27 @@ export function assertPcccCheckInScope(
     check: { houseId: unknown },
 ): void {
     if (user.roles.includes("admin")) return;
-    if (!user.assignedClusters?.length) return;
     const house = check.houseId as {
         cluster?: string;
+        neighborhoodId?: unknown;
     } | null;
+
+    if (user.roles.includes("neighborhood_leader")) {
+        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+            .filter(Boolean)
+            .map(String);
+        const neighborhoodId =
+            house && typeof house === "object" ? house.neighborhoodId : undefined;
+        if (!neighborhoodId || !ids.includes(String(neighborhoodId))) {
+            throw new HttpError(
+                "Ban khong co quyen thao tac voi bien ban ngoai to dan pho duoc phan cong",
+                403,
+            );
+        }
+        return;
+    }
+
+    if (!user.assignedClusters?.length) return;
     const cluster = house && typeof house === "object" ? house.cluster : undefined;
     if (cluster && !user.assignedClusters.includes(cluster)) {
         throw new HttpError(

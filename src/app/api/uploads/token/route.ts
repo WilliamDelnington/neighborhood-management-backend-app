@@ -4,7 +4,10 @@ import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
 import { requireUser, requireAnyPermission } from "@/lib/rbac";
 import { signUploadToken } from "@/lib/auth";
 import { HouseRecord, Business } from "@/models";
-import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import {
+    assertHouseRecordInScope,
+    resolveOwnerActingUserId,
+} from "@/services/houseRecordService";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +37,7 @@ export async function POST(req: Request) {
             await requireAnyPermission(user, ["houses.update", "houses.verify"]);
             const houseRecord = await HouseRecord.findById(body.relatedId);
             if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
-            assertHouseRecordInScope(user, houseRecord);
+            await assertHouseRecordInScope(user, houseRecord);
         } else if (body.relatedModel === "Business") {
             await requireAnyPermission(user, [
                 "businesses.update",
@@ -49,7 +52,7 @@ export async function POST(req: Request) {
                     404,
                 );
             }
-            assertHouseRecordInScope(user, houseRecord);
+            await assertHouseRecordInScope(user, houseRecord);
         } else {
             // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
             // len giay to - khac voi nhanh "Business" o tren (nhan vien co
@@ -65,9 +68,9 @@ export async function POST(req: Request) {
                 );
             }
             const isAdmin = user.roles.includes("admin");
+            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
             const isOwner =
-                !!houseRecord.ownerId &&
-                String(houseRecord.ownerId) === String(user._id);
+                !!ownerActingUserId && String(ownerActingUserId) === String(user._id);
             if (!isAdmin && !isOwner) {
                 throw new HttpError(
                     "Chỉ chủ hộ kinh doanh mới được tải lên giấy tờ",
