@@ -53,3 +53,47 @@ export function validateZaloWebhookConfig(): void {
         );
     }
 }
+
+/**
+ * Ten database duoc coi la du lieu that (production) - cac script ghi/xoa
+ * hang loat (seed*, create-proposal-accounts...) tu choi chay neu MONGODB_URI
+ * dang tro vao day, BAT KE NODE_ENV dat gi. Bo sung doc lap voi kiem tra
+ * NODE_ENV=production (vd assertNotProduction trong scripts/seed.ts): nguyen
+ * nhan accident mat du lieu truoc day khong phai NODE_ENV sai, ma la may dev
+ * tro thang MONGODB_URI vao database production (khong co database rieng cho
+ * dev), nen kiem tra NODE_ENV khong the bat duoc truong hop nay.
+ */
+const PROTECTED_DB_NAMES = ["to-dan-hoa-binh"];
+
+/**
+ * Lay ten database tu chuoi ket noi MongoDB. Khong dung WHATWG URL de parse vi
+ * chuoi khong-SRV cua Atlas liet ke nhieu host truc tiep trong authority
+ * (shard-00-00,shard-00-01,shard-00-02) ma URL chuan khong parse duoc.
+ */
+export function extractDbNameFromMongoUri(uri: string): string {
+    const withoutQuery = uri.split("?")[0];
+    const afterScheme = withoutQuery.replace(/^mongodb(\+srv)?:\/\//, "");
+    const afterCredentials = afterScheme.includes("@")
+        ? afterScheme.slice(afterScheme.lastIndexOf("@") + 1)
+        : afterScheme;
+    const slashIndex = afterCredentials.indexOf("/");
+    return slashIndex === -1 ? "" : afterCredentials.slice(slashIndex + 1);
+}
+
+/**
+ * Chan cung mot script ghi/xoa hang loat neu MONGODB_URI dang tro vao database
+ * production (xem PROTECTED_DB_NAMES). Goi truoc khi ket noi, ngay sau
+ * loadEnv().
+ */
+export function assertNotProtectedDatabase(uri: string): void {
+    const dbName = extractDbNameFromMongoUri(uri);
+    if (PROTECTED_DB_NAMES.includes(dbName)) {
+        throw new Error(
+            `Tu choi chay: MONGODB_URI dang tro vao database "${dbName}", ` +
+                "day la database du lieu that (production) - khong duoc phep " +
+                "chay script ghi/xoa hang loat nham vao day. Neu day thuc su la " +
+                `moi truong dev, doi ten database trong MONGODB_URI (vd "${dbName}-dev") ` +
+                "trong .env.local - xem phan Cau hinh bien moi truong trong README.",
+        );
+    }
+}

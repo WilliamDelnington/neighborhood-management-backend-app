@@ -142,10 +142,13 @@ export async function listBusinesses(params: {
 export async function getBusinessById(id: string): Promise<IBusiness> {
     const business = await Business.findById(id)
         .populate("businessType", "name")
-        // Populate them ownerId de frontend tinh "co phai chu nha khong" ma
-        // khong can goi rieng API nha so (dung cho man chi tiet ho kinh doanh
-        // hien nut gui duyet/duyet/tu choi).
-        .populate("houseId", "code address cluster ownerId status");
+        // Populate them ownerId/ownerType de frontend tinh "co phai chu nha
+        // khong" ma khong can goi rieng API nha so (dung cho man chi tiet ho
+        // kinh doanh hien nut gui duyet/duyet/tu choi). ownerType bat buoc
+        // phai co - neu ownerType la "organization" thi ownerId la id to
+        // chuc, khong phai id user, frontend phai tu goi fetchOrganizationById
+        // de biet nguoi dai dien (xem HouseDetailPage.tsx cung lam vay).
+        .populate("houseId", "code address cluster ownerId ownerType status");
     if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
     return business;
 }

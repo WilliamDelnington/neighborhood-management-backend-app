@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import readline from "readline";
 import { connectDB } from "@/lib/mongodb";
 import { generateSequentialCode, generateYearlyCode } from "@/lib/utils";
+import { assertNotProtectedDatabase } from "@/lib/config";
 
 /**
  * Chan cung (KHONG co co bypass nao, khac voi confirmSeed() ben duoi) neu
@@ -917,6 +918,7 @@ async function seedNotifications(adminId: string) {
 
 async function main() {
     assertNotProduction();
+    assertNotProtectedDatabase(process.env.MONGODB_URI as string);
 
     const confirmed = await confirmSeed();
     if (!confirmed) {
