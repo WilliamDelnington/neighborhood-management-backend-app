@@ -15,6 +15,7 @@ import {
     assertHouseRecordInScope,
     assertHouseRecordVerifiedForMembers,
     getOwnedHouseRecordIds,
+    resolveOwnerActingUserId,
 } from "@/services/houseRecordService";
 import type {
     CreateHouseholdInput,
@@ -335,13 +336,16 @@ export async function assertHouseholdInScope(
 
     if (household.houseId) {
         const houseRecord = await HouseRecord.findById(household.houseId).select(
-            "ownerId",
+            "ownerId ownerType",
         );
-        if (
-            houseRecord?.ownerId &&
-            String(houseRecord.ownerId) === String(user._id)
-        ) {
-            return;
+        if (houseRecord) {
+            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
+            if (
+                ownerActingUserId &&
+                String(ownerActingUserId) === String(user._id)
+            ) {
+                return;
+            }
         }
     }
 

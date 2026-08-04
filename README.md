@@ -85,6 +85,25 @@ cp .env.example .env.local
 | `ZALO_APP_ID` / `ZALO_APP_SECRET` | khi `ZALO_ENV=production` | Thông tin Zalo Mini App |
 | `CORS_ORIGIN` | tuỳ chọn | Origin được phép gọi API, mặc định `*` |
 
+### Database dev và production trên cùng Cluster0
+
+`MONGODB_URI` của `.env.local` (dev) và của VPS production **phải trỏ vào hai
+database khác tên nhau**, dù cùng một Atlas cluster (`Cluster0`):
+
+- Production: `to-dan-hoa-binh`
+- Dev (máy cá nhân): `to-dan-hoa-binh-dev`
+
+Trước đây cả hai đều trỏ chung vào `to-dan-hoa-binh`, nên `npm run seed` (script
+xoá-và-tạo-lại toàn bộ dữ liệu demo) chạy ở máy dev đã xoá mất dữ liệu thật.
+`scripts/seed.ts` giờ tự chối chạy nếu `MONGODB_URI` trỏ vào một tên database
+nằm trong `PROTECTED_DB_NAMES` (xem `src/lib/config.ts`), bất kể `NODE_ENV` là
+gì - đây là lớp bảo vệ thứ hai, **không thay thế** cho việc luôn dùng đúng
+database dev ở máy cá nhân.
+
+Database `to-dan-hoa-binh-dev` không cần tạo thủ công trong Atlas UI - MongoDB
+tự tạo database/collection khi có lần ghi dữ liệu đầu tiên (ví dụ chạy
+`npm run seed -- --yes`).
+
 ## Chạy dự án
 
 ```bash

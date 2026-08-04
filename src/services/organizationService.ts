@@ -100,12 +100,10 @@ export async function getOrganizationById(
     actorUser: IUser,
     id: string,
 ): Promise<IOrganization> {
-    const organization = await Organization.findById(id).populate(
-        "representativeUserId",
-        "displayName phone",
-    );
+    const organization = await Organization.findById(id);
     if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
     assertOrganizationInScope(actorUser, organization);
+    await organization.populate("representativeUserId", "displayName phone");
     return organization;
 }
 
