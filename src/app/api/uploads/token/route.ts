@@ -4,10 +4,8 @@ import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
 import { requireUser, requireAnyPermission } from "@/lib/rbac";
 import { signUploadToken } from "@/lib/auth";
 import { HouseRecord, Business } from "@/models";
-import {
-    assertHouseRecordInScope,
-    resolveOwnerActingUserId,
-} from "@/services/houseRecordService";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 
 export const dynamic = "force-dynamic";
 
@@ -68,9 +66,7 @@ export async function POST(req: Request) {
                 );
             }
             const isAdmin = user.roles.includes("admin");
-            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-            const isOwner =
-                !!ownerActingUserId && String(ownerActingUserId) === String(user._id);
+            const isOwner = await isHouseOwnerActor(houseRecord._id, user._id);
             if (!isAdmin && !isOwner) {
                 throw new HttpError(
                     "Chỉ chủ hộ kinh doanh mới được tải lên giấy tờ",

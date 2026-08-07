@@ -115,6 +115,11 @@ let Neighborhood: ModelsModule["Neighborhood"];
 // @/lib/streetSync imports "@/models" (barrel) tu no cung bi anh huong boi
 // van de hoist o tren - phai import dong cung luc voi cac model.
 let resolveStreetForCluster: typeof import("@/lib/streetSync").resolveStreetForCluster;
+// Dong bo voi cach scripts/seed-neighborhood-leaders.ts gan to truong cho
+// dung to dan pho - dam bao tai khoan to truong mau (0900000002) cung khong
+// bi "mo coi" nhu 21 tai khoan to truong that, tranh bi RequireNeighborhoodAssignment
+// (admin web) chan truy cap vi thieu neighborhoodId.
+let assignNeighborhoodLeader: typeof import("../src/services/neighborhoodService").assignNeighborhoodLeader;
 
 import { SYSTEM_ROLE_PERMISSIONS } from "../src/lib/systemRoles";
 import { ROLE_LABEL } from "../src/types";
@@ -241,6 +246,21 @@ async function seedUsers() {
         assignedClusters: ["Cụm 1", "Cụm 2"],
         notificationPermission: true,
     });
+
+    // assignedClusters o tren la mo hinh cu, khong con duoc dung de xet quyen
+    // (xem lib/rbac.ts:areaScopeFilter) - can gan them neighborhoodId qua dung
+    // service assignNeighborhoodLeader (nhu scripts/seed-neighborhood-leaders.ts)
+    // de tai khoan to truong mau nay khong bi chan boi RequireNeighborhoodAssignment.
+    // Bo qua neu chua chay `npm run seed:neighborhoods` (khong tim thay to dan pho).
+    const leaderNeighborhood = await Neighborhood.findOne({ sequence: 1 });
+    if (leaderNeighborhood) {
+        await assignNeighborhoodLeader(
+            String(admin._id),
+            String(leaderNeighborhood._id),
+            String(leader._id),
+            "Seed tu dong boi scripts/seed.ts",
+        );
+    }
 
     const secretary = await upsertDemoUser({
         zaloUserId: "seed-secretary",
@@ -949,6 +969,9 @@ async function main() {
         Neighborhood,
     } = await import("../src/models"));
     ({ resolveStreetForCluster } = await import("@/lib/streetSync"));
+    ({ assignNeighborhoodLeader } = await import(
+        "../src/services/neighborhoodService"
+    ));
 
     await connectDB();
     console.log("Đang xóa dữ liệu demo cũ...");

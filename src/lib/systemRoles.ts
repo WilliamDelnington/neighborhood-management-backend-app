@@ -10,11 +10,22 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     neighborhood_leader: [
         "dashboard.read",
         "users.create",
+        // users.read/users.lock deu duoc userService (listUsers/getUserById/
+        // lockUserStatus) tu dong gioi han: to truong chi thay/khoa duoc tai
+        // khoan house_owner dang so huu nha thuoc to dan pho minh phu trach
+        // (xem getHouseOwnerIdsInLeaderScope) - KHONG duoc cap users.update:
+        // quyen do khong gioi han theo pham vi va cho sua moi truong cua bat
+        // ky nguoi dung nao (doi ten, gan cum, doi vai tro chinh...), khong chi
+        // status.
+        "users.read",
+        "users.lock",
         "neighborhoods.read",
         "streets.read",
         "houses.read",
+        "houses.create",
         "houses.verify",
         "households.read",
+        "households.verify",
         "citizens.read",
         "business_types.read",
         "businesses.read",
@@ -45,6 +56,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "houses.read",
         "houses.verify",
         "households.read",
+        "households.verify",
         "citizens.read",
         "business_types.read",
         "businesses.read",
@@ -103,6 +115,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "houses.read",
         "houses.verify",
         "households.read",
+        "households.verify",
         "citizens.read",
         "business_types.read",
         "businesses.read",
@@ -123,6 +136,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "organizations.read",
         "organizations.create",
         "organizations.update",
+        // Chi de chon duong/pho va to dan pho khi tao/sua nha so cua chinh
+        // minh (xem HouseForm.tsx o mini app) - khong cap quyen manage.
+        "streets.read",
+        "neighborhoods.read",
         "houses.read",
         "houses.create",
         "houses.update",
@@ -133,6 +150,16 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.create",
         "citizens.update",
         "citizens.delete",
+        // Chu nha duoc tu khai ho kinh doanh trong nha cua minh - pham vi da
+        // duoc gioi han qua assertHouseRecordInScope trong businessService.ts
+        // (giong het houses.*/households.*), khong can permission rieng theo
+        // scope. Khong cap businesses.delete/verify: xoa lich su khong ai
+        // duoc lam (dung active flag de "ngung hoat dong" thay vi xoa), va
+        // duyet giay to van thuoc ve cac vai tro chuyen mon.
+        "business_types.read",
+        "businesses.read",
+        "businesses.create",
+        "businesses.update",
         "complaints.create",
         "complaints.read_own",
         "support_tickets.create",

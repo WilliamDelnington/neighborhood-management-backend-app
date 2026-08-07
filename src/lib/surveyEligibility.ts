@@ -1,4 +1,5 @@
 import { HouseRecord, Household, Business, type ISurvey, type IUser } from "@/models";
+import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
 
 export type UserEligibilityContext = {
     streetIds: string[];
@@ -10,7 +11,9 @@ export type UserEligibilityContext = {
  * Suy ra street/neighborhood/business type ma mot resident (house_owner) gan
  * voi, de doi chieu voi dieu kien eligibleStreetIds/eligibleNeighborhoodIds/
  * eligibleBusinessTypeIds cua khao sat. Nguon du lieu:
- * - Nha so ma user la chu (ownerId), CONG nha so cua ho dan ma user thuoc ve
+ * - Nha so ma user dang thao tac thay chu nha (primary_owner/co_owner/
+ *   authorized_manager, truc tiep hoac qua to chuc dai dien - xem
+ *   getHouseIdsForActingOwner), CONG nha so cua ho dan ma user thuoc ve
  *   (user.householdId -> Household.houseId) - phu ca hai truong hop "tu dang
  *   ky nha" lan "duoc them vao ho dan cua nguoi khac".
  * - streetId/neighborhoodId gan truc tiep tren cac nha so do (neighborhoodId
@@ -22,10 +25,8 @@ export async function resolveUserEligibilityContext(
 ): Promise<UserEligibilityContext> {
     const houseRecordIds = new Set<string>();
 
-    const ownedHouseRecords = await HouseRecord.find({ ownerId: user._id }).select(
-        "_id",
-    );
-    for (const h of ownedHouseRecords) houseRecordIds.add(String(h._id));
+    const ownedHouseIds = await getHouseIdsForActingOwner(user._id);
+    for (const id of ownedHouseIds) houseRecordIds.add(String(id));
 
     if (user.householdId) {
         const household = await Household.findById(user.householdId).select(

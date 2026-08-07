@@ -34,11 +34,17 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const statusParam = searchParams.get("status") || undefined;
+        const statusValues = statusParam
+            ? statusParam
+                  .split(",")
+                  .filter((s): s is HouseRecordStatus =>
+                      (HOUSE_RECORD_STATUS as readonly string[]).includes(s),
+                  )
+            : [];
         const status =
-            statusParam &&
-            (HOUSE_RECORD_STATUS as readonly string[]).includes(statusParam)
-                ? (statusParam as HouseRecordStatus)
-                : undefined;
+            statusValues.length > 1
+                ? statusValues
+                : statusValues[0] || undefined;
         const result = await listHouseRecords({
             page,
             limit,
@@ -46,6 +52,9 @@ export async function GET(req: Request) {
             cluster: searchParams.get("cluster") || undefined,
             streetId: searchParams.get("streetId") || undefined,
             neighborhoodId: searchParams.get("neighborhoodId") || undefined,
+            wardCode: searchParams.get("wardCode")
+                ? Number(searchParams.get("wardCode"))
+                : undefined,
             status,
             actorUser: user,
         });

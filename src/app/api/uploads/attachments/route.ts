@@ -3,10 +3,8 @@ import { connectDB } from "@/lib/mongodb";
 import { HttpError } from "@/lib/response";
 import { getBearerToken, verifyUploadToken } from "@/lib/auth";
 import { HouseRecord, Business, FileAsset, User } from "@/models";
-import {
-    assertHouseRecordInScope,
-    resolveOwnerActingUserId,
-} from "@/services/houseRecordService";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -87,9 +85,7 @@ export async function POST(req: Request) {
                 return zaloError("Khong tim thay nha so cua ho kinh doanh nay");
             }
             const isAdmin = actorUser.roles.includes("admin");
-            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-            const isOwner =
-                !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
+            const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
             if (!isAdmin && !isOwner) {
                 return zaloError("Chi chu ho kinh doanh moi duoc tai len giay to");
             }

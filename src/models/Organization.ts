@@ -7,8 +7,12 @@ export interface IOrganization extends Document {
     organizationType: OrganizationType;
     // Nguoi dai dien - tai khoan User (vai tro house_owner) thuc su dang nhap
     // va thao tac thay cho to chuc (to chuc khong tu dang nhap duoc, xem
-    // authService.ts - dang nhap chi ho tro User).
-    representativeUserId: mongoose.Types.ObjectId;
+    // authService.ts - dang nhap chi ho tro User). Optional: to chuc duoc khai
+    // bao luc tao nha so co the chua co nguoi dai dien nao dang nhap duoc (xem
+    // houseRecordService.resolveOrCreateOrganizationOwner) - khi do to chuc
+    // chi hien thi thong tin lien he (phone/email/address) cua chinh no, khong
+    // co ai "thao tac thay" (resolveActingUserId tra ve undefined).
+    representativeUserId?: mongoose.Types.ObjectId;
     representativeRole?: string;
     phone?: string;
     email?: string;
@@ -32,7 +36,6 @@ const OrganizationSchema = new Schema<IOrganization>(
         representativeUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",
-            required: true,
             index: true,
         },
         representativeRole: { type: String, trim: true },

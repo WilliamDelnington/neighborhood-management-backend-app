@@ -27,6 +27,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "users.read", label: "Xem người dùng" },
             { key: "users.create", label: "Tạo tài khoản chủ hộ" },
             { key: "users.update", label: "Cập nhật người dùng" },
+            {
+                key: "users.lock",
+                label:
+                    "Khóa / mở khóa tài khoản chủ nhà (giới hạn theo tổ dân phố phụ trách)",
+            },
             { key: "users.assign_roles", label: "Gán / thu hồi vai trò" },
         ],
     },
@@ -61,6 +66,7 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "households.create", label: "Tạo hộ dân" },
             { key: "households.update", label: "Cập nhật hộ dân" },
             { key: "households.delete", label: "Xóa hộ dân" },
+            { key: "households.verify", label: "Duyệt / từ chối hộ dân" },
         ],
     },
     {

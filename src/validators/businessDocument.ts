@@ -15,6 +15,7 @@ export const reviewBusinessDocumentSchema = z
     .object({
         decision: z.enum(["approved", "rejected"]),
         rejectionReason: z.string().optional(),
+        approvalNote: z.string().optional(),
     })
     .refine(
         data => data.decision !== "rejected" || !!data.rejectionReason?.trim(),
