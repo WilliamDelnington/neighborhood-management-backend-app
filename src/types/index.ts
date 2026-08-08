@@ -144,6 +144,7 @@ export const HOUSE_RECORD_STATUS = [
     "pending",
     "verified",
     "denied",
+    "needs_update",
     "locked",
 ] as const;
 export type HouseRecordStatus = typeof HOUSE_RECORD_STATUS[number];
@@ -152,6 +153,7 @@ export const HOUSE_RECORD_STATUS_LABEL: Record<HouseRecordStatus, string> = {
     pending: "chờ duyệt",
     verified: "đã xác thực",
     denied: "bị từ chối",
+    needs_update: "cần cập nhật",
     locked: "đã khóa",
 };
 
@@ -398,17 +400,20 @@ export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
 // sau nay chi bang cach them gia tri vao REQUEST_TYPES (+ mot quyen
 // "{type}.assign" moi neu can gioi han nguoi co the nhan).
 // ---------------------------------------------------------------------------
-export const REQUEST_TYPES = ["pccc", "security"] as const;
+export const REQUEST_TYPES = ["pccc", "security", "other"] as const;
 export type RequestType = typeof REQUEST_TYPES[number];
 export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
     pccc: "PCCC",
-    security: "An ninh & Quản lý cư trú",
+    security: "An ninh",
+    other: "Khác",
 };
 
 export const REQUEST_STATUS = [
     "pending",
     "acknowledged",
     "in_progress",
+    "needs_info",
+    "awaiting_confirmation",
     "resolved",
 ] as const;
 export type RequestStatus = typeof REQUEST_STATUS[number];
@@ -416,6 +421,8 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
     pending: "Chưa xử lý",
     acknowledged: "Đã tiếp nhận",
     in_progress: "Đang xử lý",
+    needs_info: "Yêu cầu bổ sung",
+    awaiting_confirmation: "Chờ xác nhận",
     resolved: "Đã hoàn thành",
 };
 

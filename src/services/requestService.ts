@@ -44,11 +44,17 @@ function withOverdue(
 
 type SyncTier = "open" | "active" | "done";
 
+const ACTIVE_TIER_STATUSES = [
+    "acknowledged",
+    "in_progress",
+    "needs_info",
+    "awaiting_confirmation",
+];
+
 function computeSyncTier(statuses: string[]): SyncTier {
     if (statuses.length === 0) return "open";
     if (statuses.every(s => s === "resolved")) return "done";
-    if (statuses.some(s => s === "acknowledged" || s === "in_progress"))
-        return "active";
+    if (statuses.some(s => ACTIVE_TIER_STATUSES.includes(s))) return "active";
     return "open";
 }
 
@@ -628,6 +634,16 @@ export async function updateMyRequestStatus(
     requestId: string,
     input: UpdateMyRequestStatusInput,
 ) {
+    // "resolved" chi duoc chot boi nguoi quan ly yeu cau (xem
+    // confirmRequestRecipient) sau khi nguoi nhan bao "Chờ xác nhận" -
+    // nguoi nhan khong duoc tu dat trang thai nay cho chinh minh.
+    if (input.status === "resolved") {
+        throw new HttpError(
+            "Chỉ người giao yêu cầu mới có thể xác nhận hoàn thành",
+            403,
+        );
+    }
+
     const recipient = await RequestRecipient.findOne({ requestId, userId });
     if (!recipient)
         throw new HttpError(
@@ -640,7 +656,6 @@ export async function updateMyRequestStatus(
     if (!recipient.respondedAt && input.status !== "pending") {
         recipient.respondedAt = new Date();
     }
-    if (input.status === "resolved") recipient.resolvedAt = new Date();
     await recipient.save();
 
     await writeAuditLog({
@@ -655,6 +670,58 @@ export async function updateMyRequestStatus(
         "relatedModel relatedId",
     );
     await syncDomainRecordStatus(request?.relatedModel, request?.relatedId);
+
+    return recipient;
+}
+
+/**
+ * Nguoi quan ly yeu cau (nguoi tao/admin/requests.update) xac nhan hoan thanh
+ * hoac yeu cau xu ly lai, sau khi nguoi nhan da bao "Chờ xác nhận"
+ * (awaiting_confirmation). Day la noi DUY NHAT mot recipient duoc chuyen
+ * thanh "resolved".
+ */
+export async function confirmRequestRecipient(
+    actorUser: IUser,
+    requestId: string,
+    userId: string,
+    decision: "resolved" | "in_progress",
+    note?: string,
+) {
+    const request = await RequestModel.findById(requestId);
+    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    await assertCanManageRequest(actorUser, request);
+
+    const recipient = await RequestRecipient.findOne({ requestId, userId });
+    if (!recipient)
+        throw new HttpError("Khong tim thay nguoi nhan cua yeu cau nay", 404);
+    if (recipient.status !== "awaiting_confirmation") {
+        throw new HttpError(
+            "Chỉ có thể xác nhận khi người nhận đang ở trạng thái Chờ xác nhận",
+            422,
+        );
+    }
+
+    recipient.status = decision;
+    if (note !== undefined) recipient.note = note;
+    if (decision === "resolved") {
+        recipient.resolvedAt = new Date();
+    } else {
+        recipient.resolvedAt = undefined;
+    }
+    await recipient.save();
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action:
+            decision === "resolved"
+                ? "request.confirm_completion"
+                : "request.reject_completion",
+        targetModel: "Request",
+        targetId: requestId,
+        metadata: { userId, decision },
+    });
+
+    await syncDomainRecordStatus(request.relatedModel, request.relatedId);
 
     return recipient;
 }

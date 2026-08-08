@@ -29,10 +29,23 @@ export const updateRequestSchema = z.object({
 });
 export type UpdateRequestInput = z.infer<typeof updateRequestSchema>;
 
-export const updateMyRequestStatusSchema = z.object({
-    status: z.enum(REQUEST_STATUS),
-    note: z.string().optional(),
-});
+export const updateMyRequestStatusSchema = z
+    .object({
+        status: z.enum(REQUEST_STATUS),
+        note: z.string().optional(),
+    })
+    .refine(data => data.status !== "needs_info" || !!data.note?.trim(), {
+        message: "Vui long mo ta thong tin can bo sung",
+        path: ["note"],
+    });
 export type UpdateMyRequestStatusInput = z.infer<
     typeof updateMyRequestStatusSchema
+>;
+
+export const confirmRequestRecipientSchema = z.object({
+    decision: z.enum(["resolved", "in_progress"]),
+    note: z.string().optional(),
+});
+export type ConfirmRequestRecipientInput = z.infer<
+    typeof confirmRequestRecipientSchema
 >;

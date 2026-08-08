@@ -727,11 +727,15 @@ export async function updateHouseRecord(
  *   (kem ca khoa/mo khoa), giong quyen han khong gioi han cua admin o noi khac
  *   trong he thong.
  * - chu nha (dang thao tac thay chu nha - xem isHouseOwnerActor): chi duoc
- *   gui/gui lai de duyet, tuc la tu "unverified" hoac "denied" chuyen sang
- *   "pending".
+ *   gui/gui lai de duyet, tuc la tu "unverified", "denied" hoac "needs_update"
+ *   chuyen sang "pending".
  * - nhan vien khac (to truong, bi thu, can bo UBND - da duoc kiem tra co
- *   quyen "houses.verify" o tang route): chi duoc duyet/tu choi khi nha dang
- *   "pending", va phai nam trong pham vi cum duoc phan cong (assertHouseRecordInScope).
+ *   quyen "houses.verify" o tang route): chi duoc duyet/tu choi/yeu cau cap
+ *   nhat khi nha dang "pending", va phai nam trong pham vi cum duoc phan cong
+ *   (assertHouseRecordInScope). "needs_update" khac "denied": chu nha VAN
+ *   duoc sua House/Household/Business/Company va gui lai duyet (xem
+ *   assertHouseRecordAllowsDeclaration/updateHouseRecord - khong chan trang
+ *   thai nay), chi la mot loi nhac "con thieu gi do" thay vi tu choi han.
  * Nha da bi khoa thi khong ai ngoai admin duoc doi trang thai.
  */
 export async function transitionHouseRecordStatus(
@@ -757,10 +761,12 @@ export async function transitionHouseRecordStatus(
         if (isOwner) {
             const canSubmit =
                 targetStatus === "pending" &&
-                ["unverified", "denied"].includes(houseRecord.status);
+                ["unverified", "denied", "needs_update"].includes(
+                    houseRecord.status,
+                );
             if (!canSubmit) {
                 throw new HttpError(
-                    "Chủ nhà chỉ được gửi duyệt từ trạng thái chưa xác thực hoặc bị từ chối",
+                    "Chủ nhà chỉ được gửi duyệt từ trạng thái chưa xác thực, bị từ chối hoặc cần cập nhật",
                     403,
                 );
             }
@@ -779,10 +785,10 @@ export async function transitionHouseRecordStatus(
             await assertHouseRecordInScope(actorUser, houseRecord);
             const canVerify =
                 houseRecord.status === "pending" &&
-                ["verified", "denied"].includes(targetStatus);
+                ["verified", "denied", "needs_update"].includes(targetStatus);
             if (!canVerify) {
                 throw new HttpError(
-                    "Chỉ được duyệt hoặc từ chối nhà số đang chờ duyệt",
+                    "Chỉ được duyệt, từ chối hoặc yêu cầu cập nhật nhà số đang chờ duyệt",
                     403,
                 );
             }
@@ -794,6 +800,7 @@ export async function transitionHouseRecordStatus(
     houseRecord.updatedBy = actorUser._id as any;
     if (targetStatus === "verified") houseRecord.approvalNote = note;
     if (targetStatus === "denied") houseRecord.denialReason = note;
+    if (targetStatus === "needs_update") houseRecord.needsUpdateNote = note;
     await houseRecord.save();
 
     // Ket qua duyet/tu choi nha so cung la ket qua duyet cho quan he

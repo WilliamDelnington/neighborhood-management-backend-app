@@ -57,6 +57,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     secretary: [
         "dashboard.read",
+        // Can de chon "Tổ dân phố" khi nham doi tuong gui Thong bao (xem
+        // AnnouncementFormPage.tsx).
+        "neighborhoods.read",
         "houses.read",
         "houses.verify",
         "households.read",

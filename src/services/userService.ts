@@ -101,6 +101,51 @@ export async function listAssignableStaff(roles: RoleType[]) {
 }
 
 /**
+ * Tim chu ho (house_owner) dang hoat dong theo ten/so dien thoai - dung cho
+ * man chon "nguoi nhan cu the" khi gui Thong bao (khac assignable-staff: doi
+ * tuong la cu dan, khong gan voi permission "assign" nao).
+ */
+export async function searchResidentUsers(
+    search: string,
+    ids?: string[],
+) {
+    // ids duoc truyen khi can "resolve nguoc" mot danh sach id da luu san
+    // (vd hien lai chip nguoi nhan cu the khi sua Thong bao) - bo qua tim
+    // kiem theo ten/sdt trong truong hop nay, tra ve dung nhung id do (khong
+    // gioi han limit 20 nhu tim kiem thong thuong).
+    if (ids && ids.length > 0) {
+        const users = await User.find({ _id: { $in: ids } }).select(
+            "displayName phone",
+        );
+        return users.map(u => ({
+            id: String(u._id),
+            displayName: u.displayName,
+            phone: u.phone,
+        }));
+    }
+
+    const filter: Record<string, unknown> = {
+        roles: "house_owner",
+        status: "active",
+    };
+    if (search.trim()) {
+        filter.$or = [
+            { displayName: { $regex: search.trim(), $options: "i" } },
+            { phone: { $regex: search.trim(), $options: "i" } },
+        ];
+    }
+    const users = await User.find(filter)
+        .select("displayName phone")
+        .sort({ displayName: 1 })
+        .limit(20);
+    return users.map(u => ({
+        id: String(u._id),
+        displayName: u.displayName,
+        phone: u.phone,
+    }));
+}
+
+/**
  * To truong (hoac admin) tao tai khoan chu ho thay, dat san so dien thoai +
  * mat khau ban dau - cung logic tao User voi authService.registerWithPhone
  * (tu dang ky), chi khac actor va co ghi nhan createdBy. Chu ho dang nhap

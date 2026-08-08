@@ -9,6 +9,9 @@ export const createAnnouncementSchema = z.object({
     pinned: z.boolean().default(false),
     targetRoles: z.array(z.enum(SYSTEM_ROLE_KEYS)).optional(),
     targetClusters: z.array(z.string()).optional(),
+    targetUserIds: z.array(z.string()).optional(),
+    targetNeighborhoodIds: z.array(z.string()).optional(),
+    isUrgent: z.boolean().default(false),
     audienceAll: z.boolean().default(true),
 });
 export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;

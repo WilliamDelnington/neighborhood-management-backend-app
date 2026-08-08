@@ -253,6 +253,10 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "requests.create", label: "Tạo / gửi yêu cầu" },
             { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
             { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
+            {
+                key: "other.assign",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại Khác",
+            },
         ],
     },
     {

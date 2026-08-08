@@ -109,7 +109,14 @@ export const updateHouseRecordStatusSchema = z
     .refine(data => data.status !== "denied" || !!data.note?.trim(), {
         message: "Vui long nhap ly do khi tu choi nha so",
         path: ["note"],
-    });
+    })
+    .refine(
+        data => data.status !== "needs_update" || !!data.note?.trim(),
+        {
+            message: "Vui long nhap chi tiet can cap nhat",
+            path: ["note"],
+        },
+    );
 export type UpdateHouseRecordStatusInput = z.infer<
     typeof updateHouseRecordStatusSchema
 >;

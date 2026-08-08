@@ -51,6 +51,10 @@ export interface IHouseRecord extends Document {
     // `note` o tren (ghi chu chung, chu nha/admin sua truc tiep tren ho so).
     approvalNote?: string;
     denialReason?: string;
+    // Chi tiet can cap nhat khi status = "needs_update" - khac "denied": chu
+    // nha van duoc sua ho so (House/Household/Business/Company) va gui lai
+    // duyet, khong phai bi tu choi han.
+    needsUpdateNote?: string;
     // So khai bao cu tru/tam tru cua nha (do cong an/to dan pho cap) - nguon
     // du lieu duy nhat, duoc man hinh An ninh & Quan ly cu tru hien thi lai
     // (khong luu ban sao tren SecurityRecord).
@@ -112,6 +116,7 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
         note: { type: String },
         approvalNote: { type: String },
         denialReason: { type: String },
+        needsUpdateNote: { type: String },
         residenceDeclarationNumber: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
