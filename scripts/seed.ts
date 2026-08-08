@@ -51,7 +51,7 @@ async function confirmSeed(): Promise<boolean> {
         "   Household, Citizen, HouseRecord, Complaint, ComplaintTimeline, Announcement,",
     );
     console.log(
-        "   Meeting, MeetingRegistration, Survey, SurveyResponse, PcccCheck, SecurityRecord,",
+        "   Meeting, MeetingRegistration, Survey, SurveyResponse, PcccCheck, SecurityRecord, ResidentRecord,",
     );
     console.log(
         "   FinanceTransaction, FileAsset, Notification, NotificationDelivery, Setting, Role.",
@@ -106,6 +106,7 @@ let Survey: ModelsModule["Survey"];
 let SurveyResponse: ModelsModule["SurveyResponse"];
 let PcccCheck: ModelsModule["PcccCheck"];
 let SecurityRecord: ModelsModule["SecurityRecord"];
+let ResidentRecord: ModelsModule["ResidentRecord"];
 let FinanceTransaction: ModelsModule["FinanceTransaction"];
 let FileAsset: ModelsModule["FileAsset"];
 let Notification: ModelsModule["Notification"];
@@ -154,6 +155,7 @@ async function clearDemoData() {
         SurveyResponse.deleteMany({}),
         PcccCheck.deleteMany({}),
         SecurityRecord.deleteMany({}),
+        ResidentRecord.deleteMany({}),
         FinanceTransaction.deleteMany({}),
         FileAsset.deleteMany({}),
         Notification.deleteMany({}),
@@ -788,7 +790,6 @@ async function seedPcccAndSecurity(
     await SecurityRecord.create([
         {
             houseId: h1.houseId,
-            ownershipType: "chinh_chu",
             level: "binh_thuong",
             monitoringStatus: "binh_thuong",
             inspectionDate: new Date(),
@@ -797,11 +798,27 @@ async function seedPcccAndSecurity(
         },
         {
             houseId: h3.houseId,
-            ownershipType: "cho_thue",
-            renterCount: 6,
             level: "can_theo_doi",
             monitoringStatus: "dang_theo_doi",
             note: "Đã nhắc nhở chủ nhà khai báo cư trú cho người thuê",
+            inspectionDate: new Date(),
+            createdBy: policeId,
+            updatedBy: policeId,
+        },
+    ]);
+
+    await ResidentRecord.create([
+        {
+            houseId: h1.houseId,
+            ownershipType: "chinh_chu",
+            inspectionDate: new Date(),
+            createdBy: policeId,
+            updatedBy: policeId,
+        },
+        {
+            houseId: h3.houseId,
+            ownershipType: "cho_thue",
+            renterCount: 6,
             inspectionDate: new Date(),
             createdBy: policeId,
             updatedBy: policeId,
@@ -961,6 +978,7 @@ async function main() {
         SurveyResponse,
         PcccCheck,
         SecurityRecord,
+        ResidentRecord,
         FinanceTransaction,
         FileAsset,
         Notification,

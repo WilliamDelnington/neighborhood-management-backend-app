@@ -7,6 +7,7 @@ import {
     Complaint,
     PcccCheck,
     SecurityRecord,
+    ResidentRecord,
     FinanceTransaction,
     Meeting,
     MeetingRegistration,
@@ -418,10 +419,11 @@ export async function getSecurityReport(): Promise<SecurityReport> {
             { $group: { _id: "$monitoringStatus", count: { $sum: 1 } } },
         ]),
         Household.countDocuments({ ownershipType: "cho_thue" }),
-        // Chi bao gom ban ghi an ninh cua nha cho thue nhung nha lien quan
-        // CHUA co so khai bao cu tru -> day la chi so khoang trong tuan thu,
-        // khong phai tong so nha cho thue.
-        SecurityRecord.find({ ownershipType: "cho_thue" }).populate(
+        // Chi bao gom ho so cu tru cua nha cho thue nhung nha lien quan CHUA
+        // co so khai bao cu tru -> day la chi so khoang trong tuan thu, khong
+        // phai tong so nha cho thue. ownershipType chuyen sang ResidentRecord
+        // (tach khoi SecurityRecord) - xem models/ResidentRecord.ts.
+        ResidentRecord.find({ ownershipType: "cho_thue" }).populate(
             "houseId",
             "residenceDeclarationNumber",
         ),

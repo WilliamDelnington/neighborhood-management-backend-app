@@ -12,7 +12,6 @@ export interface IComplaint extends Document {
     title: string;
     content: string;
     area?: string;
-    images: string[];
     status: TrangThaiPhanAnh;
     cluster?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
@@ -33,7 +32,6 @@ const ComplaintSchema = new Schema<IComplaint>(
         title: { type: String, required: true, trim: true },
         content: { type: String, required: true },
         area: { type: String },
-        images: { type: [String], default: [] },
         status: {
             type: String,
             enum: TRANG_THAI_PHAN_ANH,

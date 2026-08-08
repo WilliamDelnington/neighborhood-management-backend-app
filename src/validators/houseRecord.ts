@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { HOUSE_RECORD_STATUS, HOUSE_PHYSICAL_STATUS, ORGANIZATION_TYPE } from "@/types";
+import {
+    HOUSE_RECORD_STATUS,
+    HOUSE_PHYSICAL_STATUS,
+    HOUSE_USAGE_TYPE,
+    ORGANIZATION_TYPE,
+} from "@/types";
 import { isValidVnPhone } from "@/lib/phone";
 
 // Thong tin mot ca nhan (chu nha hoac nguoi dai dien to chuc) duoc nhan vien
@@ -22,11 +27,13 @@ const personInfoSchema = z.object({
 });
 export type CreateHouseRecordOwnerInput = z.infer<typeof personInfoSchema>;
 
-// Thong tin to chuc duoc khai bao inline luc tao nha so - tim theo taxCode,
-// tao moi neu chua co (xem houseRecordService.resolveOrCreateOrganizationOwner).
+// Thong tin to chuc duoc khai bao inline luc tao nha so - neu co taxCode thi
+// tim-hoac-tao theo taxCode, khong thi luon tao moi (khong co khoa nao de doi
+// chieu trung lap - xem houseRecordService.resolveOrCreateOrganizationOwner).
 const organizationInfoSchema = z.object({
     name: z.string().min(1, "Ten to chuc khong duoc de trong"),
-    taxCode: z.string().min(1, "Ma so thue khong duoc de trong"),
+    // Khong bat buoc - khong phai to chuc nao cung co ma so thue.
+    taxCode: z.string().trim().min(1).optional(),
     organizationType: z.enum(ORGANIZATION_TYPE).optional(),
     address: z.string().optional(),
     phone: z.string().optional(),
@@ -57,6 +64,9 @@ const houseRecordBaseSchema = z.object({
     // HOUSE_PHYSICAL_STATUS o types/index.ts). Chu nha/nhan vien co the cap
     // nhat bat cu luc nao, khong gan voi luong duyet/tu choi.
     physicalStatus: z.enum(HOUSE_PHYSICAL_STATUS).optional(),
+    // Muc dich su dung nha do chu nha tu khai bao - xem models/HouseRecord.ts.
+    usageTypes: z.array(z.enum(HOUSE_USAGE_TYPE)).optional(),
+    otherUsageNote: z.string().optional(),
     note: z.string().optional(),
     residenceDeclarationNumber: z.string().optional(),
     // Loai chu nha duoc khai bao luc tao nha so - "none" = chua biet/chua

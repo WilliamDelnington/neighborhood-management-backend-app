@@ -221,6 +221,20 @@ export const BUSINESS_DOCUMENT_STATUS_LABEL: Record<
 };
 
 // ---------------------------------------------------------------------------
+// Don vi su dung cua nha (HouseUsageUnit) - lop bo sung, KHONG thay the
+// houseId truc tiep tren Household/Business/Company: mot nha so co the duoc
+// chia thanh nhieu don vi (vd tang/phong) cho hoc dan/ho kinh doanh/cong ty su
+// dung, xem models/HouseUsageUnit.ts.
+// ---------------------------------------------------------------------------
+export const HOUSE_USAGE_TYPE = ["household", "business", "company"] as const;
+export type HouseUsageType = typeof HOUSE_USAGE_TYPE[number];
+export const HOUSE_USAGE_TYPE_LABEL: Record<HouseUsageType, string> = {
+    household: "Hộ dân",
+    business: "Hộ kinh doanh",
+    company: "Công ty",
+};
+
+// ---------------------------------------------------------------------------
 // Ho dan
 // ---------------------------------------------------------------------------
 export const LOAI_SO_HUU = ["chinh_chu", "cho_thue"] as const;
@@ -379,6 +393,33 @@ export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
 };
 
 // ---------------------------------------------------------------------------
+// Yeu cau cong viec (Request) - thay the cac luong "giao viec" rieng le cua
+// PCCC/An ninh bang mot model chung, mo rong duoc cho cac loai yeu cau khac
+// sau nay chi bang cach them gia tri vao REQUEST_TYPES (+ mot quyen
+// "{type}.assign" moi neu can gioi han nguoi co the nhan).
+// ---------------------------------------------------------------------------
+export const REQUEST_TYPES = ["pccc", "security"] as const;
+export type RequestType = typeof REQUEST_TYPES[number];
+export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
+    pccc: "PCCC",
+    security: "An ninh & Quản lý cư trú",
+};
+
+export const REQUEST_STATUS = [
+    "pending",
+    "acknowledged",
+    "in_progress",
+    "resolved",
+] as const;
+export type RequestStatus = typeof REQUEST_STATUS[number];
+export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
+    pending: "Chưa xử lý",
+    acknowledged: "Đã tiếp nhận",
+    in_progress: "Đang xử lý",
+    resolved: "Đã hoàn thành",
+};
+
+// ---------------------------------------------------------------------------
 // Cuoc hop
 // ---------------------------------------------------------------------------
 export const DANG_KY_HOP = ["co", "khong", "uy_quyen"] as const;
@@ -519,6 +560,6 @@ export type SessionTokenPayload = {
 export type UploadTokenPayload = {
     purpose: "upload";
     userId: string;
-    relatedModel: "HouseRecord" | "Business" | "BusinessDocument";
+    relatedModel: "HouseRecord" | "Business" | "BusinessDocument" | "Complaint";
     relatedId: string;
 };

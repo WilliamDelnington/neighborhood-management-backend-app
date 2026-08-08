@@ -3,6 +3,7 @@ import {
     HouseRecord,
     Household,
     Business,
+    Company,
     Organization,
     Neighborhood,
     Person,
@@ -28,6 +29,7 @@ import {
 import {
     HOUSE_RECORD_STATUS_LABEL,
     type HouseRecordStatus,
+    type HouseUsageType,
     type OwnerType,
     type VerificationStatus,
 } from "@/types";
@@ -41,6 +43,35 @@ const HOUSE_RECORD_POPULATE = [
     { path: "streetId", select: "name code" },
     { path: "neighborhoodId", select: "name code" },
 ];
+
+/**
+ * Nha co Ho dan/Ho kinh doanh/Cong ty da khai bao thuc te thi PHAI duoc coi la
+ * co muc dich su dung tuong ung (living/business/company), bat ke chu nha co
+ * tick khai bao truoc hay khong - tranh truong hop nha thuc te da co ho kinh
+ * doanh nhung usageTypes chi ghi "household" (vd du lieu cu tu truoc khi co
+ * tinh nang nay, hoac chu nha khai bao thieu). Gop (union) voi usageTypes da
+ * luu, KHONG ghi de/mat gia tri da khai bao (vd nha khai bao "company" nhung
+ * chua tao Company nao van giu nguyen de con canh bao khai bao thieu - xem
+ * HouseDetailPage.tsx). Chi tinh toan de tra ve, khong luu lai vao DB.
+ */
+async function withInferredUsageTypes(
+    houseRecord: IHouseRecord,
+): Promise<IHouseRecord> {
+    const [hasHousehold, hasBusiness, hasCompany] = await Promise.all([
+        Household.exists({ houseId: houseRecord._id }),
+        Business.exists({ houseId: houseRecord._id }),
+        Company.exists({ houseId: houseRecord._id }),
+    ]);
+    const inferred: HouseUsageType[] = [];
+    if (hasHousehold) inferred.push("household");
+    if (hasBusiness) inferred.push("business");
+    if (hasCompany) inferred.push("company");
+    const merged = Array.from(
+        new Set([...(houseRecord.usageTypes || []), ...inferred]),
+    );
+    houseRecord.usageTypes = merged.length ? merged : ["household"];
+    return houseRecord;
+}
 
 /**
  * Nem HttpError(403) neu actor khong phai admin va cluster truyen vao khong
@@ -410,9 +441,16 @@ async function resolveOrCreateOrganizationOwner(
     input: CreateHouseRecordInput,
 ): Promise<Types.ObjectId> {
     const orgInput = input.organization!;
-    const existing = await Organization.findOne({ taxCode: orgInput.taxCode });
-    if (existing) {
-        return existing._id as Types.ObjectId;
+    // Chi tim-hoac-tai-su-dung khi co taxCode (khoa duy nhat de doi chieu) -
+    // to chuc khong co taxCode luon duoc tao moi, khong co cach nao doi chieu
+    // trung lap an toan.
+    if (orgInput.taxCode) {
+        const existing = await Organization.findOne({
+            taxCode: orgInput.taxCode,
+        });
+        if (existing) {
+            return existing._id as Types.ObjectId;
+        }
     }
 
     const organization = await Organization.create({
@@ -495,6 +533,8 @@ export async function createHouseRecord(
         address: input.address,
         ...administrativeDivisions,
         physicalStatus: input.physicalStatus,
+        usageTypes: input.usageTypes?.length ? input.usageTypes : ["household"],
+        otherUsageNote: input.otherUsageNote,
         note: input.note,
         residenceDeclarationNumber: input.residenceDeclarationNumber,
         createdBy: actorUser._id,
@@ -524,7 +564,7 @@ export async function createHouseRecord(
     const created = await HouseRecord.findById(houseRecord._id).populate(
         HOUSE_RECORD_POPULATE,
     );
-    return created as IHouseRecord;
+    return withInferredUsageTypes(created as IHouseRecord);
 }
 
 export async function listHouseRecords(params: {
@@ -627,7 +667,7 @@ export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
     const houseRecord =
         await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
-    return houseRecord;
+    return withInferredUsageTypes(houseRecord);
 }
 
 export async function updateHouseRecord(
@@ -678,7 +718,7 @@ export async function updateHouseRecord(
 
     await houseRecord.populate(HOUSE_RECORD_POPULATE);
 
-    return houseRecord;
+    return withInferredUsageTypes(houseRecord);
 }
 
 /**
@@ -820,7 +860,7 @@ export async function transitionHouseRecordStatus(
     });
 
     await houseRecord.populate(HOUSE_RECORD_POPULATE);
-    return houseRecord;
+    return withInferredUsageTypes(houseRecord);
 }
 
 export async function deleteHouseRecord(

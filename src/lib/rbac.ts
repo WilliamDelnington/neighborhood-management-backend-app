@@ -199,6 +199,37 @@ export async function getUserAllowedComplaintCategories(
 }
 
 /**
+ * Tra ve danh sach loai yeu cau (RequestType) ma user duoc phep gui, hoac null
+ * neu khong bi gioi han. Cung quy uoc voi getUserAllowedComplaintCategories:
+ * chi gioi han khi TAT CA cac role dang active cua user deu da duoc admin
+ * "chot" danh sach allowedRequestTypes; nhieu role bi gioi han thi hop (union).
+ */
+export async function getUserAllowedRequestTypes(
+    user: IUser,
+): Promise<string[] | null> {
+    if (user.roles.includes("admin")) return null;
+
+    const roleDocs = await RoleModel.find({
+        key: { $in: user.roles },
+        active: true,
+    });
+    if (roleDocs.length === 0) return null;
+
+    const hasUnrestrictedRole = roleDocs.some(
+        r => r.allowedRequestTypes === undefined,
+    );
+    if (hasUnrestrictedRole) return null;
+
+    const allowed = new Set<string>();
+    for (const role of roleDocs) {
+        for (const type of role.allowedRequestTypes || []) {
+            allowed.add(type);
+        }
+    }
+    return [...allowed];
+}
+
+/**
  * Xay dung dieu kien Mongo de loc du lieu theo cum dan cu duoc phan cong,
  * tru khi user la admin (xem toan bo) hoac co scope "all".
  */

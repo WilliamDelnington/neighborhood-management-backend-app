@@ -6,7 +6,10 @@ export const createComplaintSchema = z.object({
     title: z.string().min(3, "Tieu de qua ngan"),
     content: z.string().min(10, "Noi dung qua ngan"),
     area: z.string().optional(),
-    images: z.array(z.string()).max(6).optional(),
+    // Id da xin truoc qua POST /api/complaints/draft, dung lam _id cua ban ghi
+    // Complaint moi de cac tai lieu da dinh kem tu form tao (xem
+    // uploads/token, uploads/attachments) tu dong thuoc ve phan anh nay.
+    draftId: z.string().length(24).optional(),
 });
 export type CreateComplaintInput = z.infer<typeof createComplaintSchema>;
 

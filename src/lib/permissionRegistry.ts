@@ -110,6 +110,31 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "companies",
+        label: "Công ty",
+        permissions: [
+            { key: "companies.read", label: "Xem công ty" },
+            { key: "companies.create", label: "Tạo công ty" },
+            { key: "companies.update", label: "Cập nhật công ty" },
+            { key: "companies.delete", label: "Xóa công ty" },
+            { key: "companies.verify", label: "Duyệt / từ chối công ty" },
+            { key: "companies.lock", label: "Khóa / mở khóa công ty" },
+        ],
+    },
+    {
+        key: "usage_units",
+        label: "Đơn vị sử dụng nhà",
+        permissions: [
+            { key: "usage_units.read", label: "Xem đơn vị sử dụng" },
+            { key: "usage_units.create", label: "Tạo đơn vị sử dụng" },
+            {
+                key: "usage_units.update",
+                label: "Cập nhật đơn vị sử dụng",
+            },
+            { key: "usage_units.delete", label: "Xóa đơn vị sử dụng" },
+        ],
+    },
+    {
         key: "citizens",
         label: "Nhân khẩu",
         permissions: [
@@ -195,21 +220,39 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "pccc.update", label: "Cập nhật PCCC" },
             {
                 key: "pccc.assign",
-                label: "Giao phụ trách khắc phục (và được chọn làm người phụ trách)",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại PCCC",
             },
         ],
     },
     {
         key: "security",
-        label: "An ninh & Quản lý cư trú",
+        label: "An ninh",
         permissions: [
-            { key: "security.read", label: "Xem an ninh, tạm trú" },
+            { key: "security.read", label: "Xem an ninh" },
             { key: "security.create", label: "Tạo bản ghi an ninh" },
             { key: "security.update", label: "Cập nhật an ninh" },
             {
                 key: "security.assign",
-                label: "Giao theo dõi (và được chọn làm người phụ trách)",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại An ninh",
             },
+        ],
+    },
+    {
+        key: "residents",
+        label: "Hồ sơ cư trú",
+        permissions: [
+            { key: "residents.read", label: "Xem hồ sơ cư trú" },
+            { key: "residents.create", label: "Tạo hồ sơ cư trú" },
+            { key: "residents.update", label: "Cập nhật hồ sơ cư trú" },
+        ],
+    },
+    {
+        key: "requests",
+        label: "Yêu cầu công việc",
+        permissions: [
+            { key: "requests.create", label: "Tạo / gửi yêu cầu" },
+            { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
+            { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
         ],
     },
     {

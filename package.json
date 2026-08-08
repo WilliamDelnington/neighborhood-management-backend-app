@@ -29,6 +29,9 @@
         "neighborhoods:backfill-scoped-records": "tsx scripts/backfill-neighborhood-ids.ts",
         "houses:backfill-ownerships": "tsx scripts/backfill-house-ownerships.ts",
         "verification:backfill-status": "tsx scripts/backfill-verification-status.ts",
+        "requests:backfill-from-assignments": "tsx scripts/backfill-requests-from-assignments.ts",
+        "residents:backfill-from-security": "tsx scripts/backfill-split-resident-from-security.ts",
+        "organizations:fix-taxcode-index": "tsx scripts/fix-organization-taxcode-index.ts",
         "users:set-password": "tsx scripts/set-user-password.ts",
         "test": "vitest run"
     },

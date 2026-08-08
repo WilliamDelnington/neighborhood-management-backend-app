@@ -33,11 +33,15 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // duyet ho kinh doanh, khong duoc duyet/tu choi giay to (xem
         // businessDocumentService.assertReviewerRoleForRule - fallback rong
         // reviewerRoles se tu choi vai tro nay thay vi cho qua).
+        "companies.read",
+        "usage_units.read",
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
         "pccc.read",
         "security.read",
+        "residents.read",
+        "requests.read",
         "meetings.read",
         "meetings.register",
         "announcements.read",
@@ -63,6 +67,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // Khong co businesses.verify: secretary chi xem duoc tien do duyet ho
         // kinh doanh, khong duoc duyet/tu choi giay to (xem cung ghi chu o
         // neighborhood_leader ben tren).
+        "companies.read",
+        "usage_units.read",
         "meetings.read",
         "meetings.create",
         "meetings.update",
@@ -84,6 +90,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.update",
         "files.delete",
         "notifications.read",
+        // Bi thu ("ward secretary") la nguoi gui yeu cau cong viec (PCCC, an
+        // ninh, ...) cho cac can bo lien quan.
+        "requests.create",
+        "requests.read",
     ],
     regional_police: [
         "dashboard.read",
@@ -92,15 +102,25 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "business_types.read",
         "businesses.read",
+        "companies.read",
+        "usage_units.read",
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
         "pccc.read",
         "pccc.create",
         "pccc.update",
+        // Du dieu kien duoc chon lam nguoi phu trach khi nhan yeu cau PCCC/an
+        // ninh (xem getRoleKeysWithPermission trong requestService).
+        "pccc.assign",
         "security.read",
         "security.create",
         "security.update",
+        "security.assign",
+        "residents.read",
+        "residents.create",
+        "residents.update",
+        "requests.read",
         "reports.read",
         "reports.export",
         "meetings.register",
@@ -120,11 +140,16 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "business_types.read",
         "businesses.read",
         "businesses.verify",
+        "companies.read",
+        "companies.verify",
+        "usage_units.read",
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
         "pccc.read",
         "security.read",
+        "residents.read",
+        "requests.read",
         "meetings.register",
         "surveys.respond",
         "support_tickets.create",
@@ -160,6 +185,15 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "businesses.read",
         "businesses.create",
         "businesses.update",
+        // Cong ty/don vi su dung cung ap dung tuong tu ho kinh doanh - chu nha
+        // duoc tu khai bao trong pham vi nha cua minh (xem ghi chu businesses
+        // o tren).
+        "companies.read",
+        "companies.create",
+        "companies.update",
+        "usage_units.read",
+        "usage_units.create",
+        "usage_units.update",
         "complaints.create",
         "complaints.read_own",
         "support_tickets.create",
