@@ -5,7 +5,12 @@ export {
     type IRoleAssignment,
 } from "./RoleAssignment";
 export { default as HouseRecord, type IHouseRecord } from "./HouseRecord";
+export {
+    default as HouseOwnership,
+    type IHouseOwnership,
+} from "./HouseOwnership";
 export { default as Organization, type IOrganization } from "./Organization";
+export { default as Person, type IPerson } from "./Person";
 export { default as Household, type IHousehold } from "./Household";
 export {
     default as BusinessType,
@@ -13,6 +18,11 @@ export {
     type IBusinessTypeDocumentRule,
 } from "./BusinessType";
 export { default as Business, type IBusiness } from "./Business";
+export { default as Company, type ICompany } from "./Company";
+export {
+    default as HouseUsageUnit,
+    type IHouseUsageUnit,
+} from "./HouseUsageUnit";
 export {
     default as DocumentType,
     type IDocumentType,
@@ -48,6 +58,10 @@ export {
     type ISecurityRecord,
 } from "./SecurityRecord";
 export {
+    default as ResidentRecord,
+    type IResidentRecord,
+} from "./ResidentRecord";
+export {
     default as FinanceTransaction,
     type IFinanceTransaction,
 } from "./FinanceTransaction";
@@ -57,6 +71,11 @@ export {
     default as NotificationDelivery,
     type INotificationDelivery,
 } from "./NotificationDelivery";
+export { default as Request, type IRequest } from "./Request";
+export {
+    default as RequestRecipient,
+    type IRequestRecipient,
+} from "./RequestRecipient";
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
 export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
 export { default as Street, type IStreet } from "./Street";

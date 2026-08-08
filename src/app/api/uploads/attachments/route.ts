@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { HttpError } from "@/lib/response";
 import { getBearerToken, verifyUploadToken } from "@/lib/auth";
-import { HouseRecord, Business, FileAsset, User } from "@/models";
-import {
-    assertHouseRecordInScope,
-    resolveOwnerActingUserId,
-} from "@/services/houseRecordService";
+import { HouseRecord, Business, Complaint, FileAsset, User } from "@/models";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -76,6 +74,20 @@ export async function POST(req: Request) {
             }
             await assertHouseRecordInScope(actorUser, houseRecord);
             subDir = `businesses/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Complaint") {
+            // Kiem tra lai giong het luc cap token (xem
+            // /api/uploads/token/route.ts) - relatedId co the la phan anh da
+            // ton tai (dinh kem them tu trang chi tiet) hoac mot draftId chua
+            // ung voi ban ghi nao (dinh kem ngay tren form tao moi, truoc khi
+            // phan anh duoc tao). Voi draft, khong co gi de kiem tra them.
+            const complaint = await Complaint.findById(payload.relatedId);
+            if (
+                complaint &&
+                String(complaint.createdByUserId) !== String(payload.userId)
+            ) {
+                return zaloError("Chi chu phan anh moi duoc dinh kem tai lieu");
+            }
+            subDir = `complaints/${payload.relatedId}`;
         } else {
             // BusinessDocument: chi chu ho (hoac admin) - kiem tra lai giong
             // het luc cap token (xem /api/uploads/token/route.ts) vi pham vi
@@ -87,9 +99,7 @@ export async function POST(req: Request) {
                 return zaloError("Khong tim thay nha so cua ho kinh doanh nay");
             }
             const isAdmin = actorUser.roles.includes("admin");
-            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-            const isOwner =
-                !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
+            const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
             if (!isAdmin && !isOwner) {
                 return zaloError("Chi chu ho kinh doanh moi duoc tai len giay to");
             }

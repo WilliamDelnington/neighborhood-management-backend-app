@@ -3,12 +3,21 @@ import { ORGANIZATION_TYPE, type OrganizationType } from "@/types";
 
 export interface IOrganization extends Document {
     name: string;
-    taxCode: string;
+    // Khong bat buoc - khong phai to chuc nao cung co ma so thue/dang ky kinh
+    // doanh (vd to chuc cong dong, doan the chua thanh lap phap nhan). Khi co,
+    // van dung de tim-hoac-tao (khong tao trung) va bao loi trung lap - xem
+    // organizationService.createOrganization va
+    // houseRecordService.resolveOrCreateOrganizationOwner.
+    taxCode?: string;
     organizationType: OrganizationType;
     // Nguoi dai dien - tai khoan User (vai tro house_owner) thuc su dang nhap
     // va thao tac thay cho to chuc (to chuc khong tu dang nhap duoc, xem
-    // authService.ts - dang nhap chi ho tro User).
-    representativeUserId: mongoose.Types.ObjectId;
+    // authService.ts - dang nhap chi ho tro User). Optional: to chuc duoc khai
+    // bao luc tao nha so co the chua co nguoi dai dien nao dang nhap duoc (xem
+    // houseRecordService.resolveOrCreateOrganizationOwner) - khi do to chuc
+    // chi hien thi thong tin lien he (phone/email/address) cua chinh no, khong
+    // co ai "thao tac thay" (resolveActingUserId tra ve undefined).
+    representativeUserId?: mongoose.Types.ObjectId;
     representativeRole?: string;
     phone?: string;
     email?: string;
@@ -23,7 +32,10 @@ export interface IOrganization extends Document {
 const OrganizationSchema = new Schema<IOrganization>(
     {
         name: { type: String, required: true, trim: true, index: true },
-        taxCode: { type: String, required: true, unique: true, trim: true },
+        // sparse: cho phep nhieu ban ghi cung khong co taxCode ma khong vi
+        // pham unique index (MongoDB sparse index bo qua ban ghi thieu han
+        // truong, khac voi gia tri null/rong).
+        taxCode: { type: String, unique: true, trim: true, sparse: true },
         organizationType: {
             type: String,
             enum: ORGANIZATION_TYPE,
@@ -32,7 +44,6 @@ const OrganizationSchema = new Schema<IOrganization>(
         representativeUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",
-            required: true,
             index: true,
         },
         representativeRole: { type: String, trim: true },

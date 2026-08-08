@@ -141,7 +141,7 @@ async function uploadBusinessDocumentFile(
 }
 
 describe("Xac thuc ho kinh doanh theo tung giay to (business document verification)", () => {
-    it("chu ho nop giay to bat buoc -> business chuyen unverified -> pending_approval", async () => {
+    it("chu ho nop giay to bat buoc -> business chuyen unverified -> pending", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
         const { documentType, businessType } = await setupBusinessTypeWithRule(
@@ -177,7 +177,7 @@ describe("Xac thuc ho kinh doanh theo tung giay to (business document verificati
             { params: { id: business._id } },
         );
         const reqJson = await readJson(reqRes);
-        expect(reqJson.data.business.status).toBe("pending_approval");
+        expect(reqJson.data.business.status).toBe("pending");
         expect(reqJson.data.items).toHaveLength(1);
         expect(reqJson.data.items[0].missing).toBe(false);
     });
@@ -329,7 +329,7 @@ describe("Xac thuc ho kinh doanh theo tung giay to (business document verificati
         expect(reqJson.data.business.status).toBe("verified");
     });
 
-    it("tu choi giay to -> business chuyen need_supplement va bao ly do", async () => {
+    it("tu choi giay to -> business chuyen denied va bao ly do", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
         const { documentType, businessType } = await setupBusinessTypeWithRule(
@@ -382,7 +382,7 @@ describe("Xac thuc ho kinh doanh theo tung giay to (business document verificati
             { params: { id: business._id } },
         );
         const reqJson = await readJson(reqRes);
-        expect(reqJson.data.business.status).toBe("need_supplement");
+        expect(reqJson.data.business.status).toBe("denied");
     });
 
     it("nguoi khong phai chu ho khong duoc nop giay to cho ho kinh doanh cua nguoi khac", async () => {

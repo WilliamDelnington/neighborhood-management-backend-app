@@ -7,25 +7,27 @@ import {
     assertHouseholdInScope,
     getOwnedHouseholdIds,
 } from "@/services/householdService";
-import { assertHouseRecordVerifiedForMembers } from "@/services/houseRecordService";
+import { assertHouseRecordAllowsDeclaration } from "@/services/houseRecordService";
 import type {
     CreateCitizenInput,
     UpdateCitizenInput,
 } from "@/validators/citizen";
 
 /**
- * Neu ho dan co gan nha so, nem HttpError(403) khi nha so do chua duoc xac
- * thuc (xem assertHouseRecordVerifiedForMembers) - dung truoc khi them nhan
- * khau moi vao ho dan, hoac chuyen nhan khau sang mot ho dan khac.
+ * Neu ho dan co gan nha so, nem HttpError(403) khi nha so do da bi tu choi
+ * hoac bi khoa (xem assertHouseRecordAllowsDeclaration) - dung truoc khi them
+ * nhan khau moi vao ho dan, hoac chuyen nhan khau sang mot ho dan khac. Van
+ * cho them nhan khau ke ca khi nha con "unverified"/"pending", giong dieu
+ * kien khai bao Household/Business (xem householdService.createHousehold).
  */
-async function assertHouseholdHouseVerified(
+async function assertHouseholdHouseAllowsDeclaration(
     actorUser: IUser,
     household: { houseId?: unknown },
 ): Promise<void> {
     if (!household.houseId) return;
     const houseRecord = await HouseRecord.findById(household.houseId);
     if (!houseRecord) return;
-    assertHouseRecordVerifiedForMembers(actorUser, houseRecord);
+    assertHouseRecordAllowsDeclaration(actorUser, houseRecord);
 }
 
 /**
@@ -64,7 +66,7 @@ export async function createCitizen(
     const household = await Household.findById(input.householdId);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
     await assertHouseholdInScope(actorUser, household);
-    await assertHouseholdHouseVerified(actorUser, household);
+    await assertHouseholdHouseAllowsDeclaration(actorUser, household);
 
     const actorId = String(actorUser._id);
     const citizen = await Citizen.create({
@@ -193,7 +195,7 @@ export async function updateCitizen(
         if (!newHousehold)
             throw new HttpError("Khong tim thay ho dan moi", 404);
         await assertHouseholdInScope(actorUser, newHousehold);
-        await assertHouseholdHouseVerified(actorUser, newHousehold);
+        await assertHouseholdHouseAllowsDeclaration(actorUser, newHousehold);
         newHouseholdId = patch.householdId;
     }
 

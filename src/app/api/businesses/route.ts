@@ -7,7 +7,7 @@ import {
 import { requireUser, requirePermission } from "@/lib/rbac";
 import { createBusinessSchema } from "@/validators/business";
 import { createBusiness, listBusinesses } from "@/services/businessService";
-import { BUSINESS_STATUS, type BusinessStatus } from "@/types";
+import { VERIFICATION_STATUS, type VerificationStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +43,8 @@ export async function GET(req: Request) {
         const statusParam = searchParams.get("status") || undefined;
         const status =
             statusParam &&
-            (BUSINESS_STATUS as readonly string[]).includes(statusParam)
-                ? (statusParam as BusinessStatus)
+            (VERIFICATION_STATUS as readonly string[]).includes(statusParam)
+                ? (statusParam as VerificationStatus)
                 : undefined;
         const result = await listBusinesses({
             page,

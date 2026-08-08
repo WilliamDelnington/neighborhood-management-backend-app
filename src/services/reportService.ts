@@ -7,9 +7,13 @@ import {
     Complaint,
     PcccCheck,
     SecurityRecord,
+    ResidentRecord,
     FinanceTransaction,
     Meeting,
     MeetingRegistration,
+    Business,
+    BusinessType,
+    Company,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { addSummarySheet, addTableSheet } from "@/lib/excelResponse";
@@ -22,6 +26,9 @@ import {
     MUC_DO_AN_NINH_LABEL,
     TINH_TRANG_THEO_DOI_AN_NINH_LABEL,
     DANG_KY_HOP_LABEL,
+    HOUSE_RECORD_STATUS_LABEL,
+    HOUSE_USAGE_TYPE_LABEL,
+    VERIFICATION_STATUS_LABEL,
     type LoaiCuTru,
     type NhomPhanAnh,
     type TrangThaiPhanAnh,
@@ -29,6 +36,9 @@ import {
     type MucDoAnNinh,
     type TinhTrangTheoDoiAnNinh,
     type DangKyHop,
+    type HouseRecordStatus,
+    type HouseUsageType,
+    type VerificationStatus,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -418,10 +428,11 @@ export async function getSecurityReport(): Promise<SecurityReport> {
             { $group: { _id: "$monitoringStatus", count: { $sum: 1 } } },
         ]),
         Household.countDocuments({ ownershipType: "cho_thue" }),
-        // Chi bao gom ban ghi an ninh cua nha cho thue nhung nha lien quan
-        // CHUA co so khai bao cu tru -> day la chi so khoang trong tuan thu,
-        // khong phai tong so nha cho thue.
-        SecurityRecord.find({ ownershipType: "cho_thue" }).populate(
+        // Chi bao gom ho so cu tru cua nha cho thue nhung nha lien quan CHUA
+        // co so khai bao cu tru -> day la chi so khoang trong tuan thu, khong
+        // phai tong so nha cho thue. ownershipType chuyen sang ResidentRecord
+        // (tach khoi SecurityRecord) - xem models/ResidentRecord.ts.
+        ResidentRecord.find({ ownershipType: "cho_thue" }).populate(
             "houseId",
             "residenceDeclarationNumber",
         ),
@@ -715,5 +726,193 @@ export function buildSurveyResultReportWorkbook(
         );
     }
 
+    return workbook;
+}
+
+// ---------------------------------------------------------------------------
+// 8. Bao cao Nha so
+// ---------------------------------------------------------------------------
+
+export type HouseReport = {
+    total: number;
+    byStatus: { status: string; label: string; count: number }[];
+    byUsageType: { usageType: string; label: string; count: number }[];
+    byCluster: { cluster: string; count: number }[];
+};
+
+export async function getHouseReport(): Promise<HouseReport> {
+    const [total, byStatusRaw, byUsageTypeRaw, byClusterRaw] =
+        await Promise.all([
+            HouseRecord.countDocuments(),
+            HouseRecord.aggregate([
+                { $group: { _id: "$status", count: { $sum: 1 } } },
+            ]),
+            HouseRecord.aggregate([
+                { $unwind: "$usageTypes" },
+                { $group: { _id: "$usageTypes", count: { $sum: 1 } } },
+            ]),
+            HouseRecord.aggregate([
+                { $group: { _id: "$cluster", count: { $sum: 1 } } },
+                { $sort: { _id: 1 } },
+            ]),
+        ]);
+
+    return {
+        total,
+        byStatus: byStatusRaw.map(r => ({
+            status: r._id,
+            label:
+                HOUSE_RECORD_STATUS_LABEL[r._id as HouseRecordStatus] ??
+                String(r._id),
+            count: r.count,
+        })),
+        byUsageType: byUsageTypeRaw.map(r => ({
+            usageType: r._id,
+            label:
+                HOUSE_USAGE_TYPE_LABEL[r._id as HouseUsageType] ??
+                String(r._id),
+            count: r.count,
+        })),
+        byCluster: byClusterRaw.map(r => ({
+            cluster: r._id ?? "Chưa xác định",
+            count: r.count,
+        })),
+    };
+}
+
+export function buildHouseReportWorkbook(data: HouseReport): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    addSummarySheet(workbook, "Tong quan", [
+        { label: "Tổng số nhà", value: data.total },
+    ]);
+    addTableSheet(
+        workbook,
+        "Theo trang thai",
+        [
+            { header: "Trạng thái", key: "label", width: 25 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byStatus,
+    );
+    addTableSheet(
+        workbook,
+        "Theo muc dich su dung",
+        [
+            { header: "Mục đích sử dụng", key: "label", width: 25 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byUsageType,
+    );
+    addTableSheet(
+        workbook,
+        "Theo cum dan cu",
+        [
+            { header: "Cụm dân cư", key: "cluster", width: 25 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byCluster,
+    );
+    return workbook;
+}
+
+// ---------------------------------------------------------------------------
+// 9. Bao cao Ho kinh doanh
+// ---------------------------------------------------------------------------
+
+export type BusinessReport = {
+    total: number;
+    totalCompanies: number;
+    byStatus: { status: string; label: string; count: number }[];
+    byBusinessType: { businessType: string; count: number }[];
+    byCluster: { cluster: string; count: number }[];
+};
+
+export async function getBusinessReport(): Promise<BusinessReport> {
+    const [total, totalCompanies, byStatusRaw, byBusinessTypeRaw, byClusterRaw] =
+        await Promise.all([
+            Business.countDocuments(),
+            Company.countDocuments(),
+            Business.aggregate([
+                { $group: { _id: "$status", count: { $sum: 1 } } },
+            ]),
+            Business.aggregate([
+                { $group: { _id: "$businessType", count: { $sum: 1 } } },
+            ]),
+            Business.aggregate([
+                { $group: { _id: "$cluster", count: { $sum: 1 } } },
+                { $sort: { _id: 1 } },
+            ]),
+        ]);
+
+    const businessTypeIds = byBusinessTypeRaw
+        .map(r => r._id)
+        .filter((id): id is mongoose.Types.ObjectId => !!id);
+    const businessTypes = businessTypeIds.length
+        ? await BusinessType.find({ _id: { $in: businessTypeIds } }).select(
+              "name",
+          )
+        : [];
+    const businessTypeNameById = new Map(
+        businessTypes.map(t => [String(t._id), t.name]),
+    );
+
+    return {
+        total,
+        totalCompanies,
+        byStatus: byStatusRaw.map(r => ({
+            status: r._id,
+            label:
+                VERIFICATION_STATUS_LABEL[r._id as VerificationStatus] ??
+                String(r._id),
+            count: r.count,
+        })),
+        byBusinessType: byBusinessTypeRaw.map(r => ({
+            businessType: r._id
+                ? businessTypeNameById.get(String(r._id)) ?? "Không xác định"
+                : "Chưa phân loại",
+            count: r.count,
+        })),
+        byCluster: byClusterRaw.map(r => ({
+            cluster: r._id ?? "Chưa xác định",
+            count: r.count,
+        })),
+    };
+}
+
+export function buildBusinessReportWorkbook(
+    data: BusinessReport,
+): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    addSummarySheet(workbook, "Tong quan", [
+        { label: "Tổng số hộ kinh doanh", value: data.total },
+        { label: "Tổng số công ty", value: data.totalCompanies },
+    ]);
+    addTableSheet(
+        workbook,
+        "Theo trang thai",
+        [
+            { header: "Trạng thái", key: "label", width: 25 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byStatus,
+    );
+    addTableSheet(
+        workbook,
+        "Theo loai hinh",
+        [
+            { header: "Loại hình kinh doanh", key: "businessType", width: 30 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byBusinessType,
+    );
+    addTableSheet(
+        workbook,
+        "Theo cum dan cu",
+        [
+            { header: "Cụm dân cư", key: "cluster", width: 25 },
+            { header: "Số lượng", key: "count", width: 15 },
+        ],
+        data.byCluster,
+    );
     return workbook;
 }

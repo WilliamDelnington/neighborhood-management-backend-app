@@ -6,6 +6,7 @@ export interface IRole extends Document {
     description?: string;
     permissions: string[];
     allowedComplaintCategories?: string[];
+    allowedRequestTypes?: string[];
     system: boolean;
     active: boolean;
     sortOrder: number;
@@ -30,6 +31,9 @@ const RoleSchema = new Schema<IRole>(
         // Khong dat default [] - can phan biet "chua cau hinh" (undefined, xem
         // tat ca nhu truoc day) voi "admin da chot chi cho xem mot so nhom" ([]).
         allowedComplaintCategories: { type: [String], default: undefined },
+        // Cung quy uoc voi allowedComplaintCategories: undefined = khong gioi
+        // han loai yeu cau duoc gui, [] = admin da chot khong cho gui loai nao.
+        allowedRequestTypes: { type: [String], default: undefined },
         system: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
         sortOrder: { type: Number, default: 0 },

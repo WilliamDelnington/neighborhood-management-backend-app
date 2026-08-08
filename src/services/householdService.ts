@@ -8,15 +8,23 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
-import { clusterScopeFilter, areaScopeFilter } from "@/lib/rbac";
+import { clusterScopeFilter, areaScopeFilter, userHasPermission } from "@/lib/rbac";
 import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
+import { createNotification } from "@/services/notificationService";
 import {
+    assertHouseRecordAllowsDeclaration,
     assertHouseRecordInScope,
     assertHouseRecordVerifiedForMembers,
+    assertVerificationEditable,
     getOwnedHouseRecordIds,
-    resolveOwnerActingUserId,
+    resolveInitialVerificationStatus,
 } from "@/services/houseRecordService";
+import {
+    isHouseOwnerActor,
+    resolveActiveHouseOwnerActingUserIds,
+} from "@/services/houseOwnershipService";
+import { VERIFICATION_STATUS_LABEL, type VerificationStatus } from "@/types";
 import type {
     CreateHouseholdInput,
     UpdateHouseholdInput,
@@ -104,10 +112,11 @@ export async function createHousehold(
         input.houseId,
     );
     if (houseRecord) {
-        // Nha so phai da duoc xac thuc moi cho dang ky ho dan vao - tranh
-        // truong hop dang ky trung lap/gia mao dia chi truoc khi nha so duoc
-        // nhan vien duyet.
-        assertHouseRecordVerifiedForMembers(actorUser, houseRecord);
+        // Chi chan dang ky ho dan khi ho so nha da bi tu choi hoac bi khoa -
+        // van cho dang ky ke ca khi nha con "unverified"/"pending". Ho dan tao
+        // ra se o trang thai "unverified" (hoac "pending" neu nha da "verified"
+        // san) cho toi khi duoc xac thuc rieng (xem resolveInitialVerificationStatus).
+        assertHouseRecordAllowsDeclaration(actorUser, houseRecord);
     }
     // Cum dan cu/duong pho luon lay theo nha so lien ket (neu co) de tranh ho
     // dan va nha so lech nhau; chi khi khong co nha so lien ket (ho dan mo
@@ -153,6 +162,7 @@ export async function createHousehold(
         ownershipType: input.ownershipType ?? "chinh_chu",
         needsSupport: input.needsSupport ?? false,
         houseId: input.houseId || undefined,
+        status: resolveInitialVerificationStatus(houseRecord),
         note: input.note,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
@@ -322,7 +332,8 @@ export async function getHouseholdById(id: string): Promise<IHousehold> {
 /**
  * Kiem tra quyen truy cap ho dan:
  * - admin: luon duoc phep.
- * - chu nha (nha chua ho dan nay co ownerId trung actor): luon duoc phep.
+ * - nguoi dang thao tac thay chu nha cua nha chua ho dan nay (primary_owner/
+ *   co_owner/authorized_manager - xem isHouseOwnerActor): luon duoc phep.
  * - house_owner khac (khong phai chu nha): khong bao gio duoc phep - phai chan
  *   o day truoc, khong duoc roi xuong kiem tra cum ben duoi vi house_owner
  *   luon co assignedClusters rong nen se "lot" qua kiem tra do.
@@ -334,19 +345,8 @@ export async function assertHouseholdInScope(
 ): Promise<void> {
     if (user.roles.includes("admin")) return;
 
-    if (household.houseId) {
-        const houseRecord = await HouseRecord.findById(household.houseId).select(
-            "ownerId ownerType",
-        );
-        if (houseRecord) {
-            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-            if (
-                ownerActingUserId &&
-                String(ownerActingUserId) === String(user._id)
-            ) {
-                return;
-            }
-        }
+    if (household.houseId && (await isHouseOwnerActor(household.houseId, user._id))) {
+        return;
     }
 
     if (user.roles.includes("house_owner")) {
@@ -399,6 +399,8 @@ export async function updateHousehold(
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+
+    assertVerificationEditable(actorUser, household.status, "Hộ dân");
 
     // House_owner khong duoc go lien ket nha so khoi ho dan cua minh - ho dan
     // phu thuoc vao nha so, go lien ket se tao ra ho dan "mo coi" ma house_owner
@@ -486,6 +488,111 @@ export async function updateHousehold(
         targetModel: "Household",
         targetId: household._id,
         metadata: patch,
+    });
+
+    return household;
+}
+
+/**
+ * Chuyen trang thai xac thuc cua ho dan, ap dung dung mot trong ba luat sau
+ * (mirror transitionHouseRecordStatus cua nha so - xem houseRecordService.ts):
+ * - admin: duoc chuyen sang bat ky trang thai nao, bat ke trang thai hien tai.
+ * - chu ho (chu nha dang thao tac thay - isHouseOwnerActor - hoac chinh tai
+ *   khoan headOfHouseholdUserId cua ho dan nay): chi duoc gui/gui lai de duyet,
+ *   tuc la tu "unverified" hoac "denied" chuyen sang "pending".
+ * - nhan vien co quyen "households.verify" (kiem tra rieng o day, khong chi
+ *   dua vao assertHouseholdInScope): chi duoc duyet/tu choi khi ho dan dang
+ *   "pending", va phai nam trong pham vi cua minh.
+ * Ho dan da bi khoa thi khong ai ngoai admin duoc doi trang thai.
+ */
+export async function transitionHouseholdStatus(
+    actorUser: IUser,
+    id: string,
+    targetStatus: VerificationStatus,
+    note?: string,
+): Promise<IHousehold> {
+    const household = await Household.findById(id);
+    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+
+    const isAdmin = actorUser.roles.includes("admin");
+    const isOwner =
+        (household.houseId &&
+            (await isHouseOwnerActor(household.houseId, actorUser._id))) ||
+        (household.headOfHouseholdUserId &&
+            String(household.headOfHouseholdUserId) === String(actorUser._id));
+
+    if (!isAdmin) {
+        if (household.status === "locked") {
+            throw new HttpError(
+                "Hộ dân đã bị khóa, chỉ quản trị viên mới có thể thay đổi trạng thái",
+                403,
+            );
+        }
+
+        if (isOwner) {
+            const canSubmit =
+                targetStatus === "pending" &&
+                ["unverified", "denied"].includes(household.status);
+            if (!canSubmit) {
+                throw new HttpError(
+                    "Chủ hộ chỉ được gửi duyệt từ trạng thái chưa xác thực hoặc bị từ chối",
+                    403,
+                );
+            }
+        } else {
+            if (!(await userHasPermission(actorUser, "households.verify"))) {
+                throw new HttpError(
+                    "Bạn không có quyền duyệt/từ chối hộ dân",
+                    403,
+                );
+            }
+            await assertHouseholdInScope(actorUser, household);
+            const canVerify =
+                household.status === "pending" &&
+                ["verified", "denied"].includes(targetStatus);
+            if (!canVerify) {
+                throw new HttpError(
+                    "Chỉ được duyệt hoặc từ chối hộ dân đang chờ duyệt",
+                    403,
+                );
+            }
+        }
+    }
+
+    const previousStatus = household.status;
+    household.status = targetStatus;
+    household.updatedBy = actorUser._id as any;
+    if (targetStatus === "verified") household.approvalNote = note;
+    if (targetStatus === "denied") household.denialReason = note;
+    await household.save();
+
+    const ownerActingUserIds = household.houseId
+        ? await resolveActiveHouseOwnerActingUserIds(household.houseId)
+        : [];
+    if (
+        ownerActingUserIds.length &&
+        previousStatus !== targetStatus &&
+        (targetStatus === "verified" || targetStatus === "denied")
+    ) {
+        await createNotification({
+            title: "Kết quả xác thực hộ dân",
+            body: `Hộ dân ${household.code} ${
+                VERIFICATION_STATUS_LABEL[targetStatus]
+            }${note ? `: ${note}` : ""}`,
+            type: "household.status_changed",
+            targetUserIds: ownerActingUserIds,
+            relatedModel: "Household",
+            relatedId: household._id,
+            createdBy: actorUser._id,
+        });
+    }
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "household.status_change",
+        targetModel: "Household",
+        targetId: household._id,
+        metadata: { previousStatus, status: targetStatus, note },
     });
 
     return household;

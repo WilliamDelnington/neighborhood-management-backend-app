@@ -1,20 +1,27 @@
 import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import { requireUser, requireAnyPermission } from "@/lib/rbac";
-import { signUploadToken } from "@/lib/auth";
-import { HouseRecord, Business } from "@/models";
 import {
-    assertHouseRecordInScope,
-    resolveOwnerActingUserId,
-} from "@/services/houseRecordService";
+    requireUser,
+    requireAnyPermission,
+    requirePermission,
+} from "@/lib/rbac";
+import { signUploadToken } from "@/lib/auth";
+import { HouseRecord, Business, Complaint } from "@/models";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 
 export const dynamic = "force-dynamic";
 
 const UPLOAD_TOKEN_TTL_SECONDS = 10 * 60;
 
 const createUploadTokenSchema = z.object({
-    relatedModel: z.enum(["HouseRecord", "Business", "BusinessDocument"]),
+    relatedModel: z.enum([
+        "HouseRecord",
+        "Business",
+        "BusinessDocument",
+        "Complaint",
+    ]),
     relatedId: z.string().min(1),
 });
 
@@ -53,6 +60,27 @@ export async function POST(req: Request) {
                 );
             }
             await assertHouseRecordInScope(user, houseRecord);
+        } else if (body.relatedModel === "Complaint") {
+            // Chi chu phan anh moi duoc dinh kem tai lieu (xem quyet dinh
+            // "owner only" trong ke hoach) - khong co nhanh cho staff nhu
+            // House/Business. relatedId co the la mot phan anh da ton tai
+            // (chu phan anh dinh kem them tu trang chi tiet) hoac mot draftId
+            // chua ung voi ban ghi nao (nguoi dung dang dinh kem file ngay
+            // tren form tao moi, truoc khi bam "Gui"). Voi truong hop draft,
+            // khong co ban ghi nao de kiem tra chu so huu - ban than viec cap
+            // duoc token (sau khi da qua requirePermission ben tren) da la du
+            // dieu kien, vi chua ai khac co the da so huu mot id chua ton tai.
+            await requirePermission(user, "complaints.create");
+            const complaint = await Complaint.findById(body.relatedId);
+            if (
+                complaint &&
+                String(complaint.createdByUserId) !== String(user._id)
+            ) {
+                throw new HttpError(
+                    "Chỉ chủ phản ánh mới được đính kèm tài liệu",
+                    403,
+                );
+            }
         } else {
             // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
             // len giay to - khac voi nhanh "Business" o tren (nhan vien co
@@ -68,9 +96,7 @@ export async function POST(req: Request) {
                 );
             }
             const isAdmin = user.roles.includes("admin");
-            const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-            const isOwner =
-                !!ownerActingUserId && String(ownerActingUserId) === String(user._id);
+            const isOwner = await isHouseOwnerActor(houseRecord._id, user._id);
             if (!isAdmin && !isOwner) {
                 throw new HttpError(
                     "Chỉ chủ hộ kinh doanh mới được tải lên giấy tờ",

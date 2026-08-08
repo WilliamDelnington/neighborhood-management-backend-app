@@ -27,6 +27,7 @@ export async function PATCH(
             user,
             params.id,
             body.status,
+            body.note,
         );
         return apiSuccess(houseRecord, "Cap nhat trang thai nha so thanh cong");
     } catch (err) {

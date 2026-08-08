@@ -1,17 +1,13 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
 import {
-    LOAI_SO_HUU,
     MUC_DO_AN_NINH,
     TINH_TRANG_THEO_DOI_AN_NINH,
-    type LoaiSoHuu,
     type MucDoAnNinh,
     type TinhTrangTheoDoiAnNinh,
 } from "@/types";
 
 export interface ISecurityRecord extends Document {
     houseId: mongoose.Types.ObjectId;
-    ownershipType: LoaiSoHuu;
-    renterCount: number;
     hasCamera: boolean;
     hasSecurityComplaint: boolean;
     level: MucDoAnNinh;
@@ -34,12 +30,6 @@ const SecurityRecordSchema = new Schema<ISecurityRecord>(
             required: true,
             index: true,
         },
-        ownershipType: {
-            type: String,
-            enum: LOAI_SO_HUU,
-            default: "chinh_chu",
-        },
-        renterCount: { type: Number, default: 0 },
         hasCamera: { type: Boolean, default: false },
         hasSecurityComplaint: { type: Boolean, default: false },
         level: {

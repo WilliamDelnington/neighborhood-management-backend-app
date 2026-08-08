@@ -66,11 +66,13 @@ export type ScopeType = typeof SCOPE_TYPES[number];
 // ---------------------------------------------------------------------------
 // Chu so huu (nha so co the thuoc ca nhan hoac to chuc)
 // ---------------------------------------------------------------------------
-export const OWNER_TYPE = ["user", "organization"] as const;
+export const OWNER_TYPE = ["user", "organization", "person"] as const;
 export type OwnerType = typeof OWNER_TYPE[number];
 export const OWNER_TYPE_LABEL: Record<OwnerType, string> = {
     user: "Cá nhân",
     organization: "Tổ chức",
+    // Danh tinh duoc khai bao, khong co tai khoan dang nhap - xem models/Person.ts.
+    person: "Cá nhân (chưa có tài khoản)",
 };
 
 export const ORGANIZATION_TYPE = [
@@ -88,6 +90,53 @@ export const ORGANIZATION_TYPE_LABEL: Record<OrganizationType, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Quan he so huu nha (House <-> chu nha/to chuc la nhieu-nhieu, xem model
+// HouseOwnership) - HouseRecord.ownerId/ownerType chi con la cache cua quan he
+// primary_owner dang active, de cac noi doc nhanh (populate) khong phai join.
+// ---------------------------------------------------------------------------
+export const HOUSE_OWNERSHIP_RELATIONSHIP_TYPES = [
+    "primary_owner",
+    "co_owner",
+    "authorized_manager",
+    "legal_representative",
+    "contact_person",
+] as const;
+export type HouseOwnershipRelationshipType =
+    typeof HOUSE_OWNERSHIP_RELATIONSHIP_TYPES[number];
+export const HOUSE_OWNERSHIP_RELATIONSHIP_TYPE_LABEL: Record<
+    HouseOwnershipRelationshipType,
+    string
+> = {
+    primary_owner: "Chủ sở hữu chính",
+    co_owner: "Đồng sở hữu",
+    authorized_manager: "Người được ủy quyền quản lý",
+    legal_representative: "Người đại diện pháp luật",
+    contact_person: "Người liên hệ",
+};
+
+// Cac quan he duoc coi la "dang thao tac thay chu nha" (duoc phep thao tac
+// nhu chu nha that su, nhan thong bao ket qua duyet...) - legal_representative
+// va contact_person chi mang tinh thong tin/lien he, khong co quyen thao tac.
+export const ACTING_HOUSE_OWNERSHIP_RELATIONSHIP_TYPES: HouseOwnershipRelationshipType[] =
+    ["primary_owner", "co_owner", "authorized_manager"];
+
+export const HOUSE_OWNERSHIP_VERIFICATION_STATUS = [
+    "waiting_verification",
+    "verified",
+    "rejected",
+] as const;
+export type HouseOwnershipVerificationStatus =
+    typeof HOUSE_OWNERSHIP_VERIFICATION_STATUS[number];
+export const HOUSE_OWNERSHIP_VERIFICATION_STATUS_LABEL: Record<
+    HouseOwnershipVerificationStatus,
+    string
+> = {
+    waiting_verification: "Chờ xác thực",
+    verified: "Đã xác thực",
+    rejected: "Bị từ chối",
+};
+
+// ---------------------------------------------------------------------------
 // Nha so
 // ---------------------------------------------------------------------------
 export const HOUSE_RECORD_STATUS = [
@@ -95,6 +144,7 @@ export const HOUSE_RECORD_STATUS = [
     "pending",
     "verified",
     "denied",
+    "needs_update",
     "locked",
 ] as const;
 export type HouseRecordStatus = typeof HOUSE_RECORD_STATUS[number];
@@ -103,27 +153,57 @@ export const HOUSE_RECORD_STATUS_LABEL: Record<HouseRecordStatus, string> = {
     pending: "chờ duyệt",
     verified: "đã xác thực",
     denied: "bị từ chối",
+    needs_update: "cần cập nhật",
     locked: "đã khóa",
 };
 
-// Ho kinh doanh: trang thai xac thuc theo tung loai giay to (xem
-// businessDocumentService.recomputeStatus) - KHONG con dung chung enum voi
-// nha so nua. "pending_approval" = da co it nhat 1 giay to duoc nop cho
-// nguoi duyet, "need_supplement" = co giay to bat buoc bi tu choi, can bo
-// sung lai. "verified" chi dat duoc khi TAT CA giay to bat buoc da duoc
-// duyet boi dung vai tro phu trach.
-export const BUSINESS_STATUS = [
-    "unverified",
-    "pending_approval",
-    "need_supplement",
-    "verified",
+// Trang thai vat ly - doc lap voi `status` o tren (do la trang thai HO SO/xac
+// thuc, khong phai tinh trang cong trinh thuc te). Tach rieng theo dac ta:
+// khong gop "nha dang xay" voi "ho so chua duyet" vao chung mot truong.
+export const HOUSE_PHYSICAL_STATUS = [
+    "not_handed_over",
+    "not_renovated",
+    "under_construction",
+    "under_renovation",
+    "completed",
+    "in_use",
+    "vacant",
+    "damaged",
 ] as const;
-export type BusinessStatus = typeof BUSINESS_STATUS[number];
-export const BUSINESS_STATUS_LABEL: Record<BusinessStatus, string> = {
+export type HousePhysicalStatus = typeof HOUSE_PHYSICAL_STATUS[number];
+export const HOUSE_PHYSICAL_STATUS_LABEL: Record<HousePhysicalStatus, string> = {
+    not_handed_over: "Chưa bàn giao",
+    not_renovated: "Chưa sửa",
+    under_construction: "Đang hoàn thiện",
+    under_renovation: "Đang sửa",
+    completed: "Đã hoàn thiện",
+    in_use: "Đang sử dụng",
+    vacant: "Để trống",
+    damaged: "Xuống cấp",
+};
+
+// Trang thai xac thuc dung chung cho ca House/Household/Business - ba thuc
+// the nay co trang thai xac thuc DOC LAP voi nhau (khong con Household/Business
+// dung chung mot enum "vong doi" rieng nhu DeclaredRecordStatus truoc day), chi
+// phu thuoc nhau mot chieu qua cascade khi House chuyen sang "verified" (xem
+// houseRecordService.resolveInitialVerificationStatus va
+// transitionHouseRecordStatus). Household dung enum nay truc tiep; Business
+// gop ca ket qua duyet giay to (truoc day la BusinessStatus rieng) vao chung
+// truong nay - xem businessDocumentService.recomputeBusinessStatus.
+export const VERIFICATION_STATUS = [
+    "unverified",
+    "pending",
+    "verified",
+    "denied",
+    "locked",
+] as const;
+export type VerificationStatus = typeof VERIFICATION_STATUS[number];
+export const VERIFICATION_STATUS_LABEL: Record<VerificationStatus, string> = {
     unverified: "chưa xác thực",
-    pending_approval: "đang chờ duyệt",
-    need_supplement: "cần bổ sung hồ sơ",
+    pending: "chờ duyệt",
     verified: "đã xác thực",
+    denied: "bị từ chối",
+    locked: "đã khóa",
 };
 
 // Trang thai xac thuc cua tung giay to (BusinessDocument) rieng le.
@@ -140,6 +220,20 @@ export const BUSINESS_DOCUMENT_STATUS_LABEL: Record<
     pending: "chờ duyệt",
     approved: "đã duyệt",
     rejected: "bị từ chối, cần bổ sung",
+};
+
+// ---------------------------------------------------------------------------
+// Don vi su dung cua nha (HouseUsageUnit) - lop bo sung, KHONG thay the
+// houseId truc tiep tren Household/Business/Company: mot nha so co the duoc
+// chia thanh nhieu don vi (vd tang/phong) cho hoc dan/ho kinh doanh/cong ty su
+// dung, xem models/HouseUsageUnit.ts.
+// ---------------------------------------------------------------------------
+export const HOUSE_USAGE_TYPE = ["household", "business", "company"] as const;
+export type HouseUsageType = typeof HOUSE_USAGE_TYPE[number];
+export const HOUSE_USAGE_TYPE_LABEL: Record<HouseUsageType, string> = {
+    household: "Hộ dân",
+    business: "Hộ kinh doanh",
+    company: "Công ty",
 };
 
 // ---------------------------------------------------------------------------
@@ -301,6 +395,38 @@ export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
 };
 
 // ---------------------------------------------------------------------------
+// Yeu cau cong viec (Request) - thay the cac luong "giao viec" rieng le cua
+// PCCC/An ninh bang mot model chung, mo rong duoc cho cac loai yeu cau khac
+// sau nay chi bang cach them gia tri vao REQUEST_TYPES (+ mot quyen
+// "{type}.assign" moi neu can gioi han nguoi co the nhan).
+// ---------------------------------------------------------------------------
+export const REQUEST_TYPES = ["pccc", "security", "other"] as const;
+export type RequestType = typeof REQUEST_TYPES[number];
+export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
+    pccc: "PCCC",
+    security: "An ninh",
+    other: "Khác",
+};
+
+export const REQUEST_STATUS = [
+    "pending",
+    "acknowledged",
+    "in_progress",
+    "needs_info",
+    "awaiting_confirmation",
+    "resolved",
+] as const;
+export type RequestStatus = typeof REQUEST_STATUS[number];
+export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
+    pending: "Chưa xử lý",
+    acknowledged: "Đã tiếp nhận",
+    in_progress: "Đang xử lý",
+    needs_info: "Yêu cầu bổ sung",
+    awaiting_confirmation: "Chờ xác nhận",
+    resolved: "Đã hoàn thành",
+};
+
+// ---------------------------------------------------------------------------
 // Cuoc hop
 // ---------------------------------------------------------------------------
 export const DANG_KY_HOP = ["co", "khong", "uy_quyen"] as const;
@@ -441,6 +567,6 @@ export type SessionTokenPayload = {
 export type UploadTokenPayload = {
     purpose: "upload";
     userId: string;
-    relatedModel: "HouseRecord" | "Business" | "BusinessDocument";
+    relatedModel: "HouseRecord" | "Business" | "BusinessDocument" | "Complaint";
     relatedId: string;
 };

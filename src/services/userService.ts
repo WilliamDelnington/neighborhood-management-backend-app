@@ -1,20 +1,63 @@
-import { Role as RoleModel, RoleAssignment, User, type IUser } from "@/models";
+import {
+    HouseRecord,
+    Role as RoleModel,
+    RoleAssignment,
+    User,
+    type IUser,
+} from "@/models";
+import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
 import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
+import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
 import type {
     AssignRoleInput,
     CreateHouseOwnerInput,
+    LockUserStatusInput,
     UpdateUserInput,
 } from "@/validators/user";
 import type { Role as RoleType } from "@/types";
 
+/**
+ * Danh sach userId cua cac house_owner dang thao tac thay chu (primary_owner/
+ * co_owner/authorized_manager, da resolve to chuc) tren bat ky Nha so nao
+ * thuoc to dan pho actorUser phu trach (neighborhoodId/assignedNeighborhoodIds)
+ * - day la toan bo pham vi "tai khoan" ma mot to truong duoc phep thay/xem
+ * (users.read/users.lock KHONG con la quyen khong gioi han nhu users.update -
+ * xem systemRoles.ts). Rong neu actorUser chua duoc phan cong to dan pho nao.
+ */
+async function getHouseOwnerIdsInLeaderScope(
+    actorUser: IUser,
+): Promise<Types.ObjectId[]> {
+    const allowedNeighborhoodIds = [
+        actorUser.neighborhoodId,
+        ...(actorUser.assignedNeighborhoodIds || []),
+    ]
+        .filter(Boolean)
+        .map(String);
+    if (allowedNeighborhoodIds.length === 0) return [];
+
+    const houseIds = await HouseRecord.find({
+        neighborhoodId: { $in: allowedNeighborhoodIds },
+    }).distinct("_id");
+    return getActingOwnerUserIdsForHouses(houseIds);
+}
+
+/**
+ * Danh sach nguoi dung. Admin xem toan bo he thong (khong gioi han) - cac vai
+ * tro khac (hien tai chi neighborhood_leader co users.read) CHI xem duoc tai
+ * khoan house_owner dang so huu nha thuoc to dan pho minh phu trach (xem
+ * getHouseOwnerIdsInLeaderScope) - khong duoc xem tai khoan cua nhan vien/
+ * admin khac du co goi voi bo loc role nao. Tranh lo toan bo danh sach nguoi
+ * dung he thong nhu truoc khi co scope nay.
+ */
 export async function listUsers(params: {
     page: number;
     limit: number;
     search?: string;
     role?: RoleType;
+    actorUser: IUser;
 }) {
     const filter: Record<string, unknown> = {};
     if (params.role) filter.roles = params.role;
@@ -23,6 +66,11 @@ export async function listUsers(params: {
             { displayName: { $regex: params.search, $options: "i" } },
             { phone: { $regex: params.search, $options: "i" } },
         ];
+    }
+    if (!params.actorUser.roles.includes("admin")) {
+        const scopedIds = await getHouseOwnerIdsInLeaderScope(params.actorUser);
+        filter._id = { $in: scopedIds };
+        filter.roles = "house_owner";
     }
     const [items, total] = await Promise.all([
         User.find(filter)
@@ -50,6 +98,51 @@ export async function listAssignableStaff(roles: RoleType[]) {
         .select("displayName")
         .sort({ displayName: 1 });
     return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
+}
+
+/**
+ * Tim chu ho (house_owner) dang hoat dong theo ten/so dien thoai - dung cho
+ * man chon "nguoi nhan cu the" khi gui Thong bao (khac assignable-staff: doi
+ * tuong la cu dan, khong gan voi permission "assign" nao).
+ */
+export async function searchResidentUsers(
+    search: string,
+    ids?: string[],
+) {
+    // ids duoc truyen khi can "resolve nguoc" mot danh sach id da luu san
+    // (vd hien lai chip nguoi nhan cu the khi sua Thong bao) - bo qua tim
+    // kiem theo ten/sdt trong truong hop nay, tra ve dung nhung id do (khong
+    // gioi han limit 20 nhu tim kiem thong thuong).
+    if (ids && ids.length > 0) {
+        const users = await User.find({ _id: { $in: ids } }).select(
+            "displayName phone",
+        );
+        return users.map(u => ({
+            id: String(u._id),
+            displayName: u.displayName,
+            phone: u.phone,
+        }));
+    }
+
+    const filter: Record<string, unknown> = {
+        roles: "house_owner",
+        status: "active",
+    };
+    if (search.trim()) {
+        filter.$or = [
+            { displayName: { $regex: search.trim(), $options: "i" } },
+            { phone: { $regex: search.trim(), $options: "i" } },
+        ];
+    }
+    const users = await User.find(filter)
+        .select("displayName phone")
+        .sort({ displayName: 1 })
+        .limit(20);
+    return users.map(u => ({
+        id: String(u._id),
+        displayName: u.displayName,
+        phone: u.phone,
+    }));
 }
 
 /**
@@ -97,10 +190,87 @@ export async function createHouseOwnerByStaff(
     return sanitizeUser(user);
 }
 
-export async function getUserById(id: string) {
+/**
+ * Xem chi tiet mot nguoi dung. Admin xem duoc bat ky ai - cac vai tro khac chi
+ * xem duoc neu targetId nam trong pham vi cua actorUser (xem
+ * getHouseOwnerIdsInLeaderScope/assertUserInLeaderScope), cung mot quy tac voi
+ * listUsers.
+ */
+export async function getUserById(actorUser: IUser, id: string) {
     const user = await User.findById(id);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!actorUser.roles.includes("admin")) {
+        await assertUserInLeaderScope(actorUser, user);
+    }
     return await sanitizeUser(user);
+}
+
+/**
+ * Nem HttpError(403) neu actorUser (to truong) khong duoc phep xem/khoa tai
+ * khoan targetUser: targetUser phai la house_owner VA dang thao tac thay chu
+ * tren it nhat mot Nha so thuoc to dan pho actorUser phu trach (xem
+ * getHouseOwnerIdsInLeaderScope). Dung chung cho getUserById va lockUserStatus
+ * khi actor khong phai admin - day la quyen HEP hon users.update (khong cho
+ * actor sua bat ky truong nao khac cua targetUser ngoai status - xem
+ * users.lock trong systemRoles.ts).
+ */
+async function assertUserInLeaderScope(
+    actorUser: IUser,
+    targetUser: IUser,
+): Promise<void> {
+    if (!targetUser.roles.includes("house_owner")) {
+        throw new HttpError(
+            "Tổ trưởng chỉ được xem/khóa tài khoản chủ nhà",
+            403,
+        );
+    }
+    const scopedIds = await getHouseOwnerIdsInLeaderScope(actorUser);
+    const inScope = scopedIds.some(
+        id => String(id) === String(targetUser._id),
+    );
+    if (!inScope) {
+        throw new HttpError(
+            "Chủ nhà này không thuộc tổ dân phố bạn phụ trách",
+            403,
+        );
+    }
+}
+
+/**
+ * Khoa/mo tai khoan chu nha - dung cho ca admin (users.update, khong gioi han)
+ * lan to truong (users.lock, gioi han qua assertUserInLeaderScope). Ly do bat
+ * buoc (xem lockUserStatusSchema) va luon duoc ghi vao audit log cung voi
+ * status moi.
+ */
+export async function lockUserStatus(
+    actorUser: IUser,
+    targetId: string,
+    input: LockUserStatusInput,
+) {
+    const target = await User.findById(targetId);
+    if (!target) throw new HttpError("Khong tim thay nguoi dung", 404);
+
+    if (!actorUser.roles.includes("admin")) {
+        await assertUserInLeaderScope(actorUser, target);
+    }
+
+    const statusChanged = target.status !== input.status;
+    target.status = input.status;
+    target.updatedBy = actorUser._id as any;
+    if (statusChanged && input.status === "locked") {
+        target.sessionVersion += 1;
+    }
+    await target.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.update",
+        targetModel: "User",
+        targetId: target._id,
+        metadata: { status: input.status, statusReason: input.statusReason },
+    });
+
+    return await sanitizeUser(target);
 }
 
 export async function updateUserByAdmin(

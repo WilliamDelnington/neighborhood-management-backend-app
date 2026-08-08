@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LOAI_SO_HUU } from "@/types";
+import { LOAI_SO_HUU, VERIFICATION_STATUS } from "@/types";
 
 // memberCount KHONG nam trong schema nay - so nhan khau duoc he thong tu tinh
 // (dua tren so ban ghi Citizen thuc te thuoc ho dan), khong cho phep nhap tay
@@ -27,3 +27,16 @@ export type CreateHouseholdInput = z.infer<typeof createHouseholdSchema>;
 
 export const updateHouseholdSchema = createHouseholdSchema.partial();
 export type UpdateHouseholdInput = z.infer<typeof updateHouseholdSchema>;
+
+export const updateHouseholdStatusSchema = z
+    .object({
+        status: z.enum(VERIFICATION_STATUS),
+        note: z.string().optional(),
+    })
+    .refine(data => data.status !== "denied" || !!data.note?.trim(), {
+        message: "Vui long nhap ly do khi tu choi ho dan",
+        path: ["note"],
+    });
+export type UpdateHouseholdStatusInput = z.infer<
+    typeof updateHouseholdStatusSchema
+>;

@@ -66,6 +66,7 @@ export async function getDashboardSummary(actorUser: IUser) {
 
     const [
         totalHouseholds,
+        totalHouses,
         totalCitizens,
         rentalHouseholds,
         householdsNeedingSupport,
@@ -82,6 +83,9 @@ export async function getDashboardSummary(actorUser: IUser) {
         urgentSecurityCount,
     ] = await Promise.all([
         Household.countDocuments(householdFilter),
+        HouseRecord.countDocuments(
+            isClusterScoped ? { _id: { $in: scopedHouseIds } } : {},
+        ),
         Citizen.countDocuments(citizenFilter),
         Household.countDocuments({ ...householdFilter, ownershipType: "cho_thue" }),
         Household.countDocuments({ ...householdFilter, needsSupport: true }),
@@ -150,6 +154,7 @@ export async function getDashboardSummary(actorUser: IUser) {
 
     return {
         totalHouseholds,
+        totalHouses,
         totalCitizens,
         rentalHouseholds,
         householdsNeedingSupport,

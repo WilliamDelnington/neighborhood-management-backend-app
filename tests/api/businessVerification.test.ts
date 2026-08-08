@@ -45,22 +45,35 @@ async function patchStatus(businessId: string, status: string, headers: any) {
 
 /**
  * Luong xin duyet/duyet/tu choi binh thuong khong con di qua route nay - xem
- * tests/api/businessDocumentVerification.test.ts. Route nay gio chi la mot
- * cong cu ghi de thu cong danh cho admin (vd reset lai ho so).
+ * tests/api/businessDocumentVerification.test.ts. Route nay gio phuc vu hai
+ * truong hop: admin ghi de tuy y (vd reset lai ho so), va chu ho gui lai
+ * ("denied" -> "pending") - xem businessService.transitionBusinessStatus.
  */
-describe("Ghi de thu cong trang thai ho kinh doanh (admin-only override)", () => {
+describe("Chuyen trang thai thu cong ho kinh doanh (admin override + chu ho gui lai)", () => {
     it("moi tao mac dinh la unverified", async () => {
         const { business } = await setupOwnerWithBusiness("Cụm A");
         expect(business.status).toBe("unverified");
     });
 
-    it("chu ho khong duoc tu doi trang thai (khong phai admin)", async () => {
+    it("chu ho khong duoc tu doi trang thai tu unverified (chi duoc gui lai tu denied)", async () => {
         const { business, headers } = await setupOwnerWithBusiness("Cụm A");
-        const res = await patchStatus(business._id, "pending_approval", headers);
+        const res = await patchStatus(business._id, "pending", headers);
         expect(res.status).toBe(403);
     });
 
-    it("nhan vien co businesses.verify cung khong duoc dung route nay (chi admin)", async () => {
+    it("chu ho gui lai duoc tu denied ve pending", async () => {
+        const { business, headers } = await setupOwnerWithBusiness("Cụm A");
+        const admin = await createTestUser({ roles: ["admin"] });
+        const adminHeaders = await authHeaders(admin);
+        await patchStatus(business._id, "denied", adminHeaders);
+
+        const res = await patchStatus(business._id, "pending", headers);
+        const json = await readJson(res);
+        expect(res.status).toBe(200);
+        expect(json.data.status).toBe("pending");
+    });
+
+    it("nhan vien co businesses.verify khong duoc dung route nay (khong phai chu ho, khong phai admin)", async () => {
         const { business } = await setupOwnerWithBusiness("Cụm A");
         const leader = await createTestUser({
             roles: ["neighborhood_leader"],

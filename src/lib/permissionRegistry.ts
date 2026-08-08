@@ -27,6 +27,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "users.read", label: "Xem người dùng" },
             { key: "users.create", label: "Tạo tài khoản chủ hộ" },
             { key: "users.update", label: "Cập nhật người dùng" },
+            {
+                key: "users.lock",
+                label:
+                    "Khóa / mở khóa tài khoản chủ nhà (giới hạn theo tổ dân phố phụ trách)",
+            },
             { key: "users.assign_roles", label: "Gán / thu hồi vai trò" },
         ],
     },
@@ -61,6 +66,7 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "households.create", label: "Tạo hộ dân" },
             { key: "households.update", label: "Cập nhật hộ dân" },
             { key: "households.delete", label: "Xóa hộ dân" },
+            { key: "households.verify", label: "Duyệt / từ chối hộ dân" },
         ],
     },
     {
@@ -101,6 +107,31 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
                 key: "businesses.lock",
                 label: "Khóa / mở khóa hộ kinh doanh",
             },
+        ],
+    },
+    {
+        key: "companies",
+        label: "Công ty",
+        permissions: [
+            { key: "companies.read", label: "Xem công ty" },
+            { key: "companies.create", label: "Tạo công ty" },
+            { key: "companies.update", label: "Cập nhật công ty" },
+            { key: "companies.delete", label: "Xóa công ty" },
+            { key: "companies.verify", label: "Duyệt / từ chối công ty" },
+            { key: "companies.lock", label: "Khóa / mở khóa công ty" },
+        ],
+    },
+    {
+        key: "usage_units",
+        label: "Đơn vị sử dụng nhà",
+        permissions: [
+            { key: "usage_units.read", label: "Xem đơn vị sử dụng" },
+            { key: "usage_units.create", label: "Tạo đơn vị sử dụng" },
+            {
+                key: "usage_units.update",
+                label: "Cập nhật đơn vị sử dụng",
+            },
+            { key: "usage_units.delete", label: "Xóa đơn vị sử dụng" },
         ],
     },
     {
@@ -189,20 +220,42 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "pccc.update", label: "Cập nhật PCCC" },
             {
                 key: "pccc.assign",
-                label: "Giao phụ trách khắc phục (và được chọn làm người phụ trách)",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại PCCC",
             },
         ],
     },
     {
         key: "security",
-        label: "An ninh & Quản lý cư trú",
+        label: "An ninh",
         permissions: [
-            { key: "security.read", label: "Xem an ninh, tạm trú" },
+            { key: "security.read", label: "Xem an ninh" },
             { key: "security.create", label: "Tạo bản ghi an ninh" },
             { key: "security.update", label: "Cập nhật an ninh" },
             {
                 key: "security.assign",
-                label: "Giao theo dõi (và được chọn làm người phụ trách)",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại An ninh",
+            },
+        ],
+    },
+    {
+        key: "residents",
+        label: "Hồ sơ cư trú",
+        permissions: [
+            { key: "residents.read", label: "Xem hồ sơ cư trú" },
+            { key: "residents.create", label: "Tạo hồ sơ cư trú" },
+            { key: "residents.update", label: "Cập nhật hồ sơ cư trú" },
+        ],
+    },
+    {
+        key: "requests",
+        label: "Yêu cầu công việc",
+        permissions: [
+            { key: "requests.create", label: "Tạo / gửi yêu cầu" },
+            { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
+            { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
+            {
+                key: "other.assign",
+                label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại Khác",
             },
         ],
     },

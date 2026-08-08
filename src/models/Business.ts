@@ -1,5 +1,5 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { BUSINESS_STATUS, type BusinessStatus } from "@/types";
+import { VERIFICATION_STATUS, type VerificationStatus } from "@/types";
 
 export interface IBusiness extends Document {
     name: string;
@@ -11,7 +11,14 @@ export interface IBusiness extends Document {
     ownerName?: string;
     phone?: string;
     active: boolean;
-    status: BusinessStatus;
+    // Trang thai xac thuc CUA CHINH ho kinh doanh nay - doc lap voi trang thai
+    // cua nha so cha (xem VerificationStatus o types/index.ts). "pending"/
+    // "verified"/"denied" duoc tinh tu dong tu ket qua duyet tung giay to bat
+    // buoc (xem businessDocumentService.recomputeBusinessStatus); "unverified"
+    // luc moi tao; "locked" chi admin gan duoc.
+    status: VerificationStatus;
+    approvalNote?: string;
+    denialReason?: string;
     note?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -44,15 +51,14 @@ const BusinessSchema = new Schema<IBusiness>(
         ownerName: { type: String, trim: true },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
-        // Trang thai xac thuc duoc tinh tu ket qua duyet tung giay to bat
-        // buoc (xem businessDocumentService.recomputeStatus), khong con la
-        // mot hanh dong duyet/tu choi thu cong nhu truoc.
         status: {
             type: String,
-            enum: BUSINESS_STATUS,
+            enum: VERIFICATION_STATUS,
             default: "unverified",
             index: true,
         },
+        approvalNote: { type: String },
+        denialReason: { type: String },
         note: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
