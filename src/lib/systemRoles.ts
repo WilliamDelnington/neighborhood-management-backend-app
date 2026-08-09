@@ -42,6 +42,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "security.read",
         "residents.read",
         "requests.read",
+        // Du dieu kien duoc chon lam nguoi phu trach khi bi thu gui yeu cau
+        // loai "Khac" (vd van ban/giay to hanh chinh) - thieu quyen nay thi
+        // to truong khong hien ra trong bo chon nguoi nhan cho loai yeu cau
+        // nay (xem eligiblePermissionForType trong requestService.ts).
+        "other.assign",
         "meetings.read",
         "meetings.register",
         "announcements.read",
@@ -54,6 +59,17 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        // Van ban (Cong van/Bao cao/De xuat/Kien nghi...): to truong vua nhan
+        // Cong van tu can bo UBND/bi thu, vua co the gui Bao cao/De xuat len -
+        // chieu gui/nhan hop le do CorrespondenceType.allowedSenderRoles/
+        // allowedReceiverRoles quyet dinh (du lieu), khong con hardcode theo
+        // vai tro - xem correspondenceService.ts. Permission o day chi la cong
+        // tho chung cho ca hai chieu.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
     ],
     secretary: [
         "dashboard.read",
@@ -93,6 +109,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.update",
         "files.delete",
         "notifications.read",
+        // Van ban - cung ly do voi neighborhood_leader (xem ghi chu o do): bi
+        // thu vua co the gui Cong van xuong to truong, vua co the nhan
+        // Bao cao/De xuat tu to truong.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
         // Bi thu ("ward secretary") la nguoi gui yeu cau cong viec (PCCC, an
         // ninh, ...) cho cac can bo lien quan.
         "requests.create",
@@ -159,6 +183,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        // Van ban - can bo UBND gui Cong van xuong to truong (pham vi
+        // phuong/xa - xem User.wardCode/wardScopeFilter trong rbac.ts) va
+        // nhan Bao cao/De xuat tu to truong.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
     ],
     house_owner: [
         "organizations.read",

@@ -42,6 +42,20 @@ export {
     type ISupportTicket,
 } from "./SupportTicket";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
+export {
+    default as CorrespondenceType,
+    type ICorrespondenceType,
+} from "./CorrespondenceType";
+export {
+    default as Correspondence,
+    type ICorrespondence,
+    type CorrespondenceStatus,
+    CORRESPONDENCE_STATUS,
+} from "./Correspondence";
+export {
+    default as CorrespondenceReply,
+    type ICorrespondenceReply,
+} from "./CorrespondenceReply";
 export { default as Meeting, type IMeeting } from "./Meeting";
 export {
     default as MeetingRegistration,

@@ -2,6 +2,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { HttpError } from "@/lib/response";
 import UserModel, { type IUser } from "@/models/User";
 import RoleModel from "@/models/Role";
+import NeighborhoodModel from "@/models/Neighborhood";
 import type { Role, SessionTokenPayload } from "@/types";
 
 /**
@@ -261,6 +262,27 @@ export function neighborhoodScopeFilter(
     );
     if (ids.length === 0) return { _id: { $in: [] } };
     return { [neighborhoodField]: { $in: ids } };
+}
+
+/**
+ * Xay dung dieu kien Mongo de loc theo Neighborhood thuoc phuong/xa (wardCode)
+ * ma nguoi dung (people_committee_official) duoc gan phu trach. Khac cac scope
+ * filter khac o tren, ham nay PHAI await: User chi luu wardCode (xem User.ts),
+ * khong luu san danh sach neighborhoodId, nen can tra Neighborhood.distinct
+ * truoc. Chua duoc gan wardCode nghia la KHONG THAY GI (cung quy uoc voi
+ * neighborhoodScopeFilter), khong phai xem tat ca.
+ */
+export async function wardScopeFilter(
+    user: IUser,
+    neighborhoodField = "neighborhoodId",
+): Promise<Record<string, unknown>> {
+    if (user.roles.includes("admin")) return {};
+    if (!user.wardCode) return { _id: { $in: [] } };
+    const neighborhoodIds = await NeighborhoodModel.distinct("_id", {
+        wardCode: user.wardCode,
+    });
+    if (neighborhoodIds.length === 0) return { _id: { $in: [] } };
+    return { [neighborhoodField]: { $in: neighborhoodIds } };
 }
 
 /**

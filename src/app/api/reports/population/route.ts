@@ -16,9 +16,15 @@ export async function GET(req: Request) {
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "reports.read");
 
-        const data = await getPopulationReport();
-
         const { searchParams } = new URL(req.url);
+        const fromDateRaw = searchParams.get("fromDate");
+        const toDateRaw = searchParams.get("toDate");
+
+        const data = await getPopulationReport(actorUser, {
+            fromDate: fromDateRaw ? new Date(fromDateRaw) : undefined,
+            toDate: toDateRaw ? new Date(toDateRaw) : undefined,
+        });
+
         if (searchParams.get("format") === "excel") {
             const workbook = buildPopulationReportWorkbook(data);
             await writeAuditLog({

@@ -20,7 +20,12 @@ import {
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
-import { REQUEST_TYPE_LABEL, REQUEST_TYPES, type RequestType } from "@/types";
+import {
+    REQUEST_TYPE_LABEL,
+    REQUEST_TYPES,
+    type RequestPriority,
+    type RequestType,
+} from "@/types";
 import type {
     CreateRequestInput,
     UpdateMyRequestStatusInput,
@@ -41,6 +46,12 @@ function withOverdue(
             recipient.status !== "resolved",
     );
 }
+
+const PRIORITY_WEIGHT: Record<RequestPriority, number> = {
+    urgent: 2,
+    high: 1,
+    normal: 0,
+};
 
 type SyncTier = "open" | "active" | "done";
 
@@ -236,6 +247,7 @@ export async function createRequest(
         type: input.type,
         title: input.title,
         description: input.description,
+        priority: input.priority,
         relatedModel: input.relatedModel,
         relatedId: input.relatedId,
         houseId,
@@ -292,12 +304,37 @@ export async function listRequests(params: {
     if (params.relatedId) filter.relatedId = params.relatedId;
     if (params.houseId) filter.houseId = params.houseId;
 
-    if (!params.actorUser.roles.includes("admin")) {
+    const isAdmin = params.actorUser.roles.includes("admin");
+    const canManageAll =
+        isAdmin || (await userHasPermission(params.actorUser, "requests.update"));
+
+    if (!canManageAll) {
+        // Nguoi khong quan ly toan bo yeu cau (vd secretary chi gui yeu cau)
+        // chi duoc thay: yeu cau do minh tao, yeu cau minh la nguoi nhan, hoac
+        // (voi vai tro co pham vi khu vuc thuc su duoc gan, vd to truong) yeu
+        // cau gan voi nha trong khu vuc phu trach. Neu khong co dieu kien nao
+        // trong 3 dieu kien tren duoc gan (vd secretary chua duoc gan cum/to
+        // dan pho nao), KHONG con roi ve "xem tat ca" nhu truoc.
+        const orClauses: Record<string, unknown>[] = [
+            { createdBy: params.actorUser._id },
+        ];
+
         const scopeFilter = areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
-            filter.houseId = { $in: houses.map(h => h._id) };
+            orClauses.push({ houseId: { $in: houses.map(h => h._id) } });
         }
+
+        const recipientRows = await RequestRecipient.find({
+            userId: params.actorUser._id,
+        }).select("requestId");
+        if (recipientRows.length > 0) {
+            orClauses.push({
+                _id: { $in: recipientRows.map(r => r.requestId) },
+            });
+        }
+
+        filter.$or = orClauses;
     }
 
     const [items, total] = await Promise.all([
@@ -355,6 +392,7 @@ export async function updateRequest(
     if (input.title !== undefined) request.title = input.title;
     if (input.description !== undefined) request.description = input.description;
     if (input.note !== undefined) request.note = input.note;
+    if (input.priority !== undefined) request.priority = input.priority;
     if (input.dueDate !== undefined) request.dueDate = new Date(input.dueDate);
     await request.save();
 
@@ -600,6 +638,14 @@ export async function listMyRequests(
         combined = combined.filter(c => c.isOverdue);
     }
 
+    // Yeu cau muc do uu tien cao hon luon xep truoc, giu nguyen thu tu (moi
+    // nhat truoc) trong cung mot muc do uu tien.
+    combined.sort(
+        (a, b) =>
+            PRIORITY_WEIGHT[b.request.priority] -
+            PRIORITY_WEIGHT[a.request.priority],
+    );
+
     const total = combined.length;
     const page = params.page;
     const limit = params.limit;
@@ -612,6 +658,7 @@ export async function listMyRequests(
             type: c.request.type,
             title: c.request.title,
             description: c.request.description,
+            priority: c.request.priority,
             houseId: c.request.houseId,
             dueDate: c.request.dueDate,
             createdBy: c.request.createdBy,
@@ -627,6 +674,65 @@ export async function listMyRequests(
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+}
+
+export type DashboardRequestItem = {
+    _id: string;
+    requestId: string;
+    type: RequestType;
+    title: string;
+    priority: RequestPriority;
+    status: string;
+    dueDate?: Date;
+    isOverdue: boolean;
+};
+
+/**
+ * Danh sach yeu cau chua hoan thanh ma nguoi dung dang dang nhap la nguoi
+ * nhan, dung cho widget "Yeu cau can xu ly" tren dashboard - sap xep muc do
+ * uu tien cao truoc, sau do den han xu ly gan nhat (khong co han xep sau cung).
+ */
+export async function listMyPendingRequestsForDashboard(
+    userId: string,
+    limit = 5,
+): Promise<DashboardRequestItem[]> {
+    const recipientRows = await RequestRecipient.find({
+        userId,
+        status: { $ne: "resolved" },
+    });
+    if (recipientRows.length === 0) return [];
+
+    const requests = await RequestModel.find({
+        _id: { $in: recipientRows.map(r => r.requestId) },
+    }).select("title type priority dueDate");
+    const requestById = new Map(requests.map(r => [String(r._id), r]));
+
+    const combined = recipientRows
+        .filter(r => requestById.has(String(r.requestId)))
+        .map(r => {
+            const request = requestById.get(String(r.requestId))!;
+            return {
+                _id: String(r._id),
+                requestId: String(request._id),
+                type: request.type,
+                title: request.title,
+                priority: request.priority,
+                status: r.status,
+                dueDate: request.dueDate,
+                isOverdue: withOverdue(r, request.dueDate),
+            };
+        });
+
+    combined.sort((a, b) => {
+        const weightDiff = PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority];
+        if (weightDiff !== 0) return weightDiff;
+        if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+        const aDue = a.dueDate ? a.dueDate.getTime() : Infinity;
+        const bDue = b.dueDate ? b.dueDate.getTime() : Infinity;
+        return aDue - bDue;
+    });
+
+    return combined.slice(0, limit);
 }
 
 export async function updateMyRequestStatus(

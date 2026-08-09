@@ -17,9 +17,15 @@ export async function GET(req: Request) {
         // Bao cao an ninh/tam tru lien quan truc tiep den nghiep vu cua cong an khu vuc.
         await requirePermission(actorUser, "reports.read");
 
-        const data = await getSecurityReport();
-
         const { searchParams } = new URL(req.url);
+        const fromDateRaw = searchParams.get("fromDate");
+        const toDateRaw = searchParams.get("toDate");
+
+        const data = await getSecurityReport(actorUser, {
+            fromDate: fromDateRaw ? new Date(fromDateRaw) : undefined,
+            toDate: toDateRaw ? new Date(toDateRaw) : undefined,
+        });
+
         if (searchParams.get("format") === "excel") {
             const workbook = buildSecurityReportWorkbook(data);
             await writeAuditLog({

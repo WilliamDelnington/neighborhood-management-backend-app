@@ -246,6 +246,10 @@ export function sanitizeUser(user: IUser) {
             : undefined,
         assignedNeighborhoodIds: (user.assignedNeighborhoodIds || []).map(String),
         assignedClusters: user.assignedClusters,
+        provinceCode: user.provinceCode,
+        provinceName: user.provinceName,
+        wardCode: user.wardCode,
+        wardName: user.wardName,
         notificationPermission: user.notificationPermission,
         createdAt: user.createdAt,
     };

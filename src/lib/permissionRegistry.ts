@@ -281,6 +281,30 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "correspondence_types",
+        label: "Loại văn bản",
+        permissions: [
+            { key: "correspondence_types.read", label: "Xem loại văn bản" },
+            { key: "correspondence_types.create", label: "Tạo loại văn bản" },
+            {
+                key: "correspondence_types.update",
+                label: "Cập nhật loại văn bản",
+            },
+            { key: "correspondence_types.delete", label: "Xóa loại văn bản" },
+        ],
+    },
+    {
+        key: "correspondences",
+        label: "Văn bản",
+        permissions: [
+            { key: "correspondences.read", label: "Xem văn bản" },
+            { key: "correspondences.create", label: "Soạn văn bản" },
+            { key: "correspondences.update", label: "Cập nhật văn bản" },
+            { key: "correspondences.send", label: "Gửi văn bản" },
+            { key: "correspondences.reply", label: "Phản hồi văn bản" },
+        ],
+    },
+    {
         key: "surveys",
         label: "Khảo sát",
         permissions: [

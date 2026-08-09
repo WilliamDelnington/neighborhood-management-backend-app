@@ -1,11 +1,12 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { REQUEST_TYPES, type RequestType } from "@/types";
+import { REQUEST_PRIORITIES, REQUEST_TYPES, type RequestPriority, type RequestType } from "@/types";
 
 export interface IRequest extends Document {
     type: RequestType;
     title: string;
     description?: string;
     note?: string;
+    priority: RequestPriority;
     relatedModel?: string;
     relatedId?: mongoose.Types.ObjectId;
     houseId?: mongoose.Types.ObjectId;
@@ -23,6 +24,12 @@ const RequestSchema = new Schema<IRequest>(
         title: { type: String, required: true, trim: true },
         description: { type: String, trim: true },
         note: { type: String, trim: true },
+        priority: {
+            type: String,
+            enum: REQUEST_PRIORITIES,
+            default: "normal",
+            index: true,
+        },
         relatedModel: { type: String },
         relatedId: { type: Schema.Types.ObjectId },
         houseId: { type: Schema.Types.ObjectId, ref: "House", index: true },

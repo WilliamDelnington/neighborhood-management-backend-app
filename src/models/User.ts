@@ -18,6 +18,15 @@ export interface IUser extends Document {
     neighborhoodId?: mongoose.Types.ObjectId;
     assignedNeighborhoodIds: mongoose.Types.ObjectId[];
     assignedClusters: string[];
+    // Pham vi phuong/xa cho people_committee_official (Can bo UBND) - cung
+    // dang denormalized nhu Neighborhood.wardCode/wardName (nguon du lieu tu
+    // https://provinces.open-api.vn, khong co collection Ward/Province rieng).
+    // Dung boi wardScopeFilter (rbac.ts) de loc To dan pho/nguoi dung thuoc
+    // phuong/xa nay khi PCO gui Cong Van.
+    provinceCode?: number;
+    provinceName?: string;
+    wardCode?: number;
+    wardName?: string;
     permissions: string[];
     lastLoginAt?: Date;
     notificationPermission: boolean;
@@ -55,6 +64,10 @@ const UserSchema = new Schema<IUser>(
             ref: "Neighborhood",
             default: [],
         },
+        provinceCode: { type: Number },
+        provinceName: { type: String },
+        wardCode: { type: Number, index: true },
+        wardName: { type: String },
         // Truong tam thoi (transitional) - cum dan cu dang dang du lieu tu do,
         // giu lai de tuong thich nguoc cho den khi du lieu duoc migrate day du
         // sang Neighborhood (xem Neighborhood.ts / neighborhoodService.ts).

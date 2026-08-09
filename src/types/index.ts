@@ -426,6 +426,14 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
     resolved: "Đã hoàn thành",
 };
 
+export const REQUEST_PRIORITIES = ["normal", "high", "urgent"] as const;
+export type RequestPriority = typeof REQUEST_PRIORITIES[number];
+export const REQUEST_PRIORITY_LABEL: Record<RequestPriority, string> = {
+    normal: "Bình thường",
+    high: "Cao",
+    urgent: "Khẩn cấp",
+};
+
 // ---------------------------------------------------------------------------
 // Cuoc hop
 // ---------------------------------------------------------------------------

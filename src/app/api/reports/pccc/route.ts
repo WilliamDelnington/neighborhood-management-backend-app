@@ -17,9 +17,15 @@ export async function GET(req: Request) {
         // PCCC anh huong truc tiep den an toan cong dong nen cho phep ca cong an khu vuc xem.
         await requirePermission(actorUser, "reports.read");
 
-        const data = await getPcccReport();
-
         const { searchParams } = new URL(req.url);
+        const fromDateRaw = searchParams.get("fromDate");
+        const toDateRaw = searchParams.get("toDate");
+
+        const data = await getPcccReport(actorUser, {
+            fromDate: fromDateRaw ? new Date(fromDateRaw) : undefined,
+            toDate: toDateRaw ? new Date(toDateRaw) : undefined,
+        });
+
         if (searchParams.get("format") === "excel") {
             const workbook = buildPcccReportWorkbook(data);
             await writeAuditLog({

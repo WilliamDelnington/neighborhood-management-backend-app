@@ -295,6 +295,12 @@ export async function updateUserByAdmin(
     }
     if (patch.assignedClusters !== undefined)
         user.assignedClusters = patch.assignedClusters;
+    if (patch.provinceCode !== undefined)
+        user.provinceCode = patch.provinceCode ?? undefined;
+    if (patch.provinceName !== undefined)
+        user.provinceName = patch.provinceName ?? undefined;
+    if (patch.wardCode !== undefined) user.wardCode = patch.wardCode ?? undefined;
+    if (patch.wardName !== undefined) user.wardName = patch.wardName ?? undefined;
     if (patch.primaryRole !== undefined) {
         if (!user.roles.includes(patch.primaryRole)) {
             throw new HttpError(
