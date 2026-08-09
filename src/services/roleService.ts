@@ -133,6 +133,12 @@ export async function updateRole(
                 ? undefined
                 : input.allowedComplaintCategories;
     }
+    if (input.allowedRequestTypes !== undefined) {
+        role.allowedRequestTypes =
+            input.allowedRequestTypes === null
+                ? undefined
+                : input.allowedRequestTypes;
+    }
     if (input.active !== undefined) role.active = input.active;
     if (input.sortOrder !== undefined) role.sortOrder = input.sortOrder;
     role.updatedBy = actorId as any;

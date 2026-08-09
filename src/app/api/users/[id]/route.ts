@@ -14,7 +14,7 @@ export async function GET(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "users.read");
-        const user = await getUserById(params.id);
+        const user = await getUserById(actorUser, params.id);
         return apiSuccess(user);
     } catch (err) {
         return apiErrorFromException(err);

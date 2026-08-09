@@ -11,6 +11,10 @@ const PUBLIC_SETTING_KEYS = [
     "oa_info",
     "committee_members",
     "community_stats",
+    // Thu tu/hien thi tinh nang tren trang chu Mini App (xem
+    // constants/utinities.ts:resolveFeatureOrder o Mini App) - admin cau hinh
+    // qua man /mini-app-features, khong nhay cam nen an toan de cong khai.
+    "mini_app_features",
 ] as const;
 
 // Luu y: co tinh khong lam endpoint reset/wipe du lieu he thong o day. Day la

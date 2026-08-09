@@ -1,5 +1,10 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { LOAI_SO_HUU, type LoaiSoHuu } from "@/types";
+import {
+    VERIFICATION_STATUS,
+    LOAI_SO_HUU,
+    type VerificationStatus,
+    type LoaiSoHuu,
+} from "@/types";
 
 export interface IHousehold extends Document {
     code: string;
@@ -14,6 +19,15 @@ export interface IHousehold extends Document {
     ownershipType: LoaiSoHuu;
     needsSupport: boolean;
     houseId?: mongoose.Types.ObjectId;
+    // Trang thai xac thuc CUA CHINH ho dan nay - doc lap voi trang thai cua nha
+    // so cha (xem VerificationStatus o types/index.ts). "unverified" ngay tu
+    // luc tao (ke ca khi khong gan nha so - ho dan "mo coi" khong co gi de cho,
+    // van phai duoc xac thuc thu cong sau nay). Xem
+    // houseRecordService.resolveInitialVerificationStatus va
+    // householdService.transitionHouseholdStatus.
+    status: VerificationStatus;
+    approvalNote?: string;
+    denialReason?: string;
     note?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -50,6 +64,14 @@ const HouseholdSchema = new Schema<IHousehold>(
         },
         needsSupport: { type: Boolean, default: false },
         houseId: { type: Schema.Types.ObjectId, ref: "House", index: true },
+        status: {
+            type: String,
+            enum: VERIFICATION_STATUS,
+            default: "unverified",
+            index: true,
+        },
+        approvalNote: { type: String },
+        denialReason: { type: String },
         note: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

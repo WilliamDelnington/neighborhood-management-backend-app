@@ -37,13 +37,23 @@ describe("createComplaintSchema", () => {
         ).toThrow();
     });
 
-    it("gioi han toi da 6 anh dinh kem", () => {
+    it("chap nhan draftId hop le (24 ky tu, xem POST /api/complaints/draft)", () => {
+        const result = createComplaintSchema.parse({
+            category: "khac",
+            title: "Tieu de hop le",
+            content: "Noi dung du dai de qua kiem tra.",
+            draftId: "507f1f77bcf86cd799439011",
+        });
+        expect(result.draftId).toBe("507f1f77bcf86cd799439011");
+    });
+
+    it("tu choi draftId sai do dai", () => {
         expect(() =>
             createComplaintSchema.parse({
                 category: "khac",
                 title: "Tieu de hop le",
                 content: "Noi dung du dai de qua kiem tra.",
-                images: Array.from({ length: 7 }, (_, i) => `img${i}.jpg`),
+                draftId: "khong-phai-object-id",
             }),
         ).toThrow();
     });

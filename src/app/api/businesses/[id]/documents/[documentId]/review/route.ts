@@ -27,6 +27,7 @@ export async function PUT(
             params.documentId,
             body.decision,
             body.rejectionReason,
+            body.approvalNote,
         );
         return apiSuccess(businessDocument, "Cap nhat ket qua duyet thanh cong");
     } catch (err) {

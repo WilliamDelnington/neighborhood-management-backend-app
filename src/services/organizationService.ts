@@ -126,9 +126,17 @@ export async function createOrganization(
     }
     await assertRepresentativeUser(representativeUserId);
 
-    const existing = await Organization.findOne({ taxCode: input.taxCode });
-    if (existing) {
-        throw new HttpError("Mã số thuế / số đăng ký kinh doanh đã tồn tại", 409);
+    // Khong co taxCode thi khong co gi de doi chieu trung lap - bo qua kiem
+    // tra (findOne({taxCode: undefined}) se khop nham voi ban ghi khac cung
+    // chua co taxCode, sai y nghia "trung lap").
+    if (input.taxCode) {
+        const existing = await Organization.findOne({ taxCode: input.taxCode });
+        if (existing) {
+            throw new HttpError(
+                "Mã số thuế / số đăng ký kinh doanh đã tồn tại",
+                409,
+            );
+        }
     }
 
     const organization = await Organization.create({

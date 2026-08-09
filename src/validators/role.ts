@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidPermissionKey } from "@/lib/permissionRegistry";
-import { NHOM_PHAN_ANH } from "@/types";
+import { NHOM_PHAN_ANH, REQUEST_TYPES } from "@/types";
 
 const permissionsField = z
     .array(z.string())
@@ -11,6 +11,7 @@ const permissionsField = z
     );
 
 const complaintCategoriesField = z.array(z.enum(NHOM_PHAN_ANH));
+const requestTypesField = z.array(z.enum(REQUEST_TYPES));
 
 export const createRoleSchema = z.object({
     key: z
@@ -25,6 +26,8 @@ export const createRoleSchema = z.object({
     permissions: permissionsField,
     // Bo trong = khong gioi han (xem tat ca nhom phan anh).
     allowedComplaintCategories: complaintCategoriesField.optional(),
+    // Bo trong = khong gioi han (gui duoc tat ca loai yeu cau).
+    allowedRequestTypes: requestTypesField.optional(),
     active: z.boolean().default(true),
     sortOrder: z.number().default(0),
 });
@@ -36,6 +39,7 @@ export const updateRoleSchema = z.object({
     permissions: permissionsField.optional(),
     // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
     allowedComplaintCategories: complaintCategoriesField.nullable().optional(),
+    allowedRequestTypes: requestTypesField.nullable().optional(),
     active: z.boolean().optional(),
     sortOrder: z.number().optional(),
 });

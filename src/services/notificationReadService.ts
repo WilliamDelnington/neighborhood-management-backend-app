@@ -1,5 +1,6 @@
 import { NotificationDelivery } from "@/models";
 import { HttpError } from "@/lib/response";
+import { emitUnreadCount } from "@/lib/socket";
 
 /**
  * Danh sach thong bao (NotificationDelivery) cua chinh nguoi dung dang dang nhap,
@@ -67,6 +68,8 @@ export async function markAsRead(userId: string, deliveryId: string) {
             404,
         );
     }
+    const { count } = await getUnreadCount(userId);
+    emitUnreadCount(userId, count);
     return delivery;
 }
 
@@ -80,5 +83,6 @@ export async function markAllAsRead(
         { userId, readAt: null },
         { readAt: new Date() },
     );
+    emitUnreadCount(userId, 0);
     return { modifiedCount: result.modifiedCount };
 }

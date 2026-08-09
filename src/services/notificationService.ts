@@ -1,7 +1,8 @@
-import { Notification, User } from "@/models";
+import { Notification, NotificationDelivery, User } from "@/models";
 import { inAppAdapter } from "@/lib/notificationAdapters";
+import { emitUnreadCount } from "@/lib/socket";
 import type { NotificationChannel, Role } from "@/types";
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 
 export type CreateNotificationParams = {
     title: string;
@@ -73,7 +74,26 @@ export async function createNotification(params: CreateNotificationParams) {
         );
         notification.status = "sent";
         await notification.save();
+
+        await notifyUnreadCounts(recipientIds);
     }
 
     return notification;
+}
+
+/**
+ * Tinh lai so thong bao chua doc cho tung recipient (mot query aggregate cho
+ * ca lo, thay vi N query rieng le) va phat realtime qua socket - de badge tren
+ * chuong thong bao cap nhat ngay ma khong can doi vong poll tiep theo.
+ */
+async function notifyUnreadCounts(recipientIds: string[]): Promise<void> {
+    const objectIds = recipientIds.map(id => new Types.ObjectId(id));
+    const counts = await NotificationDelivery.aggregate([
+        { $match: { userId: { $in: objectIds }, readAt: null } },
+        { $group: { _id: "$userId", count: { $sum: 1 } } },
+    ]);
+    const countByUserId = new Map(counts.map(c => [String(c._id), c.count]));
+    for (const userId of recipientIds) {
+        emitUnreadCount(userId, countByUserId.get(userId) || 0);
+    }
 }

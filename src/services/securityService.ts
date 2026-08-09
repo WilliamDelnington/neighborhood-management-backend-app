@@ -6,7 +6,6 @@ import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import { MUC_DO_AN_NINH_LABEL } from "@/types";
 import type {
-    AssignSecurityRecordInput,
     CreateSecurityRecordInput,
     UpdateSecurityRecordInput,
 } from "@/validators/security";
@@ -47,8 +46,6 @@ export async function createSecurityRecord(
 
     const record = await SecurityRecord.create({
         houseId: input.houseId,
-        ownershipType: input.ownershipType,
-        renterCount: input.renterCount,
         hasCamera: input.hasCamera,
         hasSecurityComplaint: input.hasSecurityComplaint,
         level: input.level,
@@ -188,9 +185,6 @@ export async function updateSecurityRecord(
             record[field] = patch[field] as boolean;
         }
     }
-    if (patch.ownershipType !== undefined)
-        record.ownershipType = patch.ownershipType;
-    if (patch.renterCount !== undefined) record.renterCount = patch.renterCount;
     if (patch.level !== undefined) record.level = patch.level;
     if (patch.monitoringStatus !== undefined)
         record.monitoringStatus = patch.monitoringStatus;
@@ -217,44 +211,6 @@ export async function updateSecurityRecord(
     }
 
     return record;
-}
-
-export async function assignSecurityRecord(
-    actorId: string,
-    id: string,
-    input: AssignSecurityRecordInput,
-) {
-    const record = await SecurityRecord.findById(id);
-    if (!record) throw new HttpError("Khong tim thay ho so an ninh", 404);
-
-    record.assigneeId = input.assigneeId as unknown as typeof record.assigneeId;
-    await record.save();
-
-    const house = await HouseRecord.findById(record.houseId).select(
-        "code address",
-    );
-
-    await createNotification({
-        title: "Bạn được giao theo dõi hồ sơ an ninh, tạm trú",
-        body: house
-            ? `Nhà ${house.code} (${house.address})`
-            : "Bạn được giao theo dõi một hồ sơ an ninh, tạm trú",
-        type: "security.assigned",
-        targetUserIds: [input.assigneeId],
-        relatedModel: "SecurityRecord",
-        relatedId: record._id,
-        createdBy: actorId,
-    });
-
-    await writeAuditLog({
-        actorId,
-        action: "security.assign",
-        targetModel: "SecurityRecord",
-        targetId: record._id,
-        metadata: { assigneeId: input.assigneeId },
-    });
-
-    return getSecurityRecordById(String(record._id));
 }
 
 export async function deleteSecurityRecord(actorId: string, id: string) {

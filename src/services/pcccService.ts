@@ -7,7 +7,6 @@ import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import { MUC_NGUY_CO_PCCC_LABEL } from "@/types";
 import type {
-    AssignPcccCheckInput,
     CreatePcccCheckInput,
     UpdatePcccCheckInput,
 } from "@/validators/pccc";
@@ -59,6 +58,7 @@ export async function createPcccCheck(
         isCrowdedRental: input.isCrowdedRental,
         riskLevel: input.riskLevel,
         remediationNeeded: input.remediationNeeded,
+        note: input.note,
         inspectionDate: new Date(input.inspectionDate),
         inspectorId,
         followUpStatus: input.followUpStatus,
@@ -196,6 +196,7 @@ export async function updatePcccCheck(
     if (patch.riskLevel !== undefined) check.riskLevel = patch.riskLevel;
     if (patch.remediationNeeded !== undefined)
         check.remediationNeeded = patch.remediationNeeded;
+    if (patch.note !== undefined) check.note = patch.note;
     if (patch.followUpStatus !== undefined)
         check.followUpStatus = patch.followUpStatus;
     if (patch.inspectionDate !== undefined)
@@ -223,52 +224,6 @@ export async function updatePcccCheck(
     }
 
     return check;
-}
-
-export async function assignPcccCheck(
-    actorId: string,
-    id: string,
-    input: AssignPcccCheckInput,
-) {
-    const check = await PcccCheck.findById(id);
-    if (!check)
-        throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
-
-    check.assigneeId = input.assigneeId as unknown as typeof check.assigneeId;
-    if (input.deadline) check.deadline = new Date(input.deadline);
-    // Giao lai/doi han moi thi phai canh bao lai tu dau cho han hien tai.
-    check.deadlineWarnedAt = undefined;
-    await check.save();
-
-    const house = await HouseRecord.findById(check.houseId).select(
-        "code address",
-    );
-
-    await createNotification({
-        title: "Bạn được giao theo dõi khắc phục PCCC",
-        body: house
-            ? `Nhà ${house.code} (${house.address}) - hạn khắc phục: ${
-                  check.deadline
-                      ? check.deadline.toLocaleDateString("vi-VN")
-                      : "chưa đặt"
-              }`
-            : "Bạn được giao theo dõi một bản ghi kiểm tra PCCC",
-        type: "pccc.assigned",
-        targetUserIds: [input.assigneeId],
-        relatedModel: "PcccCheck",
-        relatedId: check._id,
-        createdBy: actorId,
-    });
-
-    await writeAuditLog({
-        actorId,
-        action: "pccc.assign",
-        targetModel: "PcccCheck",
-        targetId: check._id,
-        metadata: { assigneeId: input.assigneeId, deadline: check.deadline },
-    });
-
-    return getPcccCheckById(String(check._id));
 }
 
 /**

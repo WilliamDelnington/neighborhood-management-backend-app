@@ -175,12 +175,16 @@ export async function createComplaint(
     const cluster = await resolveComplaintCluster(actorUser);
     const neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
     const complaint = await Complaint.create({
+        // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
+        // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
+        // draftId) tu dong thuoc ve phan anh nay - xem uploads/token,
+        // uploads/attachments.
+        _id: input.draftId,
         code,
         category: input.category,
         title: input.title,
         content: input.content,
         area: input.area,
-        images: input.images || [],
         status: "moi_tiep_nhan",
         cluster,
         neighborhoodId,
@@ -286,23 +290,27 @@ async function getTimelineFor(complaintId: string, publicOnly: boolean) {
     return ComplaintTimeline.find(filter).sort({ createdAt: 1 });
 }
 
-export async function getComplaintDetailForOwnerOrStaff(
-    complaintId: string,
-    requester: {
-        userId: string;
-        isStaff: boolean;
-        allowedCategories?: string[] | null;
-        actorUser?: IUser;
-        canReadEscalated?: boolean;
-    },
-) {
-    const complaint = await Complaint.findById(complaintId)
-        .populate("createdByUserId", "displayName phone")
-        .populate("assigneeId", "displayName");
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+export interface ComplaintReadRequester {
+    userId: string;
+    isStaff: boolean;
+    allowedCategories?: string[] | null;
+    actorUser?: IUser;
+    canReadEscalated?: boolean;
+}
 
+/**
+ * Nem HttpError neu requester khong duoc xem phan anh nay - chu phan anh luon
+ * duoc xem; nhan vien phai co complaints.read (isStaff), dung nhom
+ * (allowedCategories) va trong pham vi phu trach (assertComplaintInScope).
+ * Dung chung cho getComplaintDetailForOwnerOrStaff va route liet ke tai lieu
+ * dinh kem cua phan anh (xem /api/complaints/[id]/attachments).
+ */
+export function assertComplaintReadable(
+    complaint: IComplaint,
+    requester: ComplaintReadRequester,
+): boolean {
     const isOwner =
-        String(complaint.createdByUserId._id || complaint.createdByUserId) ===
+        String((complaint.createdByUserId as any)?._id || complaint.createdByUserId) ===
         requester.userId;
     if (!requester.isStaff && !isOwner) {
         throw new HttpError("Ban khong co quyen xem phan anh nay", 403);
@@ -322,6 +330,19 @@ export async function getComplaintDetailForOwnerOrStaff(
             requester.canReadEscalated ?? false,
         );
     }
+    return isOwner;
+}
+
+export async function getComplaintDetailForOwnerOrStaff(
+    complaintId: string,
+    requester: ComplaintReadRequester,
+) {
+    const complaint = await Complaint.findById(complaintId)
+        .populate("createdByUserId", "displayName phone")
+        .populate("assigneeId", "displayName");
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+
+    assertComplaintReadable(complaint, requester);
 
     const timeline = await getTimelineFor(complaintId, !requester.isStaff);
     const plain = complaint.toObject();

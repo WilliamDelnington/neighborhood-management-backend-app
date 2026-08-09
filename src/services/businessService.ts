@@ -1,5 +1,6 @@
 import {
     Business,
+    BusinessDocument,
     HouseRecord,
     BusinessType,
     type IBusiness,
@@ -10,11 +11,17 @@ import { areaScopeFilter } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
 import {
+    assertHouseRecordAllowsDeclaration,
     assertHouseRecordInScope,
+    assertVerificationEditable,
     getOwnedHouseRecordIds,
-    resolveOwnerActingUserId,
+    resolveInitialVerificationStatus,
 } from "@/services/houseRecordService";
-import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/types";
+import {
+    isHouseOwnerActor,
+    resolveActiveHouseOwnerActingUserIds,
+} from "@/services/houseOwnershipService";
+import { VERIFICATION_STATUS_LABEL, type VerificationStatus } from "@/types";
 import type {
     CreateBusinessInput,
     UpdateBusinessInput,
@@ -39,6 +46,10 @@ export async function createBusiness(
     const houseRecord = await HouseRecord.findById(input.houseId);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
+    // Chi chan khai bao ho kinh doanh khi ho so nha da bi tu choi hoac bi khoa -
+    // giong dieu kien ap dung cho Household (xem householdService.createHousehold).
+    // Ho kinh doanh tao ra se o trang thai "draft" cho toi khi nha so duoc xac thuc.
+    assertHouseRecordAllowsDeclaration(actorUser, houseRecord);
     await assertBusinessTypeExists(input.businessType);
 
     const business = await Business.create({
@@ -51,6 +62,7 @@ export async function createBusiness(
         ownerName: input.ownerName,
         phone: input.phone,
         active: input.active ?? true,
+        status: resolveInitialVerificationStatus(houseRecord),
         note: input.note,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
@@ -86,7 +98,7 @@ export async function listBusinesses(params: {
     page?: number;
     limit?: number;
     search?: string;
-    status?: BusinessStatus;
+    status?: VerificationStatus;
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
@@ -164,6 +176,8 @@ export async function updateBusiness(
     const houseRecord = await HouseRecord.findById(business.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
 
+    assertVerificationEditable(actorUser, business.status, "Hộ kinh doanh");
+
     if (patch.businessType) {
         await assertBusinessTypeExists(patch.businessType);
     }
@@ -189,42 +203,59 @@ export async function updateBusiness(
 }
 
 /**
- * Ghi de thu cong trang thai xac thuc cua ho kinh doanh - CHI danh cho admin,
- * dung cho cac truong hop dac biet (vd reset lai ho so). Luong binh thuong
- * KHONG con di qua ham nay: nop giay to (createBusinessDocument) tu dong
- * chuyen unverified -> pending_approval, va duyet/tu choi tung giay to
- * (reviewBusinessDocument) tu dong tinh lai trang thai tong quat - xem
- * businessDocumentService.ts. Kiem tra quyen admin da thuc hien o tang route.
+ * Chuyen trang thai xac thuc cua ho kinh doanh thu cong. Luong binh thuong
+ * (chu ho nop giay to, nguoi phu trach duyet tung giay to) khong di qua ham
+ * nay - xem businessDocumentService.ts (createBusinessDocument tu dong chuyen
+ * unverified -> pending, reviewBusinessDocument tu dong tinh lai trang thai
+ * tong quat qua recomputeBusinessStatus). Ham nay chi phuc vu hai truong hop:
+ * - admin: ghi de sang bat ky trang thai nao (vd reset lai ho so).
+ * - chu ho (isHouseOwnerActor): CHI duoc "gui lai" tu "denied" ve "pending" -
+ *   day la loi thoat duy nhat cho ho kinh doanh bi tu choi, vi upload giay to
+ *   moi (createBusinessDocument) chi cho phep khi dang "unverified"/"pending"
+ *   (xem assertBusinessDocumentUploadAllowed) - khong the tu "denied" nop lai
+ *   giay to truc tiep duoc.
  */
 export async function transitionBusinessStatus(
     actorUser: IUser,
     id: string,
-    targetStatus: BusinessStatus,
+    targetStatus: VerificationStatus,
 ): Promise<IBusiness> {
     const business = await Business.findById(id);
     if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+
+    const isAdmin = actorUser.roles.includes("admin");
+    if (!isAdmin) {
+        const isOwner = await isHouseOwnerActor(business.houseId, actorUser._id);
+        const canResubmit =
+            isOwner && business.status === "denied" && targetStatus === "pending";
+        if (!canResubmit) {
+            throw new HttpError(
+                "Bạn không có quyền thay đổi trạng thái hộ kinh doanh này",
+                403,
+            );
+        }
+    }
 
     const previousStatus = business.status;
     business.status = targetStatus;
     business.updatedBy = actorUser._id as any;
     await business.save();
 
-    const houseRecord = await HouseRecord.findById(business.houseId);
-    const ownerActingUserId = houseRecord
-        ? await resolveOwnerActingUserId(houseRecord)
-        : undefined;
+    const ownerActingUserIds = await resolveActiveHouseOwnerActingUserIds(
+        business.houseId,
+    );
     if (
-        ownerActingUserId &&
+        ownerActingUserIds.length &&
         previousStatus !== targetStatus &&
-        (targetStatus === "verified" || targetStatus === "need_supplement")
+        (targetStatus === "verified" || targetStatus === "denied")
     ) {
         await createNotification({
             title: "Kết quả xác thực hộ kinh doanh",
             body: `Hộ kinh doanh ${business.name} của bạn ${
-                BUSINESS_STATUS_LABEL[targetStatus]
+                VERIFICATION_STATUS_LABEL[targetStatus]
             }`,
             type: "business.status_changed",
-            targetUserIds: [ownerActingUserId],
+            targetUserIds: ownerActingUserIds,
             relatedModel: "Business",
             relatedId: business._id,
             createdBy: actorUser._id,
@@ -236,7 +267,7 @@ export async function transitionBusinessStatus(
         action: "business.status_change",
         targetModel: "Business",
         targetId: business._id,
-        metadata: { status: targetStatus },
+        metadata: { previousStatus, status: targetStatus },
     });
 
     return business;
@@ -251,6 +282,21 @@ export async function deleteBusiness(
 
     const houseRecord = await HouseRecord.findById(business.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
+
+    // Khong duoc xoa ho kinh doanh da co lich su (da nop giay to, hoac da tung
+    // duoc xac thuc) - giong nguyen tac "khong xoa lich su" da ap dung cho
+    // HouseOwnership (khong co route xoa) va Household (chi xoa khi chua co
+    // nhan khau nao). Truong hop nay chi con dung de don ho kinh doanh tao
+    // nham/chua co du lieu gi - muon ngung hoat dong mot ho da co du lieu thi
+    // dung updateBusiness voi active=false (xem "Doanh nghiep ngung hoat dong"
+    // trong dac ta).
+    const hasDocuments = await BusinessDocument.exists({ businessId: id });
+    if (hasDocuments || business.status !== "unverified") {
+        throw new HttpError(
+            "Không thể xóa hộ kinh doanh đã có giấy tờ hoặc đã xác thực - hãy chuyển sang ngừng hoạt động (active=false) để giữ lịch sử",
+            409,
+        );
+    }
 
     await business.deleteOne();
 

@@ -15,6 +15,7 @@ export interface IPcccCheck extends Document {
     isCrowdedRental: boolean;
     riskLevel: MucNguyCoPccc;
     remediationNeeded?: string;
+    note?: string;
     inspectionDate: Date;
     inspectorId: mongoose.Types.ObjectId;
     followUpStatus: TinhTrangTheoDoiPccc;
@@ -47,6 +48,7 @@ const PcccCheckSchema = new Schema<IPcccCheck>(
             index: true,
         },
         remediationNeeded: { type: String },
+        note: { type: String, trim: true },
         inspectionDate: { type: Date, required: true },
         inspectorId: {
             type: Schema.Types.ObjectId,

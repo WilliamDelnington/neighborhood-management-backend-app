@@ -10,6 +10,7 @@ export interface IBusinessDocument extends Document {
     expiryDate?: Date;
     status: BusinessDocumentStatus;
     rejectionReason?: string;
+    approvalNote?: string;
     uploadedBy: mongoose.Types.ObjectId;
     reviewedBy?: mongoose.Types.ObjectId;
     reviewedAt?: Date;
@@ -49,6 +50,7 @@ const BusinessDocumentSchema = new Schema<IBusinessDocument>(
             index: true,
         },
         rejectionReason: { type: String, trim: true },
+        approvalNote: { type: String, trim: true },
         uploadedBy: {
             type: Schema.Types.ObjectId,
             ref: "User",

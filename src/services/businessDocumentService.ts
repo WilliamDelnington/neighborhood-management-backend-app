@@ -14,11 +14,12 @@ import { HttpError } from "@/lib/response";
 import { userHasPermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import {
-    assertHouseRecordInScope,
-    resolveOwnerActingUserId,
-} from "@/services/houseRecordService";
-import type { BusinessDocumentStatus, BusinessStatus } from "@/types";
+    isHouseOwnerActor,
+    resolveActiveHouseOwnerActingUserIds,
+} from "@/services/houseOwnershipService";
+import type { BusinessDocumentStatus, VerificationStatus } from "@/types";
 import type { CreateBusinessDocumentInput } from "@/validators/businessDocument";
 
 async function loadBusinessContext(
@@ -82,14 +83,18 @@ async function getRuleForDocumentType(
 }
 
 /**
- * Tinh lai trang thai tong quat cua ho kinh doanh tu ket qua duyet cua tung
- * giay to bat buoc. Ham thuan tuy (khong doc/ghi DB) de de kiem thu rieng.
- * "missing" = chua co ban nop nao dang active cho loai giay to bat buoc do.
+ * Tinh lai trang thai xac thuc tong quat cua ho kinh doanh tu ket qua duyet
+ * cua tung giay to bat buoc. Ham thuan tuy (khong doc/ghi DB) de de kiem thu
+ * rieng. "missing" = chua co ban nop nao dang active cho loai giay to bat
+ * buoc do. Chi tra ve "pending"/"verified"/"denied" - ham nay chi duoc goi khi
+ * business da roi khoi "unverified" (da nop it nhat 1 giay to), va khong bao
+ * gio tra ve "unverified"/"locked" (hai trang thai do khong lien quan ket qua
+ * duyet giay to).
  */
 export function recomputeBusinessStatus(
     requiredRules: IBusinessTypeDocumentRule[],
     docsByDocumentTypeId: Map<string, { status: BusinessDocumentStatus }>,
-): BusinessStatus {
+): VerificationStatus {
     const requiredStatuses: Array<BusinessDocumentStatus | "missing"> =
         requiredRules
             .filter(r => r.isRequired)
@@ -99,14 +104,14 @@ export function recomputeBusinessStatus(
                         ?.status ?? "missing",
             );
 
-    if (requiredStatuses.includes("rejected")) return "need_supplement";
+    if (requiredStatuses.includes("rejected")) return "denied";
     if (
         requiredStatuses.length > 0 &&
         requiredStatuses.every(s => s === "approved")
     ) {
         return "verified";
     }
-    return "pending_approval";
+    return "pending";
 }
 
 export type RequiredDocumentItem = {
@@ -190,12 +195,21 @@ export async function createBusinessDocument(
     const { business, houseRecord } = await loadBusinessContext(businessId);
 
     const isAdmin = actorUser.roles.includes("admin");
-    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-    const isOwner =
-        !!ownerActingUserId && String(ownerActingUserId) === String(actorUser._id);
+    const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
     if (!isAdmin && !isOwner) {
         throw new HttpError(
             "Chỉ chủ hộ kinh doanh mới được nộp giấy tờ",
+            403,
+        );
+    }
+
+    // Chi duoc nop giay to khi ho kinh doanh dang "unverified" (chua nop lan
+    // nao) hoac "pending" (dang cho duyet) - "verified"/"denied"/"locked" phai
+    // qua transitionBusinessStatus ("denied" -> "pending") truoc khi nop lai
+    // duoc (xem businessService.transitionBusinessStatus).
+    if (!isAdmin && !["unverified", "pending"].includes(business.status)) {
+        throw new HttpError(
+            "Hộ kinh doanh không ở trạng thái cho phép nộp giấy tờ",
             403,
         );
     }
@@ -242,7 +256,7 @@ export async function createBusinessDocument(
     });
 
     if (business.status === "unverified") {
-        business.status = "pending_approval";
+        business.status = "pending";
         business.updatedBy = actorUser._id as any;
         await business.save();
     }
@@ -269,6 +283,7 @@ export async function reviewBusinessDocument(
     documentId: string,
     decision: "approved" | "rejected",
     rejectionReason?: string,
+    approvalNote?: string,
 ): Promise<IBusinessDocument> {
     const { business, houseRecord } = await loadBusinessContext(businessId);
 
@@ -300,6 +315,8 @@ export async function reviewBusinessDocument(
     businessDocument.status = decision;
     businessDocument.rejectionReason =
         decision === "rejected" ? rejectionReason : undefined;
+    businessDocument.approvalNote =
+        decision === "approved" ? approvalNote : undefined;
     businessDocument.reviewedBy = actorUser._id as any;
     businessDocument.reviewedAt = new Date();
     await businessDocument.save();
@@ -322,14 +339,16 @@ export async function reviewBusinessDocument(
     business.updatedBy = actorUser._id as any;
     await business.save();
 
-    const ownerActingUserId = await resolveOwnerActingUserId(houseRecord);
-    if (ownerActingUserId && previousStatus !== nextStatus) {
+    const ownerActingUserIds = await resolveActiveHouseOwnerActingUserIds(
+        houseRecord._id,
+    );
+    if (ownerActingUserIds.length && previousStatus !== nextStatus) {
         if (decision === "rejected") {
             await createNotification({
                 title: "Giấy tờ cần bổ sung",
                 body: `Một giấy tờ của hộ kinh doanh ${business.name} bị từ chối: ${rejectionReason}`,
                 type: "business_document.rejected",
-                targetUserIds: [ownerActingUserId],
+                targetUserIds: ownerActingUserIds,
                 relatedModel: "Business",
                 relatedId: business._id,
                 createdBy: actorUser._id,
@@ -338,9 +357,11 @@ export async function reviewBusinessDocument(
         if (nextStatus === "verified") {
             await createNotification({
                 title: "Kết quả xác thực hộ kinh doanh",
-                body: `Hộ kinh doanh ${business.name} của bạn đã được xác thực`,
+                body: `Hộ kinh doanh ${business.name} của bạn đã được xác thực${
+                    approvalNote ? `: ${approvalNote}` : ""
+                }`,
                 type: "business.status_changed",
-                targetUserIds: [ownerActingUserId],
+                targetUserIds: ownerActingUserIds,
                 relatedModel: "Business",
                 relatedId: business._id,
                 createdBy: actorUser._id,
@@ -358,6 +379,8 @@ export async function reviewBusinessDocument(
             documentTypeId: String(businessDocument.documentTypeId),
             previousBusinessStatus: previousStatus,
             newBusinessStatus: nextStatus,
+            rejectionReason,
+            approvalNote,
         },
     });
 

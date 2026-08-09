@@ -41,6 +41,7 @@ export async function GET(req: Request) {
             limit,
             search,
             role: role || undefined,
+            actorUser,
         });
         return apiSuccess(result);
     } catch (err) {

@@ -5,6 +5,13 @@ export const createNeighborhoodSchema = z.object({
     code: z.string().min(1, "Mã tổ dân phố không được để trống"),
     sequence: z.number().int().positive("Số thứ tự phải là số nguyên dương"),
     active: z.boolean().default(true),
+    // Bat buoc luc tao (moi to dan pho phai thuoc mot phuong/xa) - khong bat
+    // buoc o Mongoose/TS vi to dan pho tao truoc khi co truong nay van ton tai
+    // (xem models/Neighborhood.ts).
+    provinceCode: z.number(),
+    provinceName: z.string().min(1, "Vui long chon tinh/thanh pho"),
+    wardCode: z.number(),
+    wardName: z.string().min(1, "Vui long chon phuong/xa"),
     address: z.string().optional(),
     description: z.string().optional(),
     contactPhone: z.string().optional(),

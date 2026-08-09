@@ -52,7 +52,12 @@ export async function listNeighborhoods(params: {
             ...(targetUser.assignedNeighborhoodIds || []),
         ].filter(Boolean);
         filter._id = { $in: ids };
-    } else if (!params.actorUser.roles.includes("admin")) {
+    } else if (params.actorUser.roles.includes("neighborhood_leader")) {
+        // Chi to truong (neighborhood_leader) bi gioi han ve to dan pho minh
+        // phu trach. Cac vai tro khac co quyen neighborhoods.read nhung khong
+        // co khai niem "to dan pho cua minh" (vd house_owner chon to dan pho
+        // luc tao nha) can thay toan bo danh sach dang active, giong nhu
+        // streetService.listStreets khong co scoping nao ca.
         const ids = ownNeighborhoodIds(params.actorUser);
         filter._id = { $in: ids };
     }

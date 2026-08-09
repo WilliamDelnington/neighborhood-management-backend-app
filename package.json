@@ -4,9 +4,9 @@
     "version": "1.0.0",
     "description": "Backend API cho Zalo Mini App Tổ dân phố Hòa Bình",
     "scripts": {
-        "dev": "next dev -p 4000",
+        "dev": "tsx watch server.ts",
         "build": "next build",
-        "start": "next start -p 4000",
+        "start": "cross-env NODE_ENV=production tsx server.ts",
         "lint": "next lint",
         "seed": "tsx scripts/seed.ts",
         "backup": "tsx scripts/backup-db.ts",
@@ -24,8 +24,15 @@
         "security:backfill-handling-status": "tsx scripts/backfill-security-handling-status.ts",
         "security:backfill-monitoring-status": "tsx scripts/backfill-security-monitoring-status.ts",
         "businesses:backfill-status": "tsx scripts/backfill-business-status.ts",
+        "records:backfill-declared-status": "tsx scripts/backfill-declared-record-status.ts",
         "streets:backfill": "tsx scripts/backfill-streets.ts",
         "neighborhoods:backfill-scoped-records": "tsx scripts/backfill-neighborhood-ids.ts",
+        "houses:backfill-ownerships": "tsx scripts/backfill-house-ownerships.ts",
+        "verification:backfill-status": "tsx scripts/backfill-verification-status.ts",
+        "requests:backfill-from-assignments": "tsx scripts/backfill-requests-from-assignments.ts",
+        "residents:backfill-from-security": "tsx scripts/backfill-split-resident-from-security.ts",
+        "organizations:fix-taxcode-index": "tsx scripts/fix-organization-taxcode-index.ts",
+        "users:set-password": "tsx scripts/set-user-password.ts",
         "test": "vitest run"
     },
     "dependencies": {
@@ -37,6 +44,8 @@
         "node-cron": "^4.6.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
+        "socket.io": "^4.8.1",
+        "tsx": "^4.23.0",
         "zod": "^3.24.1"
     },
     "devDependencies": {
@@ -45,11 +54,11 @@
         "@types/node": "^20.17.10",
         "@types/node-cron": "^3.0.11",
         "@types/react": "^18.3.18",
+        "cross-env": "^7.0.3",
         "dotenv": "^16.4.7",
         "eslint": "^8.57.1",
         "eslint-config-next": "14.2.35",
         "mongodb-memory-server": "^11.2.0",
-        "tsx": "^4.23.0",
         "typescript": "^5.7.2",
         "vitest": "^4.1.10"
     }

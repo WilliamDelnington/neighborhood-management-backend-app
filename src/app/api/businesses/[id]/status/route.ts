@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requireRole } from "@/lib/rbac";
+import { requireUser, requireAnyPermission } from "@/lib/rbac";
 import { updateBusinessStatusSchema } from "@/validators/business";
 import { transitionBusinessStatus } from "@/services/businessService";
 
@@ -8,10 +8,12 @@ export const dynamic = "force-dynamic";
 
 /**
  * PATCH /api/businesses/:id/status
- * Ghi de thu cong trang thai xac thuc - CHI danh cho admin (vd reset lai ho
- * so). Luong binh thuong (chu ho nop giay to, nguoi phu trach duyet tung
- * giay to) khong con di qua route nay - xem
+ * Chuyen trang thai xac thuc thu cong - admin ghi de tuy y, chu ho chi duoc
+ * gui lai ("denied" -> "pending"). Luong binh thuong (chu ho nop giay to,
+ * nguoi phu trach duyet tung giay to) khong di qua route nay - xem
  * /api/businesses/:id/documents va /api/businesses/:id/documents/:documentId/review.
+ * O day chi loc tho (phai co it nhat mot trong hai quyen lien quan) - luat chi
+ * tiet nam trong transitionBusinessStatus, mirror /api/houses/:id/status.
  */
 export async function PATCH(
     req: Request,
@@ -20,7 +22,7 @@ export async function PATCH(
     try {
         await connectDB();
         const user = await requireUser(req);
-        requireRole(user, "admin");
+        await requireAnyPermission(user, ["businesses.update", "businesses.verify"]);
 
         const body = updateBusinessStatusSchema.parse(await req.json());
         const business = await transitionBusinessStatus(
