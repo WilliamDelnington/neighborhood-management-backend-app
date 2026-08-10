@@ -16,6 +16,11 @@ export interface IComplaint extends Document {
     cluster?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
     wardCode?: number;
+    // Nha so nguoi gui CHU DONG chon de gan phan anh vao - khong bat buoc, va
+    // KHONG can la nha cua chinh nguoi gui (vd bao phan anh ve nha hang xom).
+    // Neu co, uu tien dung neighborhoodId/cluster cua chinh nha nay thay vi
+    // suy tu ho khau/nha cua nguoi gui - xem createComplaint.
+    targetHouseId?: mongoose.Types.ObjectId;
     createdByUserId: mongoose.Types.ObjectId;
     assigneeId?: mongoose.Types.ObjectId;
     expectedCompletionDate?: Date;
@@ -61,6 +66,11 @@ const ComplaintSchema = new Schema<IComplaint>(
         // pho, ke ca khi ung dung mo rong nhieu phuong sau nay - xem
         // resolveComplaintWardCode trong complaintService.ts.
         wardCode: { type: Number, index: true },
+        targetHouseId: {
+            type: Schema.Types.ObjectId,
+            ref: "House",
+            index: true,
+        },
         createdByUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",

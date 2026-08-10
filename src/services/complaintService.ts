@@ -56,13 +56,17 @@ export async function resolveComplaintCluster(
     // doanh nghiep dai dien qua Organization, hoac chu nha ca nhan chua tao
     // Household, van phai suy ra duoc qua chinh cac Nha ho dang dung vai tro
     // chu so huu (truc tiep hoac dai dien to chuc) - xem getHouseIdsForActingOwner.
+    // Chi tu resolve khi KHONG mo ho: neu cac nha ho so huu thuoc nhieu cum
+    // khac nhau, doan dai mot cum bat ky (vd chi lay findOne dau tien) se sai
+    // nhieu hon dung - tra ve undefined de roi ve co che chuyen tiep cap
+    // Phuong (an toan hon la gui nham to/cum).
     const ownedHouseIds = await getHouseIdsForActingOwner(user._id);
     if (ownedHouseIds.length) {
-        const house = await HouseRecord.findOne({
+        const clusters = await HouseRecord.distinct("cluster", {
             _id: { $in: ownedHouseIds },
             cluster: { $exists: true, $ne: null },
-        }).select("cluster");
-        if (house?.cluster) return house.cluster;
+        });
+        if (clusters.length === 1) return clusters[0];
     }
     if (user.assignedClusters?.length) return user.assignedClusters[0];
     return undefined;
@@ -96,14 +100,19 @@ export async function resolveComplaintNeighborhoodId(
     }
     // Tuong tu resolveComplaintCluster o tren - thu tiep qua cac Nha ma user
     // dang dung vai tro chu so huu truoc khi roi ve neighborhoodId cua chinh
-    // user (chi co y nghia voi nhan vien duoc gan to dan pho phu trach).
+    // user (chi co y nghia voi nhan vien duoc gan to dan pho phu trach). Chi
+    // tu resolve khi KHONG mo ho: mot nguoi co the so huu nha o nhieu to dan
+    // pho khac nhau - neu phan anh khong noi ro nha nao, doan dai mot to bat
+    // ky (vd lay findOne dau tien) co the gui NHAM sang to khong lien quan.
+    // Tra ve undefined trong truong hop mo ho de roi ve co che chuyen tiep
+    // cap Phuong (secretary/PCO), an toan hon la doan sai.
     const ownedHouseIds = await getHouseIdsForActingOwner(user._id);
     if (ownedHouseIds.length) {
-        const house = await HouseRecord.findOne({
+        const neighborhoodIds = await HouseRecord.distinct("neighborhoodId", {
             _id: { $in: ownedHouseIds },
             neighborhoodId: { $exists: true, $ne: null },
-        }).select("neighborhoodId");
-        if (house?.neighborhoodId) return house.neighborhoodId;
+        });
+        if (neighborhoodIds.length === 1) return neighborhoodIds[0];
     }
     if (user.neighborhoodId) return user.neighborhoodId;
     return undefined;
@@ -249,8 +258,30 @@ export async function createComplaint(
 ) {
     const userId = String(actorUser._id);
     const code = await generateYearlyCode(Complaint, "HB-PA");
-    const cluster = await resolveComplaintCluster(actorUser);
-    const neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
+
+    // Nha so nguoi gui CHU DONG chon (khong bat buoc, khong can la nha cua
+    // chinh ho - vd bao phan anh ve nha hang xom) luon duoc uu tien lam nguon
+    // xac dinh to dan pho/cum, thay vi suy tu ho khau/nha cua nguoi gui - vi
+    // day la thong tin ro rang nguoi dung da xac nhan, dang tin cay hon suy
+    // doan. Chi roi ve resolveComplaintCluster/resolveComplaintNeighborhoodId
+    // khi khong chon nha nao.
+    let targetHouseId: mongoose.Types.ObjectId | undefined;
+    let cluster: string | undefined;
+    let neighborhoodId: mongoose.Types.ObjectId | undefined;
+    if (input.houseId) {
+        const targetHouse = await HouseRecord.findById(input.houseId).select(
+            "neighborhoodId cluster",
+        );
+        if (!targetHouse) {
+            throw new HttpError("Khong tim thay nha so duoc chon", 404);
+        }
+        targetHouseId = targetHouse._id as mongoose.Types.ObjectId;
+        neighborhoodId = targetHouse.neighborhoodId;
+        cluster = targetHouse.cluster;
+    } else {
+        cluster = await resolveComplaintCluster(actorUser);
+        neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
+    }
     const wardCode = await resolveComplaintWardCode(actorUser, neighborhoodId);
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
@@ -267,6 +298,7 @@ export async function createComplaint(
         cluster,
         neighborhoodId,
         wardCode,
+        targetHouseId,
         relatedAssetId: input.relatedAssetId,
         createdByUserId: userId,
     });
@@ -372,7 +404,8 @@ export async function listComplaints(params: {
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
             .populate("createdByUserId", "displayName phone")
-            .populate("assigneeId", "displayName"),
+            .populate("assigneeId", "displayName")
+            .populate("targetHouseId", "code address"),
         Complaint.countDocuments(filter),
     ]);
     return {
@@ -493,7 +526,8 @@ export async function getComplaintDetailForOwnerOrStaff(
 ) {
     const complaint = await Complaint.findById(complaintId)
         .populate("createdByUserId", "displayName phone")
-        .populate("assigneeId", "displayName");
+        .populate("assigneeId", "displayName")
+        .populate("targetHouseId", "code address");
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
 
     assertComplaintReadable(complaint, requester);

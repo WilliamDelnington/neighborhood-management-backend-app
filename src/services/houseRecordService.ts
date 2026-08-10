@@ -708,6 +708,33 @@ export async function listHouseRecords(params: {
     };
 }
 
+/**
+ * Tim kiem nha so RUT GON (chi ma/dia chi), KHONG loc theo pham vi so huu/phu
+ * trach (khac listHouseRecords) - dung rieng cho luong chon "nha so lien
+ * quan" khi gui phan anh: nguoi gui co the bao ve mot nha KHONG PHAI cua ho
+ * (vd nha hang xom), nen khong the gioi han theo ownerId/assignedClusters
+ * nhu man quan ly nha so thong thuong. Chi tra ve du lieu dia chi cong khai
+ * (khong ten chu ho, so dien thoai, trang thai xac minh...), tranh lo thong
+ * tin nhay cam qua tinh nang tim kiem mo nay.
+ */
+export async function searchHousesForComplaintTarget(
+    search?: string,
+    limit = 20,
+): Promise<Array<{ _id: unknown; code: string; address?: string; cluster?: string }>> {
+    const filter: Record<string, unknown> = search
+        ? {
+              $or: [
+                  { code: { $regex: search, $options: "i" } },
+                  { address: { $regex: search, $options: "i" } },
+              ],
+          }
+        : {};
+    return HouseRecord.find(filter)
+        .select("code address cluster")
+        .sort({ code: 1 })
+        .limit(limit);
+}
+
 export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
     const houseRecord =
         await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
