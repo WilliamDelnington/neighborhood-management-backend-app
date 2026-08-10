@@ -142,27 +142,34 @@ export async function assertHouseRecordInScope(
     if (await isHouseOwnerActor(houseRecord._id, user._id)) {
         return;
     }
-    if (user.roles.includes("house_owner")) {
+    // Mot nguoi co the VUA la chu nha (o mot to khac) VUA la To truong/To pho -
+    // kiem tra scope To truong TRUOC khi tu choi theo house_owner, thay vi
+    // tu choi ngay khi co role house_owner (truoc day se chan ca cac nha
+    // trong chinh to dan pho ho phu trach, chi vi ho cung so huu mot nha khac
+    // o noi khac).
+    const isLeaderOrColeader =
+        user.roles.includes("neighborhood_leader") ||
+        user.roles.includes("neighborhood_coleader");
+    if (isLeaderOrColeader) {
+        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+            .filter(Boolean)
+            .map(String);
+        const houseNeighborhoodId = refIdToString(houseRecord.neighborhoodId);
+        if (houseNeighborhoodId && ids.includes(houseNeighborhoodId)) {
+            return;
+        }
+    }
+    if (user.roles.includes("house_owner") && !isLeaderOrColeader) {
         throw new HttpError(
             "Bạn không có quyền thao tác với nhà số của người khác",
             403,
         );
     }
-    if (
-        user.roles.includes("neighborhood_leader") ||
-        user.roles.includes("neighborhood_coleader")
-    ) {
-        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
-            .filter(Boolean)
-            .map(String);
-        const houseNeighborhoodId = refIdToString(houseRecord.neighborhoodId);
-        if (!houseNeighborhoodId || !ids.includes(houseNeighborhoodId)) {
-            throw new HttpError(
-                "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
-                403,
-            );
-        }
-        return;
+    if (isLeaderOrColeader) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
+            403,
+        );
     }
     if (
         user.assignedClusters?.length &&
@@ -610,17 +617,30 @@ export async function listHouseRecords(params: {
             : params.status;
     }
 
-    const isNeighborhoodLeader = params.actorUser.roles.includes(
-        "neighborhood_leader",
-    );
+    const isNeighborhoodLeader =
+        params.actorUser.roles.includes("neighborhood_leader") ||
+        params.actorUser.roles.includes("neighborhood_coleader");
     // House_owner luon bi gioi han theo ownerId, khong duoc dung query
     // `cluster`/`streetId` de "mo rong" pham vi xem (ho khong co
     // assignedClusters de doi chieu). To truong (neighborhood_leader) cung
     // khong duoc di qua nhanh cluster/streetId ben duoi, vi nhanh do doi chieu
     // theo assignedClusters (thuong rong voi to truong) - se vo tinh bo qua
     // scope theo Neighborhood.
-    if (isNeighborhoodLeader && !isHouseOwnerUser) {
-        Object.assign(filter, areaScopeFilter(params.actorUser));
+    if (isNeighborhoodLeader) {
+        // Mot nguoi co the VUA la chu nha (co nha o mot To khac, khong lien
+        // quan den to minh phu trach) VUA la To truong/To pho - khong the coi
+        // house_owner "thay the hoan toan" scope cua neighborhood_leader nhu
+        // truoc (se lam mat het quyen xem to dan pho minh phu trach, chi con
+        // thay dung nha cua chinh minh). Hop (OR) ca hai pham vi lai.
+        const neighborhoodFilter = areaScopeFilter(params.actorUser);
+        if (isHouseOwnerUser) {
+            const ownedHouseIds = await getHouseIdsForActingOwner(
+                params.actorUser._id,
+            );
+            filter.$or = [neighborhoodFilter, { _id: { $in: ownedHouseIds } }];
+        } else {
+            Object.assign(filter, neighborhoodFilter);
+        }
         if (params.streetId) filter.streetId = params.streetId;
         else if (params.cluster) filter.cluster = params.cluster;
     } else if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
