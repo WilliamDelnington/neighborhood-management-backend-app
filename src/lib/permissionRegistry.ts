@@ -322,16 +322,16 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
     },
     {
         key: "change_requests",
-        label: "Yêu cầu thay đổi",
+        label: "Yêu cầu thay đổi thông tin",
         permissions: [
-            { key: "change_requests.read", label: "Xem yêu cầu thay đổi" },
+            { key: "change_requests.read", label: "Xem yêu cầu thay đổi thông tin" },
             {
                 key: "change_requests.create",
                 label: "Gửi yêu cầu thay đổi thông tin của mình",
             },
             {
                 key: "change_requests.decide",
-                label: "Duyệt / từ chối yêu cầu thay đổi",
+                label: "Duyệt / từ chối yêu cầu thay đổi thông tin",
             },
         ],
     },

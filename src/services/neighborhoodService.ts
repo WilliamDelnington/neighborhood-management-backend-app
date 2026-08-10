@@ -113,6 +113,17 @@ export async function listNeighborhoods(params: {
 
 function assertNeighborhoodInScope(user: IUser, neighborhood: INeighborhood): void {
     if (user.roles.includes("admin")) return;
+    // Chi To truong/To pho bi gioi han ve to dan pho minh phu trach - dung
+    // HET dieu kien voi listNeighborhoods (xem comment o do). Cac vai tro khac
+    // co neighborhoods.read (secretary, PCO, house_owner...) khong co khai
+    // niem "to dan pho cua minh" nen duoc xem chi tiet bat ky to dan pho nao,
+    // giong nhu ho da thay ca danh sach khong loc gi.
+    if (
+        !user.roles.includes("neighborhood_leader") &&
+        !user.roles.includes("neighborhood_coleader")
+    ) {
+        return;
+    }
     if (!ownNeighborhoodIds(user).includes(String(neighborhood._id))) {
         throw new HttpError(
             "Ban khong co quyen xem to dan pho nay",

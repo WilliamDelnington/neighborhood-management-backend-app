@@ -165,7 +165,7 @@ export async function createChangeRequest(
     });
 
     await createNotification({
-        title: "Có yêu cầu thay đổi mới",
+        title: "Có yêu cầu thay đổi thông tin mới",
         body: `${actorUser.displayName} gửi yêu cầu ${
             input.changeType === "unlink"
                 ? "hủy liên kết"
@@ -282,10 +282,12 @@ async function applyApprovedChange(
 /**
  * Chuyen doi rieng cho changeType="transfer_neighborhood": khac quyet dinh
  * thong thuong (chi can change_requests.decide), chuyen to CHI duoc quyet
- * dinh boi can bo UBND (PCO) hoac To truong/To pho cua to dan pho SE NHAN
- * (khong phai to dan pho hien tai, va khong phai bat ky ai co
- * change_requests.decide) - tranh mot To truong tu duyet chuyen nha vao to
- * cua chinh minh ma To do khong biet/dong y.
+ * dinh boi can bo UBND (PCO), bi thu (secretary), hoac To truong/To pho cua
+ * to dan pho SE NHAN (khong phai to dan pho hien tai, va khong phai bat ky
+ * ai co change_requests.decide) - tranh mot To truong tu duyet chuyen nha vao
+ * to cua chinh minh ma To do khong biet/dong y. PCO/secretary duoc mien check
+ * "to nhan" vi ho dai dien Phuong, dung vai tro trung gian khi hai To khong
+ * tu thong nhat duoc.
  */
 async function assertCanDecideTransfer(
     actorUser: IUser,
@@ -293,6 +295,7 @@ async function assertCanDecideTransfer(
 ): Promise<void> {
     if (actorUser.roles.includes("admin")) return;
     if (actorUser.roles.includes("people_committee_official")) return;
+    if (actorUser.roles.includes("secretary")) return;
 
     const receivingNeighborhoodId = String(changeRequest.patch?.neighborhoodId);
     if (
@@ -309,7 +312,7 @@ async function assertCanDecideTransfer(
     }
 
     throw new HttpError(
-        "Chi can bo UBND hoac To truong/To pho cua to dan pho se nhan moi duoc quyet dinh yeu cau chuyen to",
+        "Chi can bo UBND, bi thu, hoac To truong/To pho cua to dan pho se nhan moi duoc quyet dinh yeu cau chuyen to",
         403,
     );
 }
@@ -442,8 +445,8 @@ export async function decideChangeRequest(
         body:
             changeRequest.decisionNote ||
             (input.approve
-                ? "Yêu cầu thay đổi của bạn đã được duyệt."
-                : "Yêu cầu thay đổi của bạn đã bị từ chối."),
+                ? "Yêu cầu thay đổi thông tin của bạn đã được duyệt."
+                : "Yêu cầu thay đổi thông tin của bạn đã bị từ chối."),
         type: input.approve ? "change_request.approved" : "change_request.rejected",
         targetUserIds: [changeRequest.requestedBy],
         relatedModel: "ChangeRequest",

@@ -730,8 +730,8 @@ export async function updateHouseRecord(
     ) {
         throw new HttpError(
             editsNeighborhood
-                ? "Nhà số đã được xác minh, việc chuyển tổ dân phố phải thực hiện qua yêu cầu thay đổi"
-                : "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thay vì sửa trực tiếp",
+                ? "Nhà số đã được xác minh, việc chuyển tổ dân phố phải thực hiện qua yêu cầu thay đổi thông tin"
+                : "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thông tin thay vì sửa trực tiếp",
             403,
         );
     }

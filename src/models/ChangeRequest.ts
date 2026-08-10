@@ -17,8 +17,8 @@ export type ChangeRequestTargetModel =
 // dan pho khac - ve mat du lieu chi la update truong neighborhoodId (van dung
 // updateHouseRecord de chay lai auto-derive province/ward, xem
 // changeRequestService.applyApprovedChange), nhung tach rieng khoi "update"
-// vi quyen QUYET DINH khac han: chi PCO hoac To truong/To pho cua to dan pho
-// SE NHAN (khong phai bat ky ai co change_requests.decide) - xem
+// vi quyen QUYET DINH khac han: chi PCO, bi thu, hoac To truong/To pho cua
+// to dan pho SE NHAN (khong phai bat ky ai co change_requests.decide) - xem
 // assertCanDecideTransfer trong changeRequestService.ts.
 // "data_discrepancy": sai lech du lieu Nha so phat hien giua he thong va bao
 // cao cua To dan pho (vd Phuong ghi so nha 125, To bao 125A) - khac 3 loai
