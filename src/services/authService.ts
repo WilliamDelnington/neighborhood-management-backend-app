@@ -143,10 +143,27 @@ export async function loginWithPhone(input: PhoneLoginInput) {
     return { token, user: await sanitizeUserWithPermissions(user) };
 }
 
-export async function setPassword(userId: string, password: string) {
-    const user = await User.findById(userId);
+export async function setPassword(
+    userId: string,
+    input: { currentPassword?: string; password: string },
+) {
+    const user = await User.findById(userId).select("+passwordHash");
     if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
-    user.passwordHash = await hashPassword(password);
+
+    if (user.passwordHash) {
+        if (!input.currentPassword) {
+            throw new HttpError("Vui long nhap mat khau hien tai", 400);
+        }
+        const matches = await comparePassword(
+            input.currentPassword,
+            user.passwordHash,
+        );
+        if (!matches) {
+            throw new HttpError("Mat khau hien tai khong dung", 401);
+        }
+    }
+
+    user.passwordHash = await hashPassword(input.password);
     await user.save();
     return sanitizeUserWithPermissions(user);
 }
@@ -157,8 +174,8 @@ export async function updateOwnProfile(
 ) {
     const user = await User.findById(userId);
     if (!user) throw new Error("Khong tim thay tai khoan");
-    if (input.displayName !== undefined) user.displayName = input.displayName;
     if (input.phone !== undefined) user.phone = input.phone;
+    if (input.email !== undefined) user.email = input.email;
     if (input.address !== undefined) user.address = input.address;
     if (input.notificationPermission !== undefined) {
         user.notificationPermission = input.notificationPermission;

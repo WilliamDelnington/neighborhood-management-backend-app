@@ -25,7 +25,7 @@ import type { AddHouseOwnershipInput } from "@/validators/houseOwnership";
  * ownerType="person" -> luon undefined (danh tinh khai bao, khong co tai
  * khoan dang nhap - xem models/Person.ts).
  */
-async function resolveActingUserId(
+export async function resolveActingUserId(
     ownerType: OwnerType,
     ownerId: Types.ObjectId,
 ): Promise<Types.ObjectId | undefined> {
@@ -369,6 +369,25 @@ export async function endHouseOwnership(
     if (!ownership) throw new HttpError("Khong tim thay quan he so huu", 404);
     if (!ownership.active) {
         throw new HttpError("Quan he so huu nay da ket thuc truoc do", 409);
+    }
+
+    // Chinh chu nha (nguoi dung sau quan he so huu nay) khong duoc tu ket thuc
+    // truc tiep nua - phai gui ChangeRequest (changeType="unlink") de nhan vien
+    // duyet, luc do decideChangeRequest se goi lai chinh ham nay voi actorUser
+    // la nguoi duyet (khac actingUserId cua ownership) nen khong bi chan o day.
+    const actingUserId = await resolveActingUserId(
+        ownership.ownerType,
+        ownership.ownerId,
+    );
+    if (
+        actingUserId &&
+        String(actingUserId) === String(actorUser._id) &&
+        !actorUser.roles.includes("admin")
+    ) {
+        throw new HttpError(
+            "Vui lòng gửi yêu cầu hủy liên kết thay vì thao tác trực tiếp",
+            403,
+        );
     }
 
     ownership.active = false;

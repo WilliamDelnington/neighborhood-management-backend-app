@@ -109,3 +109,13 @@ export {
     default as ZaloWebhookEvent,
     type IZaloWebhookEvent,
 } from "./ZaloWebhookEvent";
+export {
+    default as ChangeRequest,
+    type IChangeRequest,
+    type ChangeRequestTargetModel,
+    type ChangeRequestType,
+    type ChangeRequestStatus,
+    CHANGE_REQUEST_TARGET_MODELS,
+    CHANGE_REQUEST_TYPES,
+    CHANGE_REQUEST_STATUS,
+} from "./ChangeRequest";

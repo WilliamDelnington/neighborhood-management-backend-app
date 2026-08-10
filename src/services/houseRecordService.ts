@@ -14,6 +14,25 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
+
+// Danh sach truong duoc coi la "dinh danh/dia chi" cua nha so - mot khi ho so
+// da "verified", nhung truong nay khong con sua truc tiep duoc nua (phai gui
+// ChangeRequest, xem changeRequestService.ts). Cac truong con lai (vd
+// physicalStatus, note) van sua tu do bat ke trang thai xac minh - xem ghi
+// chu trong validators/houseRecord.ts.
+export const HOUSE_RECORD_PROTECTED_FIELDS = [
+    "address",
+    "cluster",
+    "streetId",
+    "neighborhoodId",
+    "provinceCode",
+    "provinceName",
+    "wardCode",
+    "wardName",
+    "usageTypes",
+    "otherUsageNote",
+    "residenceDeclarationNumber",
+];
 import { clusterScopeFilter, areaScopeFilter, userHasPermission } from "@/lib/rbac";
 import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
@@ -674,6 +693,12 @@ export async function updateHouseRecord(
     actorUser: IUser,
     id: string,
     patch: UpdateHouseRecordInput,
+    // bypassVerifiedGate=true: dung DUY NHAT boi changeRequestService khi ap
+    // dung mot ChangeRequest da duoc duyet (chinh no la ly do hop le de sua
+    // truong da bi khoa boi trang thai "verified") - van chay lai toan bo logic
+    // resolve cluster/streetId/neighborhoodId->province/ward ben duoi thay vi
+    // update tho, tranh sai lech du lieu dia gioi.
+    opts: { bypassVerifiedGate?: boolean } = {},
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
@@ -681,6 +706,21 @@ export async function updateHouseRecord(
     if (houseRecord.status === "locked" && !actorUser.roles.includes("admin")) {
         throw new HttpError(
             "Nhà số đã bị khóa, chỉ quản trị viên mới có thể chỉnh sửa",
+            403,
+        );
+    }
+
+    const editsProtectedField = Object.keys(patch).some(key =>
+        HOUSE_RECORD_PROTECTED_FIELDS.includes(key),
+    );
+    if (
+        houseRecord.status === "verified" &&
+        editsProtectedField &&
+        !actorUser.roles.includes("admin") &&
+        !opts.bypassVerifiedGate
+    ) {
+        throw new HttpError(
+            "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thay vì sửa trực tiếp",
             403,
         );
     }

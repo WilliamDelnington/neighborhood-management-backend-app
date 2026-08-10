@@ -24,9 +24,13 @@ export const zaloLoginSchema = z.object({
 });
 export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;
 
+// displayName KHONG con trong danh sach nay - tu "danh tinh", chi sua duoc
+// qua ChangeRequest sau khi duyet (xem changeRequestService.ts). email duoc
+// them vao vi truoc gio field nay ton tai tren User nhung chua tung duoc noi
+// vao endpoint tu-cap-nhat nay.
 export const updateProfileSchema = z.object({
-    displayName: z.string().min(1).optional(),
     phone: z.string().optional(),
+    email: z.string().email("Email khong hop le").optional(),
     address: z.string().optional(),
     householdId: z.string().optional(),
     notificationPermission: z.boolean().optional(),
@@ -46,7 +50,11 @@ export const phoneLoginSchema = z.object({
 });
 export type PhoneLoginInput = z.infer<typeof phoneLoginSchema>;
 
+// currentPassword bat buoc khi tai khoan da co mat khau (doi mat khau) - bo
+// qua khi chua co (dat mat khau lan dau cho tai khoan dang nhap qua Zalo), xem
+// authService.setPassword.
 export const setPasswordSchema = z.object({
+    currentPassword: z.string().optional(),
     password: passwordField,
 });
 export type SetPasswordInput = z.infer<typeof setPasswordSchema>;

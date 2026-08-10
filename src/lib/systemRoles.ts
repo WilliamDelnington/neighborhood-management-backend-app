@@ -70,6 +70,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "correspondences.update",
         "correspondences.send",
         "correspondences.reply",
+        // To truong duyet/tu choi de nghi thay doi cua chu nha (cung nhom
+        // quyen voi houses.verify) va tu gui de nghi doi thong tin cua chinh
+        // minh - xem changeRequestService.ts.
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     secretary: [
         "dashboard.read",
@@ -121,6 +127,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // ninh, ...) cho cac can bo lien quan.
         "requests.create",
         "requests.read",
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     regional_police: [
         "dashboard.read",
@@ -156,6 +165,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        "change_requests.create",
     ],
     people_committee_official: [
         "dashboard.read",
@@ -191,6 +201,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "correspondences.update",
         "correspondences.send",
         "correspondences.reply",
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     house_owner: [
         "organizations.read",
@@ -237,6 +250,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.respond",
         "files.read",
         "notifications.read",
+        // Gui de nghi thay doi thong tin nha/ho khau da xac minh, hoac de nghi
+        // huy lien ket voi mot nha - xem changeRequestService.ts.
+        "change_requests.create",
     ],
     // Chu ho (dung dau hop khau) khac house_owner (chu nha/nguoi dang ky nha):
     // mot nha co the co nhieu ho dan (vd. chinh chu + nguoi thue), moi ho co
@@ -258,5 +274,6 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.respond",
         "files.read",
         "notifications.read",
+        "change_requests.create",
     ],
 };

@@ -11,7 +11,7 @@ export async function POST(req: Request) {
         await connectDB();
         const user = await requireUser(req);
         const body = setPasswordSchema.parse(await req.json());
-        const result = await setPassword(String(user._id), body.password);
+        const result = await setPassword(String(user._id), body);
         return apiSuccess(result, "Da dat mat khau dang nhap");
     } catch (err) {
         return apiErrorFromException(err);

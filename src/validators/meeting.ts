@@ -7,7 +7,6 @@ export const createMeetingSchema = z.object({
     location: z.string().min(1, "Vui long nhap dia diem"),
     content: z.string().min(1, "Vui long nhap noi dung"),
     minutes: z.string().optional(),
-    attachments: z.array(z.string()).optional(),
     published: z.boolean().default(false),
     eligibleRoles: z.array(z.string()).optional(),
     eligibleStreetIds: z.array(z.string()).optional(),

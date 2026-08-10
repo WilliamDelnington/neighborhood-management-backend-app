@@ -1,5 +1,6 @@
-import { Meeting, MeetingRegistration, type IMeeting } from "@/models";
+import { FileAsset, Meeting, MeetingRegistration, type IMeeting, type IUser } from "@/models";
 import { HttpError } from "@/lib/response";
+import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import type {
@@ -30,7 +31,6 @@ export async function createMeeting(
         location: input.location,
         content: input.content,
         minutes: input.minutes,
-        attachments: input.attachments || [],
         published: input.published,
         eligibleRoles: input.eligibleRoles || [],
         eligibleStreetIds: input.eligibleStreetIds || [],
@@ -127,11 +127,118 @@ export async function deleteMeeting(actorId: string, id: string) {
     await meeting.deleteOne();
     await MeetingRegistration.deleteMany({ meetingId: id });
 
+    const attachments = await FileAsset.find({
+        relatedModel: "Meeting",
+        relatedId: id,
+    });
+    for (const attachment of attachments) {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteUploadedFile(attachment.url);
+    }
+    await FileAsset.deleteMany({ relatedModel: "Meeting", relatedId: id });
+
     await writeAuditLog({
         actorId,
         action: "meeting.delete",
         targetModel: "Meeting",
         targetId: id,
+    });
+}
+
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".doc",
+    ".docx",
+];
+
+export async function listMeetingAttachments(meetingId: string) {
+    return FileAsset.find({
+        relatedModel: "Meeting",
+        relatedId: meetingId,
+    })
+        .sort({ createdAt: -1 })
+        .populate("uploadedBy", "displayName");
+}
+
+export async function uploadMeetingAttachment(
+    actorUser: IUser,
+    meetingId: string,
+    file: File,
+) {
+    const meeting = await Meeting.findById(meetingId).select("_id");
+    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        throw new HttpError(
+            "File vuot qua dung luong cho phep (toi da 10MB)",
+            400,
+        );
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(
+        buffer,
+        file.name,
+        `meeting/${meetingId}`,
+    );
+
+    const fileAsset = await FileAsset.create({
+        name: file.name,
+        url,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        category: "attachment",
+        relatedModel: "Meeting",
+        relatedId: meetingId,
+        isPublic: true,
+        audienceAll: true,
+        targetRoles: [],
+        uploadedBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "meeting.attachment.upload",
+        targetModel: "Meeting",
+        targetId: meetingId,
+        metadata: { fileAssetId: fileAsset._id, name: file.name },
+    });
+
+    return fileAsset;
+}
+
+export async function deleteMeetingAttachment(
+    actorUser: IUser,
+    meetingId: string,
+    fileAssetId: string,
+) {
+    const fileAsset = await FileAsset.findOne({
+        _id: fileAssetId,
+        relatedModel: "Meeting",
+        relatedId: meetingId,
+    });
+    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+
+    await deleteUploadedFile(fileAsset.url);
+    await fileAsset.deleteOne();
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "meeting.attachment.delete",
+        targetModel: "Meeting",
+        targetId: meetingId,
+        metadata: { fileAssetId, name: fileAsset.name },
     });
 }
 
