@@ -626,21 +626,17 @@ export async function listHouseRecords(params: {
     // khong duoc di qua nhanh cluster/streetId ben duoi, vi nhanh do doi chieu
     // theo assignedClusters (thuong rong voi to truong) - se vo tinh bo qua
     // scope theo Neighborhood.
+    //
+    // Day la danh sach QUAN TRI ("nha trong to minh phu trach"), khong phai
+    // "nha cua toi" - mot nguoi co the VUA la chu nha (o mot to khac, khong
+    // lien quan) VUA la To truong/To pho, nhung khi xem danh sach nay voi tu
+    // cach To truong, pham vi phai la CA to dan pho ho phu trach, khong tron
+    // them nha rieng cua ho o noi khac (se gay hieu lam day la nha thuoc to
+    // ho quan ly). Quyen xem CHI TIET nha rieng cua ho van hoat dong binh
+    // thuong qua assertHouseRecordInScope (kiem tra ownership truoc tien),
+    // khong lien quan gi den danh sach nay.
     if (isNeighborhoodLeader) {
-        // Mot nguoi co the VUA la chu nha (co nha o mot To khac, khong lien
-        // quan den to minh phu trach) VUA la To truong/To pho - khong the coi
-        // house_owner "thay the hoan toan" scope cua neighborhood_leader nhu
-        // truoc (se lam mat het quyen xem to dan pho minh phu trach, chi con
-        // thay dung nha cua chinh minh). Hop (OR) ca hai pham vi lai.
-        const neighborhoodFilter = areaScopeFilter(params.actorUser);
-        if (isHouseOwnerUser) {
-            const ownedHouseIds = await getHouseIdsForActingOwner(
-                params.actorUser._id,
-            );
-            filter.$or = [neighborhoodFilter, { _id: { $in: ownedHouseIds } }];
-        } else {
-            Object.assign(filter, neighborhoodFilter);
-        }
+        Object.assign(filter, areaScopeFilter(params.actorUser));
         if (params.streetId) filter.streetId = params.streetId;
         else if (params.cluster) filter.cluster = params.cluster;
     } else if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
