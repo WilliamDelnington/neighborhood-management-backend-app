@@ -15,6 +15,7 @@ export interface IComplaint extends Document {
     status: TrangThaiPhanAnh;
     cluster?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
+    wardCode?: number;
     createdByUserId: mongoose.Types.ObjectId;
     assigneeId?: mongoose.Types.ObjectId;
     expectedCompletionDate?: Date;
@@ -53,6 +54,13 @@ const ComplaintSchema = new Schema<IComplaint>(
             ref: "Neighborhood",
             index: true,
         },
+        // Denormalized tai thoi diem gui phan anh: wardCode cua Neighborhood da
+        // resolve, hoac User.wardCode cua nguoi tao (nhan vien), hoac cuoi cung
+        // la setting "default_ward_code" khi khong resolve duoc gi ca - dam bao
+        // phan anh khong bao gio "mat tich" chi vi khong xac dinh duoc to dan
+        // pho, ke ca khi ung dung mo rong nhieu phuong sau nay - xem
+        // resolveComplaintWardCode trong complaintService.ts.
+        wardCode: { type: Number, index: true },
         createdByUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",

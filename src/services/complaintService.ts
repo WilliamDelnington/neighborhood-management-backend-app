@@ -4,6 +4,9 @@ import {
     ComplaintTimeline,
     Household,
     Citizen,
+    HouseRecord,
+    Neighborhood,
+    NeighborhoodColeaderAssignment,
     type IComplaint,
     type IUser,
 } from "@/models";
@@ -12,6 +15,8 @@ import { generateYearlyCode } from "@/lib/utils";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter } from "@/lib/rbac";
+import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
+import { getSetting } from "@/services/settingsService";
 import { TRANG_THAI_PHAN_ANH_LABEL } from "@/types";
 import type {
     AssignComplaintInput,
@@ -47,6 +52,18 @@ export async function resolveComplaintCluster(
             | undefined;
         if (household?.cluster) return household.cluster;
     }
+    // Chu nha (house_owner) khong chac co Household/Citizen rieng - to chuc/
+    // doanh nghiep dai dien qua Organization, hoac chu nha ca nhan chua tao
+    // Household, van phai suy ra duoc qua chinh cac Nha ho dang dung vai tro
+    // chu so huu (truc tiep hoac dai dien to chuc) - xem getHouseIdsForActingOwner.
+    const ownedHouseIds = await getHouseIdsForActingOwner(user._id);
+    if (ownedHouseIds.length) {
+        const house = await HouseRecord.findOne({
+            _id: { $in: ownedHouseIds },
+            cluster: { $exists: true, $ne: null },
+        }).select("cluster");
+        if (house?.cluster) return house.cluster;
+    }
     if (user.assignedClusters?.length) return user.assignedClusters[0];
     return undefined;
 }
@@ -77,18 +94,67 @@ export async function resolveComplaintNeighborhoodId(
             | undefined;
         if (household?.neighborhoodId) return household.neighborhoodId;
     }
+    // Tuong tu resolveComplaintCluster o tren - thu tiep qua cac Nha ma user
+    // dang dung vai tro chu so huu truoc khi roi ve neighborhoodId cua chinh
+    // user (chi co y nghia voi nhan vien duoc gan to dan pho phu trach).
+    const ownedHouseIds = await getHouseIdsForActingOwner(user._id);
+    if (ownedHouseIds.length) {
+        const house = await HouseRecord.findOne({
+            _id: { $in: ownedHouseIds },
+            neighborhoodId: { $exists: true, $ne: null },
+        }).select("neighborhoodId");
+        if (house?.neighborhoodId) return house.neighborhoodId;
+    }
     if (user.neighborhoodId) return user.neighborhoodId;
+    return undefined;
+}
+
+/**
+ * Suy ra wardCode de denormalize vao Complaint.wardCode, dam bao MOI phan anh
+ * co mot "diem den" ke ca khi khong xac dinh duoc to dan pho cu the. Uu tien
+ * wardCode cua chinh to dan pho da resolve (neighborhoodId), roi den wardCode
+ * cua nguoi tao (nhan vien duoc gan phu trach mot phuong), cuoi cung la
+ * setting "default_ward_code" - ung dung hien chi van hanh trong MOT phuong
+ * nen fallback nay la hop ly; khi mo rong nhieu phuong, day se la diem can
+ * xem lai (khong con dung mot default chung cho tat ca nua).
+ */
+export async function resolveComplaintWardCode(
+    user: IUser,
+    resolvedNeighborhoodId?: mongoose.Types.ObjectId,
+): Promise<number | undefined> {
+    if (resolvedNeighborhoodId) {
+        const neighborhood = await Neighborhood.findById(
+            resolvedNeighborhoodId,
+        ).select("wardCode");
+        if (neighborhood?.wardCode) return neighborhood.wardCode;
+    }
+    if (user.wardCode) return user.wardCode;
+    const defaultWardCode = await getSetting("default_ward_code");
+    if (typeof defaultWardCode === "number") return defaultWardCode;
+    if (typeof defaultWardCode === "string" && defaultWardCode.trim()) {
+        const parsed = Number(defaultWardCode);
+        if (!Number.isNaN(parsed)) return parsed;
+    }
     return undefined;
 }
 
 /**
  * Dieu kien Mongo loc phan anh theo pham vi. Neu actor duoc cap
  * complaints.read_escalated, pham vi la "da chuyen UBND, cong voi cum duoc
- * phan cong (neu co)" - KHONG ke thua quy uoc "assignedClusters rong = khong
- * gioi han" cua clusterScopeFilter, vi day la quyen bo sung hep (danh cho
- * can bo UBND), khong phai mo khoa toan bo. Neu khong duoc cap quyen nay,
- * dung lai clusterScopeFilter nhu thuong le (rong = khong gioi han, giu nguyen
- * hanh vi hien tai cho cac tai khoan chua duoc gan cum).
+ * phan cong (neu co), cong voi phan anh KHONG xac dinh duoc CA to dan pho LAN
+ * cum" - KHONG ke thua quy uoc "assignedClusters rong = khong gioi han" cua
+ * clusterScopeFilter, vi day la quyen bo sung hep (danh cho can bo UBND/bi
+ * thu), khong phai mo khoa toan bo. Nhanh "khong xac dinh duoc" la co che
+ * chuyen tiep len cap Phuong khi khong the giao cho mot To dan pho HAY mot
+ * cum cu the nao (vd tai khoan/nha chua lien ket day du) - xem cau hoi nguoi
+ * dung ve "huge contradiction" giua yeu cau co Nha so va co che chuyen tiep
+ * len Phuong. Bat buoc ca hai deu thieu (khong chi neighborhoodId) de tranh
+ * lo pham vi cum cho cac phan anh van con duoc gan cum theo kieu cu (truoc
+ * khi co neighborhoodId) - nhung phan anh do van phai duoc loc theo cum nhu
+ * truoc, khong duoc coi la "chuyen tiep len Phuong". Neu khong duoc cap
+ * complaints.read_escalated, dung lai clusterScopeFilter nhu thuong le (rong =
+ * khong gioi han, giu nguyen hanh vi hien tai cho cac tai khoan chua duoc gan
+ * cum).
  */
 function complaintScopeFilter(
     actorUser: IUser,
@@ -97,7 +163,12 @@ function complaintScopeFilter(
     if (actorUser.roles.includes("admin")) return {};
     if (canReadEscalated) {
         const clusters = actorUser.assignedClusters || [];
-        const or: Record<string, unknown>[] = [{ escalatedToCommittee: true }];
+        const or: Record<string, unknown>[] = [
+            { escalatedToCommittee: true },
+            // {field: null} khop CA hai truong hop field khong ton tai va field
+            // duoc luu explicit null - an toan hon $exists:false don thuan.
+            { neighborhoodId: null, cluster: null },
+        ];
         if (clusters.length) or.push({ cluster: { $in: clusters } });
         return { $or: or };
     }
@@ -123,6 +194,7 @@ export function assertComplaintInScope(
     const clusters = actorUser.assignedClusters || [];
     if (canReadEscalated) {
         if (complaint.escalatedToCommittee) return;
+        if (!complaint.neighborhoodId && !complaint.cluster) return;
         if (
             clusters.length &&
             complaint.cluster &&
@@ -179,6 +251,7 @@ export async function createComplaint(
     const code = await generateYearlyCode(Complaint, "HB-PA");
     const cluster = await resolveComplaintCluster(actorUser);
     const neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
+    const wardCode = await resolveComplaintWardCode(actorUser, neighborhoodId);
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
         // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
@@ -193,6 +266,7 @@ export async function createComplaint(
         status: "moi_tiep_nhan",
         cluster,
         neighborhoodId,
+        wardCode,
         relatedAssetId: input.relatedAssetId,
         createdByUserId: userId,
     });
@@ -205,15 +279,53 @@ export async function createComplaint(
         actorId: userId,
     });
 
-    await createNotification({
-        title: "Phản ánh mới cần xử lý",
-        body: `Mã ${code}: ${input.title}`,
-        type: "complaint.created",
-        targetRoles: ["neighborhood_leader", "admin"],
-        relatedModel: "Complaint",
-        relatedId: complaint._id,
-        createdBy: userId,
-    });
+    // Neu xac dinh duoc to dan pho, chi bao To truong/To pho CUA TO DO (khong
+    // blast toi moi neighborhood_leader trong he thong nhu truoc). Neu khong
+    // xac dinh duoc, day chinh la truong hop can chuyen tiep len cap Phuong -
+    // bao bi thu/can bo UBND thay vi de phan anh "mat tich".
+    if (neighborhoodId) {
+        const neighborhood = await Neighborhood.findById(
+            neighborhoodId,
+        ).select("leaderUserId");
+        const coleaders = await NeighborhoodColeaderAssignment.find({
+            neighborhoodId,
+            unassignedAt: { $exists: false },
+        }).select("coleaderUserId");
+        const targetUserIds = [
+            neighborhood?.leaderUserId,
+            ...coleaders.map(c => c.coleaderUserId),
+        ].filter(Boolean) as mongoose.Types.ObjectId[];
+        if (targetUserIds.length) {
+            await createNotification({
+                title: "Phản ánh mới cần xử lý",
+                body: `Mã ${code}: ${input.title}`,
+                type: "complaint.created",
+                targetUserIds,
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+                createdBy: userId,
+            });
+        }
+        await createNotification({
+            title: "Phản ánh mới cần xử lý",
+            body: `Mã ${code}: ${input.title}`,
+            type: "complaint.created",
+            targetRoles: ["admin"],
+            relatedModel: "Complaint",
+            relatedId: complaint._id,
+            createdBy: userId,
+        });
+    } else {
+        await createNotification({
+            title: "Phản ánh mới cần xử lý (chưa xác định tổ dân phố)",
+            body: `Mã ${code}: ${input.title}`,
+            type: "complaint.created",
+            targetRoles: ["secretary", "people_committee_official", "admin"],
+            relatedModel: "Complaint",
+            relatedId: complaint._id,
+            createdBy: userId,
+        });
+    }
 
     return complaint;
 }
