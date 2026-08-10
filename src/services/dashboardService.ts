@@ -26,7 +26,8 @@ async function residentScopeFor(
 ): Promise<{ householdFilter: Record<string, unknown>; scoped: boolean }> {
     const isLeaderOnly =
         !actorUser.roles.includes("admin") &&
-        actorUser.roles.includes("neighborhood_leader");
+        (actorUser.roles.includes("neighborhood_leader") ||
+            actorUser.roles.includes("neighborhood_coleader"));
     if (!isLeaderOnly) return { householdFilter: {}, scoped: false };
 
     const scope = areaScopeFilter(actorUser);
@@ -206,7 +207,9 @@ async function buildTaskList(
     const tasks: DashboardTask[] = [];
 
     const isAdmin = roles.includes("admin");
-    const isLeader = roles.includes("neighborhood_leader");
+    const isLeader =
+        roles.includes("neighborhood_leader") ||
+        roles.includes("neighborhood_coleader");
     const isPolice = roles.includes("regional_police");
 
     if (isAdmin || isLeader) {

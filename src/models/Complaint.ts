@@ -21,6 +21,9 @@ export interface IComplaint extends Document {
     actualCompletionDate?: Date;
     escalatedToCommittee: boolean;
     internalNotes?: string;
+    // Chi dat khi category="ha_tang" va nguoi gui chon lien ket toi mot tai
+    // san cu the trong so ha tang (B11.03) - tuy chon, khong bat buoc.
+    relatedAssetId?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -61,6 +64,10 @@ const ComplaintSchema = new Schema<IComplaint>(
         actualCompletionDate: { type: Date },
         escalatedToCommittee: { type: Boolean, default: false },
         internalNotes: { type: String },
+        relatedAssetId: {
+            type: Schema.Types.ObjectId,
+            ref: "InfrastructureAsset",
+        },
     },
     { timestamps: true },
 );

@@ -100,7 +100,10 @@ export function assertResidentRecordInScope(
         neighborhoodId?: unknown;
     } | null;
 
-    if (user.roles.includes("neighborhood_leader")) {
+    if (
+        user.roles.includes("neighborhood_leader") ||
+        user.roles.includes("neighborhood_coleader")
+    ) {
         const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
             .filter(Boolean)
             .map(String);

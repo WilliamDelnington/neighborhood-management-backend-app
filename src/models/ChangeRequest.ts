@@ -13,7 +13,18 @@ export const CHANGE_REQUEST_TARGET_MODELS = [
 export type ChangeRequestTargetModel =
     typeof CHANGE_REQUEST_TARGET_MODELS[number];
 
-export const CHANGE_REQUEST_TYPES = ["update", "unlink"] as const;
+// "transfer_neighborhood": chuyen mot HouseRecord tu to dan pho nay sang to
+// dan pho khac - ve mat du lieu chi la update truong neighborhoodId (van dung
+// updateHouseRecord de chay lai auto-derive province/ward, xem
+// changeRequestService.applyApprovedChange), nhung tach rieng khoi "update"
+// vi quyen QUYET DINH khac han: chi PCO hoac To truong/To pho cua to dan pho
+// SE NHAN (khong phai bat ky ai co change_requests.decide) - xem
+// assertCanDecideTransfer trong changeRequestService.ts.
+export const CHANGE_REQUEST_TYPES = [
+    "update",
+    "unlink",
+    "transfer_neighborhood",
+] as const;
 export type ChangeRequestType = typeof CHANGE_REQUEST_TYPES[number];
 
 export const CHANGE_REQUEST_STATUS = [

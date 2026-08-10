@@ -36,6 +36,8 @@ export { default as Complaint, type IComplaint } from "./Complaint";
 export {
     default as ComplaintTimeline,
     type IComplaintTimeline,
+    type ComplaintTimelineAction,
+    COMPLAINT_TIMELINE_ACTIONS,
 } from "./ComplaintTimeline";
 export {
     default as SupportTicket,
@@ -97,6 +99,10 @@ export {
     default as NeighborhoodLeaderAssignment,
     type INeighborhoodLeaderAssignment,
 } from "./NeighborhoodLeaderAssignment";
+export {
+    default as NeighborhoodColeaderAssignment,
+    type INeighborhoodColeaderAssignment,
+} from "./NeighborhoodColeaderAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
 export {
@@ -109,6 +115,21 @@ export {
     default as ZaloWebhookEvent,
     type IZaloWebhookEvent,
 } from "./ZaloWebhookEvent";
+export {
+    default as InfrastructureAsset,
+    type IInfrastructureAsset,
+} from "./InfrastructureAsset";
+export {
+    default as PeriodicReport,
+    type IPeriodicReport,
+    type IPeriodicReportSections,
+} from "./PeriodicReport";
+export {
+    default as Comment,
+    type IComment,
+    type CommentEntityType,
+    COMMENT_ENTITY_TYPES,
+} from "./Comment";
 export {
     default as ChangeRequest,
     type IChangeRequest,

@@ -19,6 +19,9 @@ export const createSurveySchema = z.object({
     eligibleNeighborhoodIds: z.array(z.string()).optional(),
     eligibleBusinessTypeIds: z.array(z.string()).optional(),
     eligibleAll: z.boolean().default(true),
+    // Nhan xet/tong hop cua nguoi phu trach khao sat sau khi co ket qua (B08.06)
+    // - khong bat buoc luc tao, chi dung khi cap nhat.
+    resultSummary: z.string().optional(),
 });
 export type CreateSurveyInput = z.infer<typeof createSurveySchema>;
 

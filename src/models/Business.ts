@@ -9,6 +9,10 @@ export interface IBusiness extends Document {
     neighborhoodId?: mongoose.Types.ObjectId;
     businessType?: mongoose.Types.ObjectId;
     ownerName?: string;
+    // Lien ket toi tai khoan thuc su cua nguoi dai dien ho kinh doanh (phai
+    // tu nhap/lien ket, khong suy tu ownerName text) - dung de gui Request
+    // (nhiem vu) den dung nguoi tai nha nay, xem requestService.ts.
+    representativeUserId?: mongoose.Types.ObjectId;
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH ho kinh doanh nay - doc lap voi trang thai
@@ -49,6 +53,7 @@ const BusinessSchema = new Schema<IBusiness>(
         },
         businessType: { type: Schema.Types.ObjectId, ref: "BusinessType" },
         ownerName: { type: String, trim: true },
+        representativeUserId: { type: Schema.Types.ObjectId, ref: "User" },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
         status: {

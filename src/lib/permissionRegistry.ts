@@ -92,6 +92,17 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "infrastructure",
+        label: "Hạ tầng (đèn, đường, cống, cây...)",
+        permissions: [
+            { key: "infrastructure.read", label: "Xem sổ hạ tầng" },
+            {
+                key: "infrastructure.manage",
+                label: "Quản trị sổ hạ tầng (tạo, cập nhật, xóa)",
+            },
+        ],
+    },
+    {
         key: "businesses",
         label: "Hộ kinh doanh",
         permissions: [
@@ -190,6 +201,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             },
             { key: "complaints.create", label: "Tạo phản ánh" },
             { key: "complaints.read_own", label: "Xem phản ánh của mình" },
+            {
+                key: "complaints.update_own",
+                label:
+                    "Sửa / xác nhận hoàn thành / đề nghị xem xét lại phản ánh của mình",
+            },
             { key: "complaints.assign", label: "Gán người xử lý" },
             { key: "complaints.update_status", label: "Cập nhật trạng thái" },
             { key: "complaints.delete", label: "Xóa phản ánh" },
@@ -345,8 +361,13 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         key: "reports",
         label: "Báo cáo",
         permissions: [
-            { key: "reports.read", label: "Xem báo cáo" },
-            { key: "reports.export", label: "Xuất báo cáo" },
+            { key: "reports.read", label: "Xem báo cáo thống kê" },
+            { key: "reports.export", label: "Xuất báo cáo thống kê" },
+            {
+                key: "reports.author",
+                label:
+                    "Soạn / nộp báo cáo định kỳ (khác báo cáo thống kê ở trên)",
+            },
         ],
     },
     {

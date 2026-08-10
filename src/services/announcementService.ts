@@ -32,11 +32,15 @@ export async function createAnnouncement(
         targetNeighborhoodIds: input.targetNeighborhoodIds || [],
         isUrgent: input.isUrgent,
         audienceAll: input.audienceAll,
-        // Pham vi tac gia: chi gan khi nguoi tao la to truong (xem
+        // Pham vi tac gia: chi gan khi nguoi tao la to truong/to pho (xem
         // to-dan-pho-cua-minh), admin/secretary tao thong bao khong bi gioi han.
+        // To pho khong co neighborhoodId "chinh" (chi to truong co) nen fallback
+        // sang assignedNeighborhoodIds[0].
         neighborhoodId: actorUser.roles.includes("neighborhood_leader")
             ? actorUser.neighborhoodId
-            : undefined,
+            : actorUser.roles.includes("neighborhood_coleader")
+                ? actorUser.assignedNeighborhoodIds?.[0]
+                : undefined,
         status: "nhap",
         createdBy: actorUser._id,
     });
@@ -53,7 +57,12 @@ export function assertAnnouncementInScope(
     user: IUser,
     announcement: IAnnouncement,
 ): void {
-    if (!user.roles.includes("neighborhood_leader")) return;
+    if (
+        !user.roles.includes("neighborhood_leader") &&
+        !user.roles.includes("neighborhood_coleader")
+    ) {
+        return;
+    }
     const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
         .filter(Boolean)
         .map(String);
@@ -222,7 +231,8 @@ export async function listAnnouncements(params: {
     // (admin=1) - admin/secretary xem duoc tat ca nhu truoc.
     if (
         !params.publicOnly &&
-        params.actorUser?.roles.includes("neighborhood_leader")
+        (params.actorUser?.roles.includes("neighborhood_leader") ||
+            params.actorUser?.roles.includes("neighborhood_coleader"))
     ) {
         Object.assign(filter, areaScopeFilter(params.actorUser));
     }

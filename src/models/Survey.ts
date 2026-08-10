@@ -28,6 +28,9 @@ export interface ISurvey extends Document {
     eligibleNeighborhoodIds: mongoose.Types.ObjectId[];
     eligibleBusinessTypeIds: mongoose.Types.ObjectId[];
     eligibleAll: boolean;
+    // Nhan xet/tong hop cua nguoi phu trach sau khi co ket qua (B08.06) - hien
+    // thi canh ket qua tho, KHONG thay doi cau tra loi cua nguoi dan.
+    resultSummary?: string;
     createdBy: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -77,6 +80,7 @@ const SurveySchema = new Schema<ISurvey>(
             default: [],
         },
         eligibleAll: { type: Boolean, default: true },
+        resultSummary: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

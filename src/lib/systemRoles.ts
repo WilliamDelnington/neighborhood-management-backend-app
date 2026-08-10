@@ -21,6 +21,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "users.lock",
         "neighborhoods.read",
         "streets.read",
+        // So ha tang (den/duong/cong/cay...) trong to dan pho minh phu trach -
+        // xem infrastructureAssetService.ts (B11).
+        "infrastructure.read",
+        "infrastructure.manage",
         "houses.read",
         "houses.create",
         "houses.verify",
@@ -42,6 +46,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "security.read",
         "residents.read",
         "requests.read",
+        // To truong/To pho gui nhiem vu (type "task") xuong dung Nha so/nguoi
+        // trong Nha (xem resolveHouseRoleRecipientIds/resolveHouseLeaderRecipientIds
+        // trong requestService.ts) - truoc day requests.create chi co secretary.
+        "requests.create",
         // Du dieu kien duoc chon lam nguoi phu trach khi bi thu gui yeu cau
         // loai "Khac" (vd van ban/giay to hanh chinh) - thieu quyen nay thi
         // to truong khong hien ra trong bo chon nguoi nhan cho loai yeu cau
@@ -54,6 +62,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.respond",
         "reports.read",
         "reports.export",
+        "reports.author",
         "exports.export",
         "support_tickets.create",
         "support_tickets.read_own",
@@ -87,6 +96,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.read",
         "households.verify",
         "citizens.read",
+        "infrastructure.read",
         "business_types.read",
         "businesses.read",
         // Khong co businesses.verify: secretary chi xem duoc tien do duyet ho
@@ -108,6 +118,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.update",
         "surveys.publish",
         "surveys.respond",
+        "reports.author",
         "support_tickets.create",
         "support_tickets.read_own",
         "files.read",
@@ -159,6 +170,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "requests.read",
         "reports.read",
         "reports.export",
+        "reports.author",
         "meetings.register",
         "surveys.respond",
         "support_tickets.create",
@@ -174,6 +186,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.read",
         "households.verify",
         "citizens.read",
+        "infrastructure.read",
         "business_types.read",
         "businesses.read",
         "businesses.verify",
@@ -187,6 +200,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "security.read",
         "residents.read",
         "requests.read",
+        "reports.author",
         "meetings.register",
         "surveys.respond",
         "support_tickets.create",
@@ -244,6 +258,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "usage_units.update",
         "complaints.create",
         "complaints.read_own",
+        // Sua noi dung, xac nhan hoan thanh, hoac de nghi xem xet lai phan
+        // anh CUA CHINH MINH - xem complaintService.ts.
+        "complaints.update_own",
         "support_tickets.create",
         "support_tickets.read_own",
         "meetings.register",
@@ -268,6 +285,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.delete",
         "complaints.create",
         "complaints.read_own",
+        "complaints.update_own",
         "support_tickets.create",
         "support_tickets.read_own",
         "meetings.register",

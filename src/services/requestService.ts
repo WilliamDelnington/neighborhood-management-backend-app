@@ -1,7 +1,13 @@
 import { Types } from "mongoose";
 import {
+    Business,
+    Company,
     FileAsset,
+    Household,
+    HouseOwnership,
     HouseRecord,
+    Neighborhood,
+    NeighborhoodColeaderAssignment,
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
@@ -23,6 +29,7 @@ import { writeAuditLog } from "@/services/auditService";
 import {
     REQUEST_TYPE_LABEL,
     REQUEST_TYPES,
+    type RequestHouseRole,
     type RequestPriority,
     type RequestType,
 } from "@/types";
@@ -213,6 +220,82 @@ async function resolveRecipientIds(
     return recipientIds;
 }
 
+/**
+ * Tra ve userId cua nguoi giu vai tro `houseRole` tai mot Nha so cu the - dung
+ * cho To truong/To pho gui nhiem vu ("task") thang xuong dung nguoi tai nha,
+ * thay vi chon tung tai khoan rieng le. Chi nguoi ĐÃ co tai khoan lien ket moi
+ * nhan duoc (house_owner qua HouseOwnership.ownerId khi ownerType="user";
+ * household_head qua Household.headOfHouseholdUserId; business_head/
+ * company_rep qua Business/Company.representativeUserId) - nha thuoc to chuc
+ * (ownerType="organization") hoac chua lien ket tai khoan dai dien se khong co
+ * nguoi nhan tu nhanh nay.
+ */
+async function resolveHouseRoleRecipientIds(
+    houseId: string,
+    houseRole: RequestHouseRole,
+): Promise<Set<string>> {
+    const ids = new Set<string>();
+    if (houseRole === "house_owner") {
+        const ownerships = await HouseOwnership.find({
+            houseId,
+            active: true,
+            relationshipType: "primary_owner",
+            ownerType: "user",
+        }).select("ownerId");
+        ownerships.forEach(o => ids.add(String(o.ownerId)));
+    } else if (houseRole === "household_head") {
+        const households = await Household.find({
+            houseId,
+            headOfHouseholdUserId: { $exists: true, $ne: null },
+        }).select("headOfHouseholdUserId");
+        households.forEach(h => {
+            if (h.headOfHouseholdUserId) ids.add(String(h.headOfHouseholdUserId));
+        });
+    } else if (houseRole === "business_head") {
+        const businesses = await Business.find({
+            houseId,
+            representativeUserId: { $exists: true, $ne: null },
+        }).select("representativeUserId");
+        businesses.forEach(b => {
+            if (b.representativeUserId) ids.add(String(b.representativeUserId));
+        });
+    } else if (houseRole === "company_rep") {
+        const companies = await Company.find({
+            houseId,
+            representativeUserId: { $exists: true, $ne: null },
+        }).select("representativeUserId");
+        companies.forEach(c => {
+            if (c.representativeUserId) ids.add(String(c.representativeUserId));
+        });
+    }
+    return ids;
+}
+
+/**
+ * Tra ve userId cua To truong + cac To pho dang hoat dong cua to dan pho chua
+ * mot Nha so cu the - dung cho Phuong giao nhiem vu xac minh xuong To (B13).
+ */
+async function resolveHouseLeaderRecipientIds(
+    houseId: string,
+): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const house = await HouseRecord.findById(houseId).select("neighborhoodId");
+    if (!house?.neighborhoodId) return ids;
+
+    const neighborhood = await Neighborhood.findById(
+        house.neighborhoodId,
+    ).select("leaderUserId");
+    if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
+
+    const coleaderAssignments = await NeighborhoodColeaderAssignment.find({
+        neighborhoodId: house.neighborhoodId,
+        unassignedAt: { $exists: false },
+    }).select("coleaderUserId");
+    coleaderAssignments.forEach(a => ids.add(String(a.coleaderUserId)));
+
+    return ids;
+}
+
 export async function createRequest(
     actorUser: IUser,
     input: CreateRequestInput,
@@ -230,6 +313,36 @@ export async function createRequest(
         input.targetUserIds,
         input.targetRoles,
     );
+
+    if (input.houseId && (input.houseRole || input.targetHouseNeighborhoodLeader)) {
+        // Chi To truong/To pho duoc chon nguoi nhan theo vai tro trong Nha -
+        // khac voi targetRoles/targetUserIds (mo cho moi loai type/nguoi gui
+        // du dieu kien), day la mot nhanh gui rieng, gioi han cung theo vai
+        // tro nguoi GUI thay vi permission rieng (xem cau hoi da duoc hoi).
+        if (
+            !actorUser.roles.includes("neighborhood_leader") &&
+            !actorUser.roles.includes("neighborhood_coleader")
+        ) {
+            throw new HttpError(
+                "Chi To truong/To pho moi duoc gui nhiem vu theo Nha so",
+                403,
+            );
+        }
+        if (input.houseRole) {
+            const houseRoleIds = await resolveHouseRoleRecipientIds(
+                input.houseId,
+                input.houseRole,
+            );
+            houseRoleIds.forEach(id => recipientIds.add(id));
+        }
+        if (input.targetHouseNeighborhoodLeader) {
+            const leaderIds = await resolveHouseLeaderRecipientIds(
+                input.houseId,
+            );
+            leaderIds.forEach(id => recipientIds.add(id));
+        }
+    }
+
     if (recipientIds.size === 0) {
         throw new HttpError("Khong tim thay nguoi nhan phu hop", 422);
     }
@@ -357,6 +470,27 @@ export async function listRequests(params: {
     };
 }
 
+/**
+ * Nem HttpError(403) neu actor khong duoc xem Request nay: admin, hoac co
+ * requests.read, hoac la MOT nguoi nhan (RequestRecipient) cua yeu cau. Dung
+ * chung boi getRequestById va commentService (B14 - binh luan tren Request
+ * chi hien voi nhung ai xem duoc chinh Request do).
+ */
+export async function assertCanViewRequest(
+    actorUser: IUser,
+    request: IRequest,
+): Promise<void> {
+    if (actorUser.roles.includes("admin")) return;
+    if (await userHasPermission(actorUser, "requests.read")) return;
+    const isRecipient = await RequestRecipient.exists({
+        requestId: request._id,
+        userId: actorUser._id,
+    });
+    if (!isRecipient) {
+        throw new HttpError("Ban khong co quyen xem yeu cau nay", 403);
+    }
+}
+
 export async function getRequestById(actorUser: IUser, id: string) {
     const request = await RequestModel.findById(id).populate(
         "createdBy",
@@ -364,18 +498,7 @@ export async function getRequestById(actorUser: IUser, id: string) {
     );
     if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
 
-    if (
-        !actorUser.roles.includes("admin") &&
-        !(await userHasPermission(actorUser, "requests.read"))
-    ) {
-        const isRecipient = await RequestRecipient.exists({
-            requestId: request._id,
-            userId: actorUser._id,
-        });
-        if (!isRecipient) {
-            throw new HttpError("Ban khong co quyen xem yeu cau nay", 403);
-        }
-    }
+    await assertCanViewRequest(actorUser, request);
 
     return attachRecipients(request);
 }

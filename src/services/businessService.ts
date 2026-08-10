@@ -60,6 +60,7 @@ export async function createBusiness(
         neighborhoodId: houseRecord.neighborhoodId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
+        representativeUserId: input.representativeUserId || undefined,
         phone: input.phone,
         active: input.active ?? true,
         status: resolveInitialVerificationStatus(houseRecord),
@@ -154,6 +155,7 @@ export async function listBusinesses(params: {
 export async function getBusinessById(id: string): Promise<IBusiness> {
     const business = await Business.findById(id)
         .populate("businessType", "name")
+        .populate("representativeUserId", "displayName phone")
         // Populate them ownerId/ownerType de frontend tinh "co phai chu nha
         // khong" ma khong can goi rieng API nha so (dung cho man chi tiet ho
         // kinh doanh hien nut gui duyet/duyet/tu choi). ownerType bat buoc
@@ -190,6 +192,7 @@ export async function updateBusiness(
     business.updatedBy = actorUser._id as any;
     await business.save();
     await business.populate("businessType", "name");
+    await business.populate("representativeUserId", "displayName phone");
 
     await writeAuditLog({
         actorId: String(actorUser._id),

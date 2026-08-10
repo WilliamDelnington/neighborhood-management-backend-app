@@ -1,6 +1,7 @@
 import {
     Neighborhood,
     NeighborhoodLeaderAssignment,
+    NeighborhoodColeaderAssignment,
     User,
     type INeighborhood,
     type IUser,
@@ -52,9 +53,13 @@ export async function listNeighborhoods(params: {
             ...(targetUser.assignedNeighborhoodIds || []),
         ].filter(Boolean);
         filter._id = { $in: ids };
-    } else if (params.actorUser.roles.includes("neighborhood_leader")) {
-        // Chi to truong (neighborhood_leader) bi gioi han ve to dan pho minh
-        // phu trach. Cac vai tro khac co quyen neighborhoods.read nhung khong
+    } else if (
+        params.actorUser.roles.includes("neighborhood_leader") ||
+        params.actorUser.roles.includes("neighborhood_coleader")
+    ) {
+        // To truong (neighborhood_leader) va To pho (neighborhood_coleader) bi
+        // gioi han ve to dan pho minh phu trach. Cac vai tro khac co quyen
+        // neighborhoods.read nhung khong
         // co khai niem "to dan pho cua minh" (vd house_owner chon to dan pho
         // luc tao nha) can thay toan bo danh sach dang active, giong nhu
         // streetService.listStreets khong co scoping nao ca.
@@ -312,6 +317,128 @@ export async function getLeaderHistory(neighborhoodId: string) {
     return NeighborhoodLeaderAssignment.find({ neighborhoodId })
         .sort({ assignedAt: -1 })
         .populate("leaderUserId", LEADER_POPULATE)
+        .populate("assignedBy", "displayName")
+        .populate("unassignedBy", "displayName");
+}
+
+/**
+ * Danh sach To pho dang hoat dong cua mot to dan pho. Khac To truong: khong
+ * denormalize len Neighborhood - doc truc tiep tu NeighborhoodColeaderAssignment
+ * (xem ghi chu trong model ve ly do khong can field rieng).
+ */
+export async function listColeaders(neighborhoodId: string) {
+    return NeighborhoodColeaderAssignment.find({
+        neighborhoodId,
+        unassignedAt: { $exists: false },
+    })
+        .sort({ assignedAt: -1 })
+        .populate("coleaderUserId", LEADER_POPULATE)
+        .populate("assignedBy", "displayName");
+}
+
+/**
+ * Gan mot nguoi lam To pho cua mot to dan pho. Khac assignNeighborhoodLeader:
+ * khong co logic "1 nguoi 1 to" o cap to dan pho (nhieu to pho cung luc duoc),
+ * nhung van gioi han 1 nguoi khong the la to pho active o 2 to KHAC nhau cung
+ * luc (xem unique index tren model) - neu dang la to pho o to khac, tu choi
+ * thay vi tu dong chuyen (khac chinh sach cua to truong).
+ */
+export async function assignNeighborhoodColeader(
+    actorId: string,
+    neighborhoodId: string,
+    coleaderUserId: string,
+    note?: string,
+): Promise<void> {
+    const neighborhood = await Neighborhood.findById(neighborhoodId);
+    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+
+    const existing = await NeighborhoodColeaderAssignment.findOne({
+        neighborhoodId,
+        coleaderUserId,
+        unassignedAt: { $exists: false },
+    });
+    if (existing) return;
+
+    const newColeader = await User.findById(coleaderUserId);
+    if (!newColeader) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (newColeader.status !== "active") {
+        throw new HttpError(
+            "Chi co the gan tai khoan dang hoat dong lam to pho",
+            422,
+        );
+    }
+    if (!newColeader.roles.includes("neighborhood_coleader")) {
+        throw new HttpError(
+            "Nguoi dung duoc chon phai co vai tro To pho",
+            422,
+        );
+    }
+
+    const activeElsewhere = await NeighborhoodColeaderAssignment.findOne({
+        coleaderUserId,
+        neighborhoodId: { $ne: neighborhoodId },
+        unassignedAt: { $exists: false },
+    });
+    if (activeElsewhere) {
+        throw new HttpError(
+            "Nguoi dung nay dang la To pho cua mot to dan pho khac",
+            422,
+        );
+    }
+
+    await NeighborhoodColeaderAssignment.create({
+        neighborhoodId,
+        coleaderUserId,
+        assignedBy: actorId,
+        assignedAt: new Date(),
+        note,
+    });
+
+    await User.findByIdAndUpdate(coleaderUserId, {
+        $addToSet: { assignedNeighborhoodIds: neighborhood._id },
+    });
+
+    await writeAuditLog({
+        actorId,
+        action: "neighborhood.coleader_assign",
+        targetModel: "Neighborhood",
+        targetId: neighborhood._id,
+        metadata: { coleaderUserId },
+    });
+}
+
+export async function unassignNeighborhoodColeader(
+    actorId: string,
+    neighborhoodId: string,
+    coleaderUserId: string,
+): Promise<void> {
+    const now = new Date();
+    const result = await NeighborhoodColeaderAssignment.updateOne(
+        { neighborhoodId, coleaderUserId, unassignedAt: { $exists: false } },
+        { unassignedAt: now, unassignedBy: actorId },
+    );
+    if (result.matchedCount === 0) return;
+
+    await User.findByIdAndUpdate(coleaderUserId, {
+        $pull: { assignedNeighborhoodIds: neighborhoodId },
+    });
+
+    await writeAuditLog({
+        actorId,
+        action: "neighborhood.coleader_unassign",
+        targetModel: "Neighborhood",
+        targetId: neighborhoodId,
+        metadata: { coleaderUserId },
+    });
+}
+
+export async function getColeaderHistory(neighborhoodId: string) {
+    const neighborhood = await Neighborhood.findById(neighborhoodId);
+    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+
+    return NeighborhoodColeaderAssignment.find({ neighborhoodId })
+        .sort({ assignedAt: -1 })
+        .populate("coleaderUserId", LEADER_POPULATE)
         .populate("assignedBy", "displayName")
         .populate("unassignedBy", "displayName");
 }

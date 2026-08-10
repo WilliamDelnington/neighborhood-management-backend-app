@@ -276,6 +276,11 @@ export const NHOM_PHAN_ANH = [
     "tranh_chap_dan_cu",
     "tam_tru_nha_cho_thue",
     "gop_y_chung",
+    // Su co ha tang chung cua khu vuc (duong/cong/cay/diem rac/nha sinh hoat -
+    // KHONG trung ha_tang_dien_nuoc, cai do chi rieng dien/nuoc) - co the lien
+    // ket toi mot InfrastructureAsset cu the qua Complaint.relatedAssetId
+    // (B11.03, xem infrastructureAssetService.ts).
+    "ha_tang",
     "khac",
 ] as const;
 export type NhomPhanAnh = typeof NHOM_PHAN_ANH[number];
@@ -288,7 +293,49 @@ export const NHOM_PHAN_ANH_LABEL: Record<NhomPhanAnh, string> = {
     tranh_chap_dan_cu: "Tranh chấp dân cư",
     tam_tru_nha_cho_thue: "Tạm trú / nhà cho thuê",
     gop_y_chung: "Góp ý chung",
+    ha_tang: "Hạ tầng (đường, cống, cây, rác...)",
     khac: "Khác",
+};
+
+// ---------------------------------------------------------------------------
+// So ha tang To dan pho (InfrastructureAsset - B11)
+// ---------------------------------------------------------------------------
+export const INFRASTRUCTURE_ASSET_TYPES = [
+    "den",
+    "duong",
+    "cong",
+    "cay",
+    "diem_rac",
+    "nha_sinh_hoat",
+] as const;
+export type InfrastructureAssetType =
+    typeof INFRASTRUCTURE_ASSET_TYPES[number];
+export const INFRASTRUCTURE_ASSET_TYPE_LABEL: Record<
+    InfrastructureAssetType,
+    string
+> = {
+    den: "Đèn chiếu sáng",
+    duong: "Đường",
+    cong: "Cống",
+    cay: "Cây xanh",
+    diem_rac: "Điểm tập kết rác",
+    nha_sinh_hoat: "Nhà sinh hoạt cộng đồng",
+};
+
+export const INFRASTRUCTURE_ASSET_CONDITIONS = [
+    "binh_thuong",
+    "hu_hong",
+    "can_kiem_tra",
+] as const;
+export type InfrastructureAssetCondition =
+    typeof INFRASTRUCTURE_ASSET_CONDITIONS[number];
+export const INFRASTRUCTURE_ASSET_CONDITION_LABEL: Record<
+    InfrastructureAssetCondition,
+    string
+> = {
+    binh_thuong: "Bình thường",
+    hu_hong: "Hư hỏng",
+    can_kiem_tra: "Cần kiểm tra",
 };
 
 export const TRANG_THAI_PHAN_ANH = [
@@ -297,7 +344,21 @@ export const TRANG_THAI_PHAN_ANH = [
     "dang_xu_ly",
     "da_chuyen_ubnd",
     "da_xu_ly",
+    // Nguoi gui XAC NHAN da hai long voi ket qua xu ly (khac da_xu_ly - do la
+    // nhan vien BAO da xu ly) - CHI nguoi gui phan anh duoc dat trang thai
+    // nay, xem complaintService.confirmComplaintResolution. Neu khong hai
+    // long, nguoi gui dung requestComplaintReevaluation (khong tao trang thai
+    // rieng - quay ve dang_xu_ly, ban ghi ComplaintTimeline la lich su duy nhat).
+    "hoan_thanh",
     "dong",
+    // Nhan vien yeu cau nguoi gui bo sung thong tin - KHAC needs_info cua
+    // Request/RequestRecipient (do la nguoi NHAN tu bao thieu thong tin, con
+    // day la Complaint, nguoi XU LY yeu cau nguoi GUI bo sung). Tu dong quay
+    // ve dang_xu_ly ngay khi nguoi gui bo sung (xem complaintService.updateComplaint),
+    // khong tu bien mat neu khong ai bo sung - giu nguyen quy uoc cua
+    // requestComplaintReevaluation (hardcode dang_xu_ly, khong tra ve trang
+    // thai truoc do).
+    "can_bo_sung",
 ] as const;
 export type TrangThaiPhanAnh = typeof TRANG_THAI_PHAN_ANH[number];
 export const TRANG_THAI_PHAN_ANH_LABEL: Record<TrangThaiPhanAnh, string> = {
@@ -306,7 +367,9 @@ export const TRANG_THAI_PHAN_ANH_LABEL: Record<TrangThaiPhanAnh, string> = {
     dang_xu_ly: "Đang xử lý",
     da_chuyen_ubnd: "Đã chuyển UBND phường",
     da_xu_ly: "Đã xử lý",
+    hoan_thanh: "Hoàn thành",
     dong: "Đóng",
+    can_bo_sung: "Cần bổ sung thông tin",
 };
 
 // ---------------------------------------------------------------------------
@@ -400,12 +463,31 @@ export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
 // sau nay chi bang cach them gia tri vao REQUEST_TYPES (+ mot quyen
 // "{type}.assign" moi neu can gioi han nguoi co the nhan).
 // ---------------------------------------------------------------------------
-export const REQUEST_TYPES = ["pccc", "security", "other"] as const;
+export const REQUEST_TYPES = ["pccc", "security", "other", "task"] as const;
 export type RequestType = typeof REQUEST_TYPES[number];
 export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
     pccc: "PCCC",
     security: "An ninh",
     other: "Khác",
+    task: "Nhiệm vụ",
+};
+
+// Vai tro trong mot Nha so ma mot yeu cau loai "task" co the nham toi - dung
+// de Nhieu leader/coleader chon "gui cho Chu nha" hay "gui cho Chu ho" cua
+// chinh nha do, thay vi chon tung nguoi dung rieng le. Xem
+// requestService.resolveHouseRoleRecipientIds.
+export const REQUEST_HOUSE_ROLES = [
+    "house_owner",
+    "household_head",
+    "business_head",
+    "company_rep",
+] as const;
+export type RequestHouseRole = typeof REQUEST_HOUSE_ROLES[number];
+export const REQUEST_HOUSE_ROLE_LABEL: Record<RequestHouseRole, string> = {
+    house_owner: "Chủ nhà",
+    household_head: "Chủ hộ",
+    business_head: "Chủ hộ kinh doanh",
+    company_rep: "Người đại diện công ty",
 };
 
 export const REQUEST_STATUS = [
@@ -577,4 +659,43 @@ export type UploadTokenPayload = {
     userId: string;
     relatedModel: "HouseRecord" | "Business" | "BusinessDocument" | "Complaint";
     relatedId: string;
+};
+
+// ---------------------------------------------------------------------------
+// Bao cao dinh ky To/nhan vien nop len Phuong (PeriodicReport - B12). KHAC
+// reportService.ts (do la bao cao thong ke/dashboard cho admin, khong phai
+// mot model) - dat ten rieng (PeriodicReport, khong phai "Report") de tranh
+// nham lan voi module do.
+// ---------------------------------------------------------------------------
+export const PERIODIC_REPORT_TYPES = [
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "ad_hoc",
+] as const;
+export type PeriodicReportType = typeof PERIODIC_REPORT_TYPES[number];
+export const PERIODIC_REPORT_TYPE_LABEL: Record<PeriodicReportType, string> = {
+    weekly: "Hàng tuần",
+    monthly: "Hàng tháng",
+    quarterly: "Hàng quý",
+    yearly: "Hàng năm",
+    ad_hoc: "Đột xuất",
+};
+
+export const PERIODIC_REPORT_STATUS = [
+    "draft",
+    "submitted",
+    "revision_requested",
+    "resubmitted",
+] as const;
+export type PeriodicReportStatus = typeof PERIODIC_REPORT_STATUS[number];
+export const PERIODIC_REPORT_STATUS_LABEL: Record<
+    PeriodicReportStatus,
+    string
+> = {
+    draft: "Bản nháp",
+    submitted: "Đã nộp",
+    revision_requested: "Yêu cầu bổ sung",
+    resubmitted: "Đã nộp lại",
 };

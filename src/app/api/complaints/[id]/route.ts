@@ -9,7 +9,9 @@ import {
 import {
     getComplaintDetailForOwnerOrStaff,
     deleteComplaint,
+    updateComplaint,
 } from "@/services/complaintService";
+import { updateComplaintSchema } from "@/validators/complaint";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,22 @@ export async function GET(
             canReadEscalated,
         });
         return apiSuccess(result);
+    } catch (err) {
+        return apiErrorFromException(err);
+    }
+}
+
+export async function PATCH(
+    req: Request,
+    { params }: { params: { id: string } },
+) {
+    try {
+        await connectDB();
+        const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "complaints.update_own");
+        const body = updateComplaintSchema.parse(await req.json());
+        const complaint = await updateComplaint(actorUser, params.id, body);
+        return apiSuccess(complaint, "Cap nhat phan anh thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
     }

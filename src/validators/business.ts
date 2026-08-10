@@ -7,6 +7,7 @@ export const createBusinessSchema = z.object({
     // null = khong gan loai hinh kinh doanh, undefined = khong doi.
     businessType: z.string().nullable().optional(),
     ownerName: z.string().optional(),
+    representativeUserId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),

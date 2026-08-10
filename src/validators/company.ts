@@ -5,6 +5,7 @@ export const createCompanySchema = z.object({
     name: z.string().min(1, "Ten cong ty khong duoc de trong"),
     houseId: z.string().min(1, "Thieu nha so"),
     ownerName: z.string().optional(),
+    representativeUserId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),

@@ -16,6 +16,8 @@ import { TRANG_THAI_PHAN_ANH_LABEL } from "@/types";
 import type {
     AssignComplaintInput,
     CreateComplaintInput,
+    RequestReevaluationInput,
+    UpdateComplaintInput,
     UpdateComplaintStatusInput,
 } from "@/validators/complaint";
 
@@ -133,7 +135,10 @@ export function assertComplaintInScope(
             403,
         );
     }
-    if (actorUser.roles.includes("neighborhood_leader")) {
+    if (
+        actorUser.roles.includes("neighborhood_leader") ||
+        actorUser.roles.includes("neighborhood_coleader")
+    ) {
         // Khac voi cluster (quy uoc cu: khong xac dinh duoc = cho xem), voi
         // neighborhoodId dung quy uoc chat hon giong Household/PcccCheck/
         // SecurityRecord/HouseRecord: khong xac dinh duoc pham vi (to truong
@@ -188,6 +193,7 @@ export async function createComplaint(
         status: "moi_tiep_nhan",
         cluster,
         neighborhoodId,
+        relatedAssetId: input.relatedAssetId,
         createdByUserId: userId,
     });
 
@@ -218,12 +224,16 @@ export async function listComplaints(params: {
     status?: string;
     category?: string;
     search?: string;
+    relatedAssetId?: string;
     allowedCategories?: string[] | null;
     actorUser: IUser;
     canReadEscalated: boolean;
 }) {
     const clauses: Record<string, unknown>[] = [];
     if (params.status) clauses.push({ status: params.status });
+    if (params.relatedAssetId) {
+        clauses.push({ relatedAssetId: params.relatedAssetId });
+    }
     if (params.allowedCategories) {
         const categories = params.category
             ? params.allowedCategories.filter(c => c === params.category)
@@ -372,6 +382,15 @@ export async function updateComplaintStatus(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
 
+    // "hoan_thanh" la nguoi gui phan anh TU XAC NHAN hai long - nhan vien
+    // khong duoc dat trang thai nay thay ho, xem confirmComplaintResolution.
+    if (input.status === "hoan_thanh") {
+        throw new HttpError(
+            "Trang thai nay chi nguoi gui phan anh moi duoc xac nhan",
+            400,
+        );
+    }
+
     complaint.status = input.status;
     if (input.status === "da_xu_ly" || input.status === "dong") {
         complaint.actualCompletionDate = new Date();
@@ -407,6 +426,184 @@ export async function updateComplaintStatus(
         targetModel: "Complaint",
         targetId: complaint._id,
         metadata: { status: input.status },
+    });
+
+    return complaint;
+}
+
+/**
+ * Nem HttpError(403) neu actorUser khong phai chinh nguoi da gui phan anh nay
+ * (khong co ngoai le cho admin - ba hanh dong duoi day the hien y kien THUC
+ * SU cua nguoi gui, gia mao se lam sai lech du lieu).
+ */
+function assertIsComplaintSender(complaint: IComplaint, actorUser: IUser): void {
+    if (String(complaint.createdByUserId) !== String(actorUser._id)) {
+        throw new HttpError(
+            "Chi nguoi gui phan anh nay moi duoc thuc hien hanh dong nay",
+            403,
+        );
+    }
+}
+
+const EDITABLE_COMPLAINT_FIELDS = ["category", "title", "content"] as const;
+
+export async function updateComplaint(
+    actorUser: IUser,
+    complaintId: string,
+    patch: UpdateComplaintInput,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+
+    if (
+        !actorUser.roles.includes("admin") &&
+        String(complaint.createdByUserId) !== String(actorUser._id)
+    ) {
+        throw new HttpError("Ban khong co quyen sua phan anh nay", 403);
+    }
+    if (complaint.status === "dong" || complaint.status === "hoan_thanh") {
+        throw new HttpError(
+            "Phan anh da ket thuc, khong the chinh sua noi dung",
+            400,
+        );
+    }
+
+    const previousSnapshot: Record<string, unknown> = {};
+    const appliedPatch: Record<string, unknown> = {};
+    for (const field of EDITABLE_COMPLAINT_FIELDS) {
+        if (patch[field] === undefined) continue;
+        previousSnapshot[field] = complaint[field];
+        appliedPatch[field] = patch[field];
+        (complaint as unknown as Record<string, unknown>)[field] = patch[field];
+    }
+
+    // Nguoi gui bo sung thong tin -> tu dong quay ve dang_xu_ly (khong can
+    // nhan vien lam gi them) - hardcode dang_xu_ly, cung quy uoc voi
+    // requestComplaintReevaluation, khong luu/tra ve trang thai truoc do.
+    const wasWaitingForInfo = complaint.status === "can_bo_sung";
+    if (wasWaitingForInfo) {
+        complaint.status = "dang_xu_ly";
+    }
+    await complaint.save();
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: complaint.status,
+        action: "edited",
+        patch: appliedPatch,
+        previousSnapshot,
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+    if (wasWaitingForInfo) {
+        await ComplaintTimeline.create({
+            complaintId: complaint._id,
+            status: "dang_xu_ly",
+            action: "status_update",
+            isPublic: true,
+            actorId: actorUser._id,
+        });
+    }
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "complaint.update",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+        metadata: appliedPatch,
+    });
+
+    return complaint;
+}
+
+export async function confirmComplaintResolution(
+    actorUser: IUser,
+    complaintId: string,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    assertIsComplaintSender(complaint, actorUser);
+    if (complaint.status !== "da_xu_ly") {
+        throw new HttpError(
+            "Chi xac nhan hoan thanh khi phan anh da duoc xu ly",
+            400,
+        );
+    }
+
+    complaint.status = "hoan_thanh";
+    await complaint.save();
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: "hoan_thanh",
+        action: "status_update",
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "complaint.confirm_resolution",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+    });
+
+    return complaint;
+}
+
+export async function requestComplaintReevaluation(
+    actorUser: IUser,
+    complaintId: string,
+    input: RequestReevaluationInput,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    assertIsComplaintSender(complaint, actorUser);
+    if (complaint.status !== "da_xu_ly") {
+        throw new HttpError(
+            "Chi de nghi xem xet lai khi phan anh da duoc xu ly",
+            400,
+        );
+    }
+    const usedCount = await ComplaintTimeline.countDocuments({
+        complaintId: complaint._id,
+        action: "reevaluation_request",
+    });
+    if (usedCount > 0) {
+        throw new HttpError(
+            "Phan anh nay da duoc de nghi xem xet lai truoc do, khong the gui them",
+            400,
+        );
+    }
+
+    complaint.status = "dang_xu_ly";
+    await complaint.save();
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: "dang_xu_ly",
+        action: "reevaluation_request",
+        note: input.note,
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+
+    await createNotification({
+        title: "Phản ánh cần xem xét lại",
+        body: `Phản ánh ${complaint.code} bị đề nghị xem xét lại: ${input.note}`,
+        type: "complaint.reevaluation_requested",
+        targetRoles: ["admin", "secretary", "neighborhood_leader"],
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+        createdBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "complaint.request_reevaluation",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+        metadata: { note: input.note },
     });
 
     return complaint;

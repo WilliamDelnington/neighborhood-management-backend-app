@@ -2,6 +2,7 @@ import {
     ChangeRequest,
     HouseOwnership,
     HouseRecord,
+    Neighborhood,
     User,
     type ChangeRequestTargetModel,
     type IChangeRequest,
@@ -89,6 +90,7 @@ export async function createChangeRequest(
     await assertCanRequestChange(actorUser, input.targetModel, input.targetId);
 
     let previousSnapshot: Record<string, unknown> | undefined;
+    let patch: Record<string, unknown> | undefined;
     if (input.changeType === "update") {
         const allowedFields = CHANGE_REQUEST_EDITABLE_FIELDS[input.targetModel];
         const invalidKeys = Object.keys(input.patch || {}).filter(
@@ -105,6 +107,27 @@ export async function createChangeRequest(
             input.targetId,
             Object.keys(input.patch || {}),
         );
+        patch = input.patch;
+    } else if (input.changeType === "transfer_neighborhood") {
+        const newNeighborhoodId = String(input.patch?.neighborhoodId);
+        const newNeighborhood = await Neighborhood.findById(newNeighborhoodId);
+        if (!newNeighborhood) {
+            throw new HttpError("Khong tim thay to dan pho muon chuyen den", 404);
+        }
+        const houseRecord = await HouseRecord.findById(input.targetId).select(
+            "neighborhoodId",
+        );
+        if (
+            houseRecord?.neighborhoodId &&
+            String(houseRecord.neighborhoodId) === newNeighborhoodId
+        ) {
+            throw new HttpError(
+                "Nha so nay da thuoc to dan pho duoc chon",
+                400,
+            );
+        }
+        previousSnapshot = { neighborhoodId: houseRecord?.neighborhoodId };
+        patch = { neighborhoodId: newNeighborhoodId };
     }
 
     const changeRequest = await ChangeRequest.create({
@@ -112,7 +135,7 @@ export async function createChangeRequest(
         targetId: input.targetId,
         requestedBy: actorUser._id,
         changeType: input.changeType,
-        patch: input.changeType === "update" ? input.patch : undefined,
+        patch,
         previousSnapshot,
         reason: input.reason,
         status: "pending",
@@ -121,7 +144,11 @@ export async function createChangeRequest(
     await createNotification({
         title: "Có yêu cầu thay đổi mới",
         body: `${actorUser.displayName} gửi yêu cầu ${
-            input.changeType === "unlink" ? "hủy liên kết" : "thay đổi thông tin"
+            input.changeType === "unlink"
+                ? "hủy liên kết"
+                : input.changeType === "transfer_neighborhood"
+                    ? "chuyển tổ dân phố"
+                    : "thay đổi thông tin"
         }`,
         type: "change_request.created",
         targetRoles: ["admin", "secretary", "neighborhood_leader"],
@@ -229,6 +256,41 @@ async function applyApprovedChange(
     }
 }
 
+/**
+ * Chuyen doi rieng cho changeType="transfer_neighborhood": khac quyet dinh
+ * thong thuong (chi can change_requests.decide), chuyen to CHI duoc quyet
+ * dinh boi can bo UBND (PCO) hoac To truong/To pho cua to dan pho SE NHAN
+ * (khong phai to dan pho hien tai, va khong phai bat ky ai co
+ * change_requests.decide) - tranh mot To truong tu duyet chuyen nha vao to
+ * cua chinh minh ma To do khong biet/dong y.
+ */
+async function assertCanDecideTransfer(
+    actorUser: IUser,
+    changeRequest: IChangeRequest,
+): Promise<void> {
+    if (actorUser.roles.includes("admin")) return;
+    if (actorUser.roles.includes("people_committee_official")) return;
+
+    const receivingNeighborhoodId = String(changeRequest.patch?.neighborhoodId);
+    if (
+        actorUser.roles.includes("neighborhood_leader") ||
+        actorUser.roles.includes("neighborhood_coleader")
+    ) {
+        const ownIds = [
+            actorUser.neighborhoodId,
+            ...(actorUser.assignedNeighborhoodIds || []),
+        ]
+            .filter(Boolean)
+            .map(String);
+        if (ownIds.includes(receivingNeighborhoodId)) return;
+    }
+
+    throw new HttpError(
+        "Chi can bo UBND hoac To truong/To pho cua to dan pho se nhan moi duoc quyet dinh yeu cau chuyen to",
+        403,
+    );
+}
+
 export async function decideChangeRequest(
     actorUser: IUser,
     id: string,
@@ -237,6 +299,9 @@ export async function decideChangeRequest(
     const changeRequest = await ChangeRequest.findById(id);
     if (!changeRequest) throw new HttpError("Khong tim thay yeu cau", 404);
     assertPending(changeRequest);
+    if (changeRequest.changeType === "transfer_neighborhood") {
+        await assertCanDecideTransfer(actorUser, changeRequest);
+    }
 
     changeRequest.status = input.approve ? "approved" : "rejected";
     changeRequest.decidedBy = actorUser._id as any;

@@ -8,6 +8,9 @@ export interface ICompany extends Document {
     streetId?: mongoose.Types.ObjectId;
     neighborhoodId?: mongoose.Types.ObjectId;
     ownerName?: string;
+    // Lien ket toi tai khoan thuc su cua nguoi dai dien cong ty (cung ly do
+    // voi Business.representativeUserId - xem ghi chu o do).
+    representativeUserId?: mongoose.Types.ObjectId;
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH cong ty nay - doc lap voi trang thai cua
@@ -44,6 +47,7 @@ const CompanySchema = new Schema<ICompany>(
             index: true,
         },
         ownerName: { type: String, trim: true },
+        representativeUserId: { type: Schema.Types.ObjectId, ref: "User" },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
         status: {
