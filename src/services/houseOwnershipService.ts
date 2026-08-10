@@ -536,3 +536,59 @@ export async function addHouseOwnership(
 
     return ownership;
 }
+
+/**
+ * Xac thuc/tu choi mot quan he co_owner hoac authorized_manager dang cho xac
+ * thuc. Khac primary_owner (tu dong dong bo theo trang thai xac minh cua
+ * chinh Nha so - xem syncPrimaryOwnershipVerification), cac quan he con lai
+ * duoc them SAU khi nha da co chu nen can mot hanh dong xac thuc rieng -
+ * truoc ham nay khong ton tai bat ky cach nao (API/UI) de chuyen
+ * waiting_verification sang verified/rejected cho co_owner/authorized_manager.
+ * Tu choi KHONG tu dong ket thuc quan he (active van giu nguyen) - chi danh
+ * dau ket qua xac thuc, nguoi duyet phai tu ket thuc rieng qua
+ * endHouseOwnership neu muon go bo hoan toan.
+ */
+export async function verifyHouseOwnership(
+    actorUser: IUser,
+    houseId: string,
+    ownershipId: string,
+    decision: "verified" | "rejected",
+    note?: string,
+): Promise<IHouseOwnership> {
+    const ownership = await HouseOwnership.findOne({
+        _id: ownershipId,
+        houseId,
+        active: true,
+    });
+    if (!ownership) {
+        throw new HttpError("Khong tim thay quan he so huu", 404);
+    }
+    if (ownership.relationshipType === "primary_owner") {
+        throw new HttpError(
+            "Chu so huu chinh duoc xac thuc tu dong theo trang thai xac minh cua Nha so, khong xac thuc rieng o day",
+            400,
+        );
+    }
+
+    ownership.verificationStatus = decision;
+    if (note) ownership.reason = note;
+    ownership.updatedBy = actorUser._id as any;
+    await ownership.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action:
+            decision === "verified"
+                ? "house.ownership.verify"
+                : "house.ownership.reject",
+        targetModel: "HouseOwnership",
+        targetId: ownership._id,
+        metadata: {
+            houseId,
+            relationshipType: ownership.relationshipType,
+            note,
+        },
+    });
+
+    return ownership;
+}

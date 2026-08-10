@@ -30,3 +30,18 @@ export const endHouseOwnershipSchema = z.object({
     reason: z.string().optional(),
 });
 export type EndHouseOwnershipInput = z.infer<typeof endHouseOwnershipSchema>;
+
+// note bat buoc khi tu choi (giong quy uoc decideChangeRequestSchema), khong
+// bat buoc khi xac thuc.
+export const verifyHouseOwnershipSchema = z
+    .object({
+        decision: z.enum(["verified", "rejected"]),
+        note: z.string().optional(),
+    })
+    .refine(data => data.decision === "verified" || !!data.note?.trim(), {
+        message: "Vui long nhap ly do khi tu choi",
+        path: ["note"],
+    });
+export type VerifyHouseOwnershipInput = z.infer<
+    typeof verifyHouseOwnershipSchema
+>;

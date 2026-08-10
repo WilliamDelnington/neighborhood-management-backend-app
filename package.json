@@ -32,6 +32,7 @@
         "requests:backfill-from-assignments": "tsx scripts/backfill-requests-from-assignments.ts",
         "residents:backfill-from-security": "tsx scripts/backfill-split-resident-from-security.ts",
         "organizations:fix-taxcode-index": "tsx scripts/fix-organization-taxcode-index.ts",
+        "users:create": "tsx scripts/create-user.ts",
         "users:set-password": "tsx scripts/set-user-password.ts",
         "test": "vitest run"
     },
