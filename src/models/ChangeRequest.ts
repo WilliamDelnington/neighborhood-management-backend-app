@@ -20,10 +20,18 @@ export type ChangeRequestTargetModel =
 // vi quyen QUYET DINH khac han: chi PCO hoac To truong/To pho cua to dan pho
 // SE NHAN (khong phai bat ky ai co change_requests.decide) - xem
 // assertCanDecideTransfer trong changeRequestService.ts.
+// "data_discrepancy": sai lech du lieu Nha so phat hien giua he thong va bao
+// cao cua To dan pho (vd Phuong ghi so nha 125, To bao 125A) - khac 3 loai
+// tren o cho can HAI vong duyet thay vi mot: To dan pho xac nhan/bao cao lai
+// truoc (reviewStage="neighborhood_review"), sau do Phuong xac nhan cuoi cung
+// (reviewStage="ward_review") moi thuc su ap dung patch. 3 loai con lai
+// KHONG bao gio dat reviewStage nen van la mot vong duyet duy nhat nhu truoc -
+// xem decideChangeRequest trong changeRequestService.ts.
 export const CHANGE_REQUEST_TYPES = [
     "update",
     "unlink",
     "transfer_neighborhood",
+    "data_discrepancy",
 ] as const;
 export type ChangeRequestType = typeof CHANGE_REQUEST_TYPES[number];
 
@@ -35,6 +43,21 @@ export const CHANGE_REQUEST_STATUS = [
 ] as const;
 export type ChangeRequestStatus = typeof CHANGE_REQUEST_STATUS[number];
 
+export const CHANGE_REQUEST_REVIEW_STAGES = [
+    "neighborhood_review",
+    "ward_review",
+] as const;
+export type ChangeRequestReviewStage =
+    typeof CHANGE_REQUEST_REVIEW_STAGES[number];
+
+export interface IChangeRequestStageDecision {
+    stage: ChangeRequestReviewStage;
+    decidedBy: mongoose.Types.ObjectId;
+    decidedAt: Date;
+    outcome: string;
+    note?: string;
+}
+
 export interface IChangeRequest extends Document {
     targetModel: ChangeRequestTargetModel;
     targetId: mongoose.Types.ObjectId;
@@ -44,6 +67,10 @@ export interface IChangeRequest extends Document {
     previousSnapshot?: Record<string, unknown>;
     reason?: string;
     status: ChangeRequestStatus;
+    // Chi dung cho changeType="data_discrepancy" - undefined voi 3 loai con
+    // lai, giu nguyen hanh vi mot vong duyet cua chung.
+    reviewStage?: ChangeRequestReviewStage;
+    stageDecisions?: IChangeRequestStageDecision[];
     decidedBy?: mongoose.Types.ObjectId;
     decidedAt?: Date;
     decisionNote?: string;
@@ -80,6 +107,28 @@ const ChangeRequestSchema = new Schema<IChangeRequest>(
             default: "pending",
             index: true,
         },
+        reviewStage: {
+            type: String,
+            enum: CHANGE_REQUEST_REVIEW_STAGES,
+        },
+        stageDecisions: [
+            {
+                _id: false,
+                stage: {
+                    type: String,
+                    enum: CHANGE_REQUEST_REVIEW_STAGES,
+                    required: true,
+                },
+                decidedBy: {
+                    type: Schema.Types.ObjectId,
+                    ref: "User",
+                    required: true,
+                },
+                decidedAt: { type: Date, required: true },
+                outcome: { type: String, required: true },
+                note: { type: String, trim: true },
+            },
+        ],
         decidedBy: { type: Schema.Types.ObjectId, ref: "User" },
         decidedAt: { type: Date },
         decisionNote: { type: String, trim: true },

@@ -5,13 +5,19 @@ export const createChangeRequestSchema = z
     .object({
         targetModel: z.enum(CHANGE_REQUEST_TARGET_MODELS),
         targetId: z.string().min(1),
-        changeType: z.enum(["update", "unlink", "transfer_neighborhood"]),
+        changeType: z.enum([
+            "update",
+            "unlink",
+            "transfer_neighborhood",
+            "data_discrepancy",
+        ]),
         patch: z.record(z.string(), z.unknown()).optional(),
         reason: z.string().optional(),
     })
     .refine(
         data =>
-            data.changeType !== "update" ||
+            (data.changeType !== "update" &&
+                data.changeType !== "data_discrepancy") ||
             (data.patch && Object.keys(data.patch).length > 0),
         {
             message: "Vui long nhap it nhat mot truong can thay doi",

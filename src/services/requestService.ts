@@ -858,6 +858,57 @@ export async function listMyPendingRequestsForDashboard(
     return combined.slice(0, limit);
 }
 
+export type MyRequestCounts = {
+    inProgress: number;
+    dueSoon: number;
+    overdue: number;
+};
+
+// So ngay truoc han duoc coi la "sap het han". Chua co cau hinh rieng,
+// hardcode va co the tach thanh setting sau neu can.
+const DUE_SOON_DAYS = 3;
+
+/**
+ * Dem so Request ma nguoi dung dang dang nhap la nguoi nhan, chia theo dang
+ * xu ly / sap het han / qua han, dung cho widget ca nhan tren dashboard.
+ * Mot recipient chi roi vao dung mot nhom: qua han uu tien truoc, sau do
+ * sap het han, con lai la dang xu ly (neu status thuoc ACTIVE_TIER_STATUSES).
+ */
+export async function getMyRequestCounts(
+    userId: string,
+): Promise<MyRequestCounts> {
+    const recipientRows = await RequestRecipient.find({
+        userId,
+        status: { $in: ACTIVE_TIER_STATUSES },
+    }).select("status requestId");
+    if (recipientRows.length === 0) {
+        return { inProgress: 0, dueSoon: 0, overdue: 0 };
+    }
+
+    const requests = await RequestModel.find({
+        _id: { $in: recipientRows.map(r => r.requestId) },
+    }).select("dueDate");
+    const dueDateById = new Map(
+        requests.map(r => [String(r._id), r.dueDate]),
+    );
+
+    const dueSoonThreshold = Date.now() + DUE_SOON_DAYS * 24 * 60 * 60 * 1000;
+    const counts: MyRequestCounts = { inProgress: 0, dueSoon: 0, overdue: 0 };
+
+    for (const recipient of recipientRows) {
+        const dueDate = dueDateById.get(String(recipient.requestId));
+        if (withOverdue(recipient, dueDate)) {
+            counts.overdue += 1;
+        } else if (dueDate && dueDate.getTime() <= dueSoonThreshold) {
+            counts.dueSoon += 1;
+        } else {
+            counts.inProgress += 1;
+        }
+    }
+
+    return counts;
+}
+
 export async function updateMyRequestStatus(
     userId: string,
     requestId: string,

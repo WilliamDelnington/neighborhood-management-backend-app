@@ -294,6 +294,38 @@ export async function listMyComplaints(
     };
 }
 
+export type MyComplaintCounts = {
+    inProgress: number;
+    overdue: number;
+};
+
+const COMPLAINT_TERMINAL_STATUSES = ["hoan_thanh", "dong"];
+
+/**
+ * Dem so phan anh ma nguoi dung dang dang nhap la nguoi duoc phan cong xu ly
+ * (assigneeId), chia theo dang xu ly / qua han, dung cho widget ca nhan tren
+ * dashboard. Qua han la tap con cua dang xu ly (dua vao expectedCompletionDate),
+ * khong phai mot trang thai rieng.
+ */
+export async function getMyAssignedComplaintCounts(
+    userId: string,
+): Promise<MyComplaintCounts> {
+    const rows = await Complaint.find({
+        assigneeId: userId,
+        status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+    }).select("expectedCompletionDate");
+
+    const now = Date.now();
+    let overdue = 0;
+    for (const row of rows) {
+        if (row.expectedCompletionDate && row.expectedCompletionDate.getTime() < now) {
+            overdue += 1;
+        }
+    }
+
+    return { inProgress: rows.length, overdue };
+}
+
 async function getTimelineFor(complaintId: string, publicOnly: boolean) {
     const filter: Record<string, unknown> = { complaintId };
     if (publicOnly) filter.isPublic = true;

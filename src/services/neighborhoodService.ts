@@ -1,4 +1,5 @@
 import {
+    HouseRecord,
     Neighborhood,
     NeighborhoodLeaderAssignment,
     NeighborhoodColeaderAssignment,
@@ -84,8 +85,25 @@ export async function listNeighborhoods(params: {
         Neighborhood.countDocuments(filter),
     ]);
 
+    // Mot truy van gop cho ca trang, khong truy van rieng tung to dan pho -
+    // tranh N+1 khi hien thi so nha tren danh sach.
+    const houseCounts = items.length
+        ? await HouseRecord.aggregate([
+              { $match: { neighborhoodId: { $in: items.map(n => n._id) } } },
+              { $group: { _id: "$neighborhoodId", count: { $sum: 1 } } },
+          ])
+        : [];
+    const houseCountById = new Map<string, number>(
+        houseCounts.map(h => [String(h._id), h.count as number]),
+    );
+
+    const itemsWithHouseCount = items.map(n => ({
+        ...n.toObject(),
+        houseCount: houseCountById.get(String(n._id)) || 0,
+    }));
+
     return {
-        items,
+        items: itemsWithHouseCount,
         total,
         page: params.page,
         limit: params.limit,

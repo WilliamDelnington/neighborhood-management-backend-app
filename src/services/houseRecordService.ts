@@ -716,14 +716,22 @@ export async function updateHouseRecord(
     const editsProtectedField = Object.keys(patch).some(key =>
         HOUSE_RECORD_PROTECTED_FIELDS.includes(key),
     );
+    // Chuyen to dan pho (neighborhoodId) KHONG duoc nam trong dien mien tru cua
+    // admin nhu cac truong bao ve khac - moi nguoi, ke ca admin, deu phai di qua
+    // ChangeRequest (transfer_neighborhood) de co lich su/duyet dung quy trinh.
+    // Chi loi thoat hop le la bypassVerifiedGate tu changeRequestService sau khi
+    // ChangeRequest da duoc duyet.
+    const editsNeighborhood = patch.neighborhoodId !== undefined;
     if (
         houseRecord.status === "verified" &&
         editsProtectedField &&
-        !actorUser.roles.includes("admin") &&
-        !opts.bypassVerifiedGate
+        !opts.bypassVerifiedGate &&
+        (editsNeighborhood || !actorUser.roles.includes("admin"))
     ) {
         throw new HttpError(
-            "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thay vì sửa trực tiếp",
+            editsNeighborhood
+                ? "Nhà số đã được xác minh, việc chuyển tổ dân phố phải thực hiện qua yêu cầu thay đổi"
+                : "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thay vì sửa trực tiếp",
             403,
         );
     }
@@ -753,7 +761,7 @@ export async function updateHouseRecord(
 
     await writeAuditLog({
         actorId: String(actorUser._id),
-        action: "house.update",
+        action: editsNeighborhood ? "house.transfer_neighborhood" : "house.update",
         targetModel: "HouseRecord",
         targetId: houseRecord._id,
         metadata: patch,

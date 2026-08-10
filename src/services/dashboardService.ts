@@ -12,7 +12,11 @@ import {
     type IUser,
 } from "@/models";
 import { areaScopeFilter } from "@/lib/rbac";
-import { listMyPendingRequestsForDashboard } from "@/services/requestService";
+import {
+    getMyRequestCounts,
+    listMyPendingRequestsForDashboard,
+} from "@/services/requestService";
+import { getMyAssignedComplaintCounts } from "@/services/complaintService";
 
 export type DashboardTask = { label: string; count: number; link: string };
 
@@ -85,6 +89,8 @@ export async function getDashboardSummary(actorUser: IUser) {
         openSurveyDocs,
         urgentSecurityCount,
         myRequests,
+        myRequestCounts,
+        myComplaintCounts,
     ] = await Promise.all([
         Household.countDocuments(householdFilter),
         HouseRecord.countDocuments(
@@ -135,6 +141,8 @@ export async function getDashboardSummary(actorUser: IUser) {
             ...(isClusterScoped ? { houseId: { $in: scopedHouseIds } } : {}),
         }),
         listMyPendingRequestsForDashboard(String(actorUser._id)),
+        getMyRequestCounts(String(actorUser._id)),
+        getMyAssignedComplaintCounts(String(actorUser._id)),
     ]);
 
     const openSurveyIds = openSurveyDocs.map(s => s._id);
@@ -185,6 +193,8 @@ export async function getDashboardSummary(actorUser: IUser) {
         },
         taskList,
         myRequests,
+        myRequestCounts,
+        myComplaintCounts,
     };
 }
 

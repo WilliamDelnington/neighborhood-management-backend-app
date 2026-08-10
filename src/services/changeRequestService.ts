@@ -128,6 +128,25 @@ export async function createChangeRequest(
         }
         previousSnapshot = { neighborhoodId: houseRecord?.neighborhoodId };
         patch = { neighborhoodId: newNeighborhoodId };
+    } else if (input.changeType === "data_discrepancy") {
+        // Cung dieu kien truong duoc phep nhu "update" - chi khac o cho can
+        // hai vong duyet (xem reviewStage ben duoi va decideChangeRequest).
+        const allowedFields = CHANGE_REQUEST_EDITABLE_FIELDS[input.targetModel];
+        const invalidKeys = Object.keys(input.patch || {}).filter(
+            key => !allowedFields.includes(key),
+        );
+        if (invalidKeys.length > 0) {
+            throw new HttpError(
+                `Khong the de nghi thay doi truong: ${invalidKeys.join(", ")}`,
+                400,
+            );
+        }
+        previousSnapshot = await getSnapshot(
+            input.targetModel,
+            input.targetId,
+            Object.keys(input.patch || {}),
+        );
+        patch = input.patch;
     }
 
     const changeRequest = await ChangeRequest.create({
@@ -139,6 +158,10 @@ export async function createChangeRequest(
         previousSnapshot,
         reason: input.reason,
         status: "pending",
+        reviewStage:
+            input.changeType === "data_discrepancy"
+                ? "neighborhood_review"
+                : undefined,
     });
 
     await createNotification({
@@ -291,6 +314,52 @@ async function assertCanDecideTransfer(
     );
 }
 
+/**
+ * Chi ap dung cho changeType="data_discrepancy": vong "neighborhood_review"
+ * chi To truong/To pho cua To dan pho dang quan ly Nha so nay (hoac admin/PCO)
+ * moi duoc xac nhan; vong "ward_review" (buoc cuoi, quyet dinh co ap dung
+ * patch hay khong) chi admin/PCO moi duoc quyet dinh.
+ */
+async function assertCanDecideDiscrepancyStage(
+    actorUser: IUser,
+    changeRequest: IChangeRequest,
+): Promise<void> {
+    if (actorUser.roles.includes("admin")) return;
+    if (actorUser.roles.includes("people_committee_official")) return;
+
+    if (changeRequest.reviewStage === "ward_review") {
+        throw new HttpError(
+            "Chi can bo UBND moi duoc xac nhan buoc cuoi cua yeu cau doi soat du lieu",
+            403,
+        );
+    }
+
+    if (
+        actorUser.roles.includes("neighborhood_leader") ||
+        actorUser.roles.includes("neighborhood_coleader")
+    ) {
+        const houseRecord = await HouseRecord.findById(
+            changeRequest.targetId,
+        ).select("neighborhoodId");
+        const ownIds = [
+            actorUser.neighborhoodId,
+            ...(actorUser.assignedNeighborhoodIds || []),
+        ]
+            .filter(Boolean)
+            .map(String);
+        if (
+            houseRecord?.neighborhoodId &&
+            ownIds.includes(String(houseRecord.neighborhoodId))
+        )
+            return;
+    }
+
+    throw new HttpError(
+        "Chi can bo UBND hoac To truong/To pho cua to dan pho phu trach nha so nay moi duoc xac nhan",
+        403,
+    );
+}
+
 export async function decideChangeRequest(
     actorUser: IUser,
     id: string,
@@ -302,11 +371,58 @@ export async function decideChangeRequest(
     if (changeRequest.changeType === "transfer_neighborhood") {
         await assertCanDecideTransfer(actorUser, changeRequest);
     }
+    if (changeRequest.changeType === "data_discrepancy") {
+        await assertCanDecideDiscrepancyStage(actorUser, changeRequest);
+    }
+
+    // Vong dau ("neighborhood_review") cua data_discrepancy chi ghi nhan xac
+    // nhan cua To dan pho va chuyen sang vong Phuong ("ward_review") - KHONG
+    // chot status/ap dung patch. 3 loai con lai khong bao gio dat reviewStage
+    // nen luon roi thang xuong nhanh chot ben duoi, dung y het truoc day.
+    if (
+        changeRequest.changeType === "data_discrepancy" &&
+        changeRequest.reviewStage === "neighborhood_review"
+    ) {
+        changeRequest.stageDecisions = [
+            ...(changeRequest.stageDecisions || []),
+            {
+                stage: "neighborhood_review",
+                decidedBy: actorUser._id as any,
+                decidedAt: new Date(),
+                outcome: input.approve ? "verified" : "need_update",
+                note: input.decisionNote,
+            },
+        ];
+        changeRequest.reviewStage = "ward_review";
+        await changeRequest.save();
+
+        await writeAuditLog({
+            actorId: String(actorUser._id),
+            action: "change_request.neighborhood_review",
+            targetModel: "ChangeRequest",
+            targetId: changeRequest._id,
+            metadata: { decisionNote: input.decisionNote, outcome: input.approve ? "verified" : "need_update" },
+        });
+
+        return changeRequest;
+    }
 
     changeRequest.status = input.approve ? "approved" : "rejected";
     changeRequest.decidedBy = actorUser._id as any;
     changeRequest.decidedAt = new Date();
     changeRequest.decisionNote = input.decisionNote;
+    if (changeRequest.changeType === "data_discrepancy") {
+        changeRequest.stageDecisions = [
+            ...(changeRequest.stageDecisions || []),
+            {
+                stage: "ward_review",
+                decidedBy: actorUser._id as any,
+                decidedAt: new Date(),
+                outcome: input.approve ? "confirmed" : "need_recheck",
+                note: input.decisionNote,
+            },
+        ];
+    }
     await changeRequest.save();
 
     if (input.approve) {
