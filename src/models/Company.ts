@@ -11,6 +11,14 @@ export interface ICompany extends Document {
     // Lien ket toi tai khoan thuc su cua nguoi dai dien cong ty (cung ly do
     // voi Business.representativeUserId - xem ghi chu o do).
     representativeUserId?: mongoose.Types.ObjectId;
+    // Lien ket TUY CHON toi Organization khi cong ty dang hoat dong tai nha
+    // nay CHINH LA (hoac thuoc ve) mot phap nhan da dang ky trong so Organization
+    // (vd cung mot cong ty vua so huu nha khac vua dang ky hoat dong o day) -
+    // khong bat buoc, khong suy ra tu dong (Company va Organization la hai
+    // khai niem khac nhau: Company gan voi MOT nha cu the va co quy trinh xac
+    // minh rieng, Organization la so dang ky phap nhan dung lam ownerType cho
+    // HouseOwnership - xem ghi chu tai models/Organization.ts).
+    organizationId?: mongoose.Types.ObjectId;
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH cong ty nay - doc lap voi trang thai cua
@@ -48,6 +56,11 @@ const CompanySchema = new Schema<ICompany>(
         },
         ownerName: { type: String, trim: true },
         representativeUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        organizationId: {
+            type: Schema.Types.ObjectId,
+            ref: "Organization",
+            index: true,
+        },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
         status: {

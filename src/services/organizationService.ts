@@ -1,6 +1,11 @@
 import { Organization, User, type IOrganization, type IUser } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
+import {
+    addOrganizationRepresentative,
+    getOrganizationIdsForRepresentative,
+    isOrganizationRepresentativeActor,
+} from "@/services/organizationRepresentativeService";
 import type {
     CreateOrganizationInput,
     UpdateOrganizationInput,
@@ -13,7 +18,7 @@ import type {
  * dai dien to chuc cung phai la mot tai khoan house_owner thuc su dang nhap
  * duoc.
  */
-async function assertRepresentativeUser(userId: string): Promise<IUser> {
+export async function assertRepresentativeUser(userId: string): Promise<IUser> {
     const user = await User.findById(userId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
     if (user.status !== "active") {
@@ -34,11 +39,18 @@ async function assertRepresentativeUser(userId: string): Promise<IUser> {
 /**
  * Dieu kien loc danh sach to chuc theo pham vi cua actor:
  * - admin: xem tat ca.
- * - house_owner: chi xem to chuc ma minh la nguoi dai dien.
+ * - house_owner: chi xem to chuc ma minh dang la nguoi dai dien active (bat
+ *   ky role nao) - tra ve tu OrganizationRepresentative thay vi chi doc
+ *   Organization.representativeUserId (chi biet duoc legal_representative).
  */
-function organizationScopeFilter(actorUser: IUser): Record<string, unknown> {
+async function organizationScopeFilter(
+    actorUser: IUser,
+): Promise<Record<string, unknown>> {
     if (actorUser.roles.includes("admin")) return {};
-    return { representativeUserId: actorUser._id };
+    const organizationIds = await getOrganizationIdsForRepresentative(
+        actorUser._id as any,
+    );
+    return { _id: { $in: organizationIds } };
 }
 
 export async function listOrganizations(params: {
@@ -48,7 +60,7 @@ export async function listOrganizations(params: {
     active?: boolean;
     actorUser: IUser;
 }) {
-    const filter: Record<string, unknown> = organizationScopeFilter(
+    const filter: Record<string, unknown> = await organizationScopeFilter(
         params.actorUser,
     );
 
@@ -80,16 +92,22 @@ export async function listOrganizations(params: {
 
 /**
  * Nem HttpError(403) neu actor khong phai admin va khong phai nguoi dai dien
- * cua to chuc nay - dung truoc khi xem/sua mot to chuc cu the.
+ * DANG ACTIVE cua to chuc nay (bat ky role nao) - dung truoc khi xem/sua mot
+ * to chuc cu the, hoac truoc khi thao tac tren danh sach nguoi dai dien cua
+ * no. Kiem tra qua OrganizationRepresentative thay vi chi so sanh
+ * representativeUserId (chi la cache cua legal_representative), de bat ca
+ * authorized_manager/contact_person dang hop le.
  */
-function assertOrganizationInScope(
+export async function assertOrganizationInScope(
     actorUser: IUser,
     organization: IOrganization,
-): void {
+): Promise<void> {
     if (actorUser.roles.includes("admin")) return;
-    if (String(organization.representativeUserId) === String(actorUser._id)) {
-        return;
-    }
+    const isActor = await isOrganizationRepresentativeActor(
+        organization._id as any,
+        actorUser._id,
+    );
+    if (isActor) return;
     throw new HttpError(
         "Bạn không có quyền truy cập tổ chức này",
         403,
@@ -102,7 +120,7 @@ export async function getOrganizationById(
 ): Promise<IOrganization> {
     const organization = await Organization.findById(id);
     if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
-    assertOrganizationInScope(actorUser, organization);
+    await assertOrganizationInScope(actorUser, organization);
     await organization.populate("representativeUserId", "displayName phone");
     return organization;
 }
@@ -139,11 +157,21 @@ export async function createOrganization(
         }
     }
 
+    const { representativeUserId: _ignored, representativeTitle, ...organizationFields } =
+        input;
     const organization = await Organization.create({
-        ...input,
-        representativeUserId,
+        ...organizationFields,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
+    });
+
+    // Tao ban ghi OrganizationRepresentative (role="legal_representative")
+    // thay vi ghi truc tiep len Organization - ham nay tu dong bo lai cache
+    // representativeUserId/representativeRole - xem organizationRepresentativeService.ts.
+    await addOrganizationRepresentative(actorUser, String(organization._id), {
+        userId: representativeUserId,
+        role: "legal_representative",
+        title: representativeTitle,
     });
 
     await writeAuditLog({
@@ -154,8 +182,9 @@ export async function createOrganization(
         metadata: { name: organization.name, taxCode: organization.taxCode },
     });
 
-    await organization.populate("representativeUserId", "displayName phone");
-    return organization;
+    const created = await Organization.findById(organization._id);
+    await created!.populate("representativeUserId", "displayName phone");
+    return created!;
 }
 
 export async function updateOrganization(
@@ -165,11 +194,7 @@ export async function updateOrganization(
 ): Promise<IOrganization> {
     const organization = await Organization.findById(id);
     if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
-    assertOrganizationInScope(actorUser, organization);
-
-    if (patch.representativeUserId) {
-        await assertRepresentativeUser(patch.representativeUserId);
-    }
+    await assertOrganizationInScope(actorUser, organization);
 
     const priorState = organization.toObject();
     for (const [key, value] of Object.entries(patch)) {

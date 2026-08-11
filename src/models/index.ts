@@ -10,6 +10,10 @@ export {
     type IHouseOwnership,
 } from "./HouseOwnership";
 export { default as Organization, type IOrganization } from "./Organization";
+export {
+    default as OrganizationRepresentative,
+    type IOrganizationRepresentative,
+} from "./OrganizationRepresentative";
 export { default as Person, type IPerson } from "./Person";
 export { default as Household, type IHousehold } from "./Household";
 export {

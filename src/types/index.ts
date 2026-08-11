@@ -137,6 +137,39 @@ export const HOUSE_OWNERSHIP_VERIFICATION_STATUS_LABEL: Record<
 };
 
 // ---------------------------------------------------------------------------
+// OrganizationRepresentative - quan he "dai dien cho" giua mot User va mot
+// Organization, cung mo hinh voi HouseOwnership (nguon su that, lich su khong
+// bi ghi de, Organization.representativeUserId/representativeRole chi con la
+// cache cua ban ghi legal_representative dang active - xem
+// organizationRepresentativeService.syncPrimaryRepresentativeCache). Khac
+// HouseOwnership: khong da hinh (userId luon la User), nen khong can
+// ownerType/ownerId rieng.
+// ---------------------------------------------------------------------------
+export const ORGANIZATION_REPRESENTATIVE_ROLES = [
+    "legal_representative",
+    "authorized_manager",
+    "contact_person",
+] as const;
+export type OrganizationRepresentativeRole =
+    typeof ORGANIZATION_REPRESENTATIVE_ROLES[number];
+export const ORGANIZATION_REPRESENTATIVE_ROLE_LABEL: Record<
+    OrganizationRepresentativeRole,
+    string
+> = {
+    legal_representative: "Người đại diện pháp luật",
+    authorized_manager: "Người được ủy quyền quản lý",
+    contact_person: "Người liên hệ",
+};
+
+// Vai tro duoc coi la "dang thao tac thay to chuc" (duoc phep thao tac nhu
+// chinh to chuc, nhan thong bao...) - contact_person chi mang tinh thong
+// tin/lien he, khong co quyen thao tac. Chi mot legal_representative dang
+// active tai mot thoi diem (xem partial unique index tren model), con
+// authorized_manager/contact_person co the co nhieu ban ghi active dong thoi.
+export const ACTING_ORGANIZATION_REPRESENTATIVE_ROLES: OrganizationRepresentativeRole[] =
+    ["legal_representative", "authorized_manager"];
+
+// ---------------------------------------------------------------------------
 // Nha so
 // ---------------------------------------------------------------------------
 export const HOUSE_RECORD_STATUS = [

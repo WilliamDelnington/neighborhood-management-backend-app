@@ -7,7 +7,6 @@ import {
 } from "@/models";
 import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
-import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
@@ -160,12 +159,10 @@ export async function createHouseOwnerByStaff(
         throw new HttpError("So dien thoai da duoc su dung", 409);
     }
 
-    const passwordHash = await hashPassword(input.password);
     let user: IUser;
     try {
         user = await User.create({
             phone: input.phone,
-            passwordHash,
             displayName: input.displayName,
             address: input.address,
             roles: ["house_owner"],

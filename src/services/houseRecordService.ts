@@ -45,6 +45,7 @@ import {
     resolveActiveHouseOwnerActingUserIds,
     syncPrimaryOwnershipVerification,
 } from "@/services/houseOwnershipService";
+import { addOrganizationRepresentative } from "@/services/organizationRepresentativeService";
 import {
     HOUSE_RECORD_STATUS_LABEL,
     type HouseRecordStatus,
@@ -506,8 +507,14 @@ async function resolveOrCreateOrganizationOwner(
             actorUser,
             input.representative,
         );
-        organization.representativeUserId = representativeUserId;
-        await organization.save();
+        // Tao ban ghi OrganizationRepresentative (role="legal_representative")
+        // thay vi ghi truc tiep len Organization - tu dong bo lai cache
+        // representativeUserId/representativeRole - xem
+        // organizationRepresentativeService.ts.
+        await addOrganizationRepresentative(actorUser, String(organization._id), {
+            userId: String(representativeUserId),
+            role: "legal_representative",
+        });
     }
 
     return organization._id as Types.ObjectId;

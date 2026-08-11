@@ -20,6 +20,10 @@ export const zaloLoginSchema = z.object({
     zaloUserId: z.string().min(1, "Thieu zaloUserId"),
     name: z.string().optional(),
     avatarUrl: z.string().optional(),
+    // One-time token returned by zmp-sdk getPhoneNumber. Production must
+    // never trust a plain phone number supplied by the client.
+    phoneToken: z.string().optional(),
+    // Sandbox-only helper for automated/local testing.
     phone: z.string().optional(),
 });
 export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;

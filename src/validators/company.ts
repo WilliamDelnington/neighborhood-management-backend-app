@@ -6,6 +6,9 @@ export const createCompanySchema = z.object({
     houseId: z.string().min(1, "Thieu nha so"),
     ownerName: z.string().optional(),
     representativeUserId: z.string().nullable().optional(),
+    // Lien ket tuy chon toi mot Organization co san (khong tao moi) - xem
+    // ghi chu tren models/Company.ts.
+    organizationId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),

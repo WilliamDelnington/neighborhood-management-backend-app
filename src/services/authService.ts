@@ -1,6 +1,6 @@
 import { Role as RoleModel, User, Household, Citizen, type IUser } from "@/models";
 import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
-import { verifyZaloAccessToken } from "@/lib/zalo";
+import { verifyZaloAccessToken, verifyZaloPhoneToken } from "@/lib/zalo";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdMemberCount } from "@/services/citizenService";
@@ -24,20 +24,67 @@ export async function loginWithZalo(input: ZaloLoginInput) {
         },
     );
 
+    const verifiedPhone = await verifyZaloPhoneToken(
+        input.accessToken,
+        input.phoneToken,
+        input.phone,
+    );
+
     let user = await User.findOne({ zaloUserId: profile.zaloUserId });
+
+    if (profile.verifiedVia === "graph_api" && !user && !verifiedPhone) {
+        throw new HttpError(
+            "Vui long cho phep chia se so dien thoai de lien ket tai khoan",
+            403,
+        );
+    }
+
+    if (user && verifiedPhone) {
+        const conflictingUser = await User.findOne({
+            phone: verifiedPhone,
+            _id: { $ne: user._id },
+        });
+        if (conflictingUser) {
+            throw new HttpError(
+                "So dien thoai nay da thuoc mot tai khoan khac",
+                409,
+            );
+        }
+    }
+
+    // A leader-created account initially has only a verified administrative
+    // phone record. Link it only after Zalo verifies the same phone for the
+    // authenticated Zalo identity.
+    if (!user && verifiedPhone) {
+        const phoneUser = await User.findOne({ phone: verifiedPhone });
+        if (phoneUser) {
+            if (
+                phoneUser.zaloUserId &&
+                phoneUser.zaloUserId !== profile.zaloUserId
+            ) {
+                throw new HttpError(
+                    "So dien thoai nay da lien ket voi tai khoan Zalo khac",
+                    409,
+                );
+            }
+            phoneUser.zaloUserId = profile.zaloUserId;
+            user = phoneUser;
+        }
+    }
 
     if (!user) {
         user = await User.create({
             zaloUserId: profile.zaloUserId,
             displayName: profile.name || input.name || "Người dùng Zalo",
             avatarUrl: profile.avatarUrl || input.avatarUrl,
-            phone: input.phone,
+            phone: verifiedPhone,
             roles: ["house_owner"],
             primaryRole: "house_owner",
             status: "active",
         });
     } else {
         user.lastLoginAt = new Date();
+        if (verifiedPhone && !user.phone) user.phone = verifiedPhone;
         if (profile.name) user.displayName = profile.name;
         if (profile.avatarUrl) user.avatarUrl = profile.avatarUrl;
         await user.save();

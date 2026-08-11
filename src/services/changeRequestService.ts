@@ -18,7 +18,7 @@ import {
 } from "@/services/houseRecordService";
 import {
     endHouseOwnership,
-    resolveActingUserId,
+    resolveActingUserIds,
 } from "@/services/houseOwnershipService";
 import type { CreateChangeRequestInput } from "@/validators/changeRequest";
 
@@ -54,11 +54,11 @@ async function assertCanRequestChange(
     // nghi ket thuc no (khong phai bat ky chu so huu nao khac cua cung nha).
     const ownership = await HouseOwnership.findById(targetId);
     if (!ownership) throw new HttpError("Khong tim thay quan he so huu", 404);
-    const actingUserId = await resolveActingUserId(
+    const actingUserIds = await resolveActingUserIds(
         ownership.ownerType,
         ownership.ownerId,
     );
-    if (!actingUserId || String(actingUserId) !== String(actorUser._id)) {
+    if (!actingUserIds.some(id => String(id) === String(actorUser._id))) {
         throw new HttpError(
             "Ban khong co quyen de nghi doi voi quan he so huu nay",
             403,

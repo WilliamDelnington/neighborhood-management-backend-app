@@ -13,28 +13,31 @@ import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import {
     ACTING_HOUSE_OWNERSHIP_RELATIONSHIP_TYPES,
+    ACTING_ORGANIZATION_REPRESENTATIVE_ROLES,
     type OwnerType,
 } from "@/types";
 import type { AddHouseOwnershipInput } from "@/validators/houseOwnership";
+import {
+    getActiveRepresentativeUserIds,
+    getOrganizationIdsForRepresentative,
+} from "@/services/organizationRepresentativeService";
 
 /**
- * Tra ve id cua User thuc su "dung sau" mot quan he so huu - giong quy tac
- * resolveOwnerActingUserId cu: ownerType="user" -> chinh ownerId, ownerType=
- * "organization" -> representativeUserId cua to chuc do (undefined neu khong
- * tim thay to chuc hoac to chuc chua co nguoi dai dien dang nhap duoc),
- * ownerType="person" -> luon undefined (danh tinh khai bao, khong co tai
- * khoan dang nhap - xem models/Person.ts).
+ * Tra ve danh sach id User thuc su "dung sau" mot quan he so huu -
+ * ownerType="user" -> chinh ownerId (mot phan tu); ownerType="organization"
+ * -> TAT CA nguoi dang la nguoi dai dien "thao tac thay" (legal_representative
+ * + authorized_manager) cua to chuc do, co the nhieu hon mot nguoi - xem
+ * organizationRepresentativeService.getActiveRepresentativeUserIds;
+ * ownerType="person" -> mang rong (danh tinh khai bao, khong co tai khoan
+ * dang nhap - xem models/Person.ts).
  */
-export async function resolveActingUserId(
+export async function resolveActingUserIds(
     ownerType: OwnerType,
     ownerId: Types.ObjectId,
-): Promise<Types.ObjectId | undefined> {
-    if (ownerType === "user") return ownerId;
-    if (ownerType === "person") return undefined;
-    const organization = await Organization.findById(ownerId).select(
-        "representativeUserId",
-    );
-    return organization?.representativeUserId;
+): Promise<Types.ObjectId[]> {
+    if (ownerType === "user") return [ownerId];
+    if (ownerType === "person") return [];
+    return getActiveRepresentativeUserIds(ownerId);
 }
 
 /**
@@ -54,17 +57,18 @@ export async function resolveActiveHouseOwnerActingUserIds(
     }).select("ownerType ownerId");
 
     const resolved = await Promise.all(
-        rows.map(row => resolveActingUserId(row.ownerType, row.ownerId)),
+        rows.map(row => resolveActingUserIds(row.ownerType, row.ownerId)),
     );
 
     const seen = new Set<string>();
     const result: Types.ObjectId[] = [];
-    for (const id of resolved) {
-        if (!id) continue;
-        const key = String(id);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        result.push(id);
+    for (const ids of resolved) {
+        for (const id of ids) {
+            const key = String(id);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push(id);
+        }
     }
     return result;
 }
@@ -86,17 +90,18 @@ export async function getActingOwnerUserIdsForHouses(
     }).select("ownerType ownerId");
 
     const resolved = await Promise.all(
-        rows.map(row => resolveActingUserId(row.ownerType, row.ownerId)),
+        rows.map(row => resolveActingUserIds(row.ownerType, row.ownerId)),
     );
 
     const seen = new Set<string>();
     const result: Types.ObjectId[] = [];
-    for (const id of resolved) {
-        if (!id) continue;
-        const key = String(id);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        result.push(id);
+    for (const ids of resolved) {
+        for (const id of ids) {
+            const key = String(id);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push(id);
+        }
     }
     return result;
 }
@@ -126,10 +131,10 @@ export async function getHouseIdsForActingOwner(
     userId: unknown,
 ): Promise<Types.ObjectId[]> {
     if (!userId) return [];
-    const organizations = await Organization.find({
-        representativeUserId: userId,
-    }).select("_id");
-    const organizationIds = organizations.map(o => o._id);
+    const organizationIds = await getOrganizationIdsForRepresentative(
+        userId as Types.ObjectId,
+        ACTING_ORGANIZATION_REPRESENTATIVE_ROLES,
+    );
 
     const rows = await HouseOwnership.find({
         active: true,
@@ -375,13 +380,12 @@ export async function endHouseOwnership(
     // truc tiep nua - phai gui ChangeRequest (changeType="unlink") de nhan vien
     // duyet, luc do decideChangeRequest se goi lai chinh ham nay voi actorUser
     // la nguoi duyet (khac actingUserId cua ownership) nen khong bi chan o day.
-    const actingUserId = await resolveActingUserId(
+    const actingUserIds = await resolveActingUserIds(
         ownership.ownerType,
         ownership.ownerId,
     );
     if (
-        actingUserId &&
-        String(actingUserId) === String(actorUser._id) &&
+        actingUserIds.some(id => String(id) === String(actorUser._id)) &&
         !actorUser.roles.includes("admin")
     ) {
         throw new HttpError(
