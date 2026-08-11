@@ -32,6 +32,11 @@ export async function PATCH(
         await requirePermission(actorUser, "roles.update");
 
         const body = updateRoleSchema.parse(await req.json());
+        // roles.update cho phep sua metadata/pham vi cua role. Thay doi tap
+        // permission co the dung de tu nang quyen nen bat buoc co roles.manage.
+        if (body.permissions !== undefined) {
+            await requirePermission(actorUser, "roles.manage");
+        }
         const role = await updateRole(String(actorUser._id), params.id, body);
         return apiSuccess(role, "Cập nhật vai trò thành công");
     } catch (err) {

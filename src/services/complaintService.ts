@@ -723,6 +723,7 @@ export async function updateComplaint(
 export async function confirmComplaintResolution(
     actorUser: IUser,
     complaintId: string,
+    input?: { rating?: number; ratingNote?: string },
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
@@ -733,14 +734,28 @@ export async function confirmComplaintResolution(
             400,
         );
     }
+    if (
+        input?.rating !== undefined &&
+        (input.rating < 1 || input.rating > 5)
+    ) {
+        throw new HttpError("Danh gia phai tu 1 den 5 sao", 400);
+    }
 
     complaint.status = "hoan_thanh";
+    if (input?.rating !== undefined) complaint.rating = input.rating;
+    if (input?.ratingNote !== undefined) complaint.ratingNote = input.ratingNote;
     await complaint.save();
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
         status: "hoan_thanh",
         action: "status_update",
+        note:
+            input?.rating !== undefined
+                ? `Đánh giá: ${input.rating}/5 sao${
+                      input.ratingNote ? ` - ${input.ratingNote}` : ""
+                  }`
+                : undefined,
         isPublic: true,
         actorId: actorUser._id,
     });

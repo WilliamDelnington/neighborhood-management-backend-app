@@ -31,6 +31,11 @@ export interface IComplaint extends Document {
     // Chi dat khi category="ha_tang" va nguoi gui chon lien ket toi mot tai
     // san cu the trong so ha tang (B11.03) - tuy chon, khong bat buoc.
     relatedAssetId?: mongoose.Types.ObjectId;
+    // Danh gia cua nguoi gui khi xac nhan hoan thanh (1-5 sao), tuy chon -
+    // xem confirmComplaintResolution. Khong the sua lai sau khi da danh gia
+    // (status da chuyen sang "hoan_thanh", khong con hanh dong nao ghi de).
+    rating?: number;
+    ratingNote?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -91,6 +96,8 @@ const ComplaintSchema = new Schema<IComplaint>(
             type: Schema.Types.ObjectId,
             ref: "InfrastructureAsset",
         },
+        rating: { type: Number, min: 1, max: 5 },
+        ratingNote: { type: String, trim: true },
     },
     { timestamps: true },
 );

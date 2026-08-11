@@ -6,10 +6,12 @@ import {
     PcccCheck,
     SecurityRecord,
     Meeting,
+    MeetingRegistration,
     Survey,
     SurveyResponse,
-    FinanceTransaction,
+    SupportTicket,
     type IUser,
+    FinanceTransaction,
 } from "@/models";
 import { areaScopeFilter } from "@/lib/rbac";
 import {
@@ -17,6 +19,11 @@ import {
     listMyPendingRequestsForDashboard,
 } from "@/services/requestService";
 import { getMyAssignedComplaintCounts } from "@/services/complaintService";
+import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
+import { getUnreadCount } from "@/services/notificationReadService";
+
+const COMPLAINT_TERMINAL_STATUSES = ["hoan_thanh", "dong"];
+const SUPPORT_TICKET_TERMINAL_STATUSES = ["dong"];
 
 export type DashboardTask = { label: string; count: number; link: string };
 
@@ -270,4 +277,78 @@ async function buildTaskList(
     }
 
     return tasks;
+}
+
+/**
+ * Dashboard cho Nha so (C01) - khac han getDashboardSummary o tren (dung cho
+ * nhan vien/to truong): moi so lieu o day deu chi tinh tren du lieu CUA CHINH
+ * nguoi dang dang nhap (Request minh la nguoi nhan, Complaint/SupportTicket
+ * minh tao, Survey/Meeting dang mo ma minh chua tra loi/dang ky) - khong lien
+ * quan pham vi quan ly theo cum/to dan pho. "Sap toi" (surveys/meetings can
+ * phan hoi) chi loc theo trang thai mo/sap dien ra, KHONG loc theo dieu kien
+ * doi tuong tra loi (eligibleRoles/...) vi listSurveys/listMeetings hien tai
+ * cung chua loc o buoc liet ke (chi kiem tra luc gui tra loi) - giu nhat quan
+ * voi hanh vi hien co cua man "Khao sat"/"Lich hop" thay vi tu suy dien them.
+ */
+export async function getMyHouseDashboard(actorUser: IUser) {
+    const userId = String(actorUser._id);
+
+    const [
+        unread,
+        myRequestCounts,
+        activeComplaints,
+        openSupportTickets,
+        houseIds,
+        openSurveyDocs,
+        respondedSurveyIds,
+        upcomingMeetingDocs,
+        myMeetingRegistrations,
+    ] = await Promise.all([
+        getUnreadCount(userId),
+        getMyRequestCounts(userId),
+        Complaint.countDocuments({
+            createdByUserId: userId,
+            status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+        }),
+        SupportTicket.countDocuments({
+            createdByUserId: userId,
+            status: { $nin: SUPPORT_TICKET_TERMINAL_STATUSES },
+        }),
+        getHouseIdsForActingOwner(userId),
+        Survey.find({ status: "dang_mo" }).select("_id"),
+        SurveyResponse.find({ userId }).select("surveyId"),
+        Meeting.find({ startTime: { $gte: new Date() }, published: true })
+            .sort({ startTime: 1 })
+            .select("_id title startTime location"),
+        MeetingRegistration.find({ userId }).select("meetingId"),
+    ]);
+
+    const respondedSurveyIdSet = new Set(
+        respondedSurveyIds.map(r => String(r.surveyId)),
+    );
+    const pendingSurveys = openSurveyDocs.filter(
+        s => !respondedSurveyIdSet.has(String(s._id)),
+    ).length;
+
+    const registeredMeetingIdSet = new Set(
+        myMeetingRegistrations.map(r => String(r.meetingId)),
+    );
+    const pendingMeetings = upcomingMeetingDocs.filter(
+        m => !registeredMeetingIdSet.has(String(m._id)),
+    );
+
+    return {
+        unreadNotifications: unread.count,
+        myRequestCounts,
+        activeComplaints,
+        openSupportTickets,
+        pendingSurveys,
+        upcomingMeetings: pendingMeetings.slice(0, 5).map(m => ({
+            id: m._id,
+            title: m.title,
+            startTime: m.startTime,
+            location: m.location,
+        })),
+        hasLinkedHouse: houseIds.length > 0,
+    };
 }

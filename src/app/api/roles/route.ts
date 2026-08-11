@@ -39,6 +39,12 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "roles.create");
 
         const body = createRoleSchema.parse(await req.json());
+        // Tao role co permission la mot thao tac phan quyen, khong chi la tao
+        // metadata. Chan nguoi chi co roles.create tu tu cap/quang ba quyen cao
+        // hon thong qua mot role moi.
+        if (body.permissions.length > 0) {
+            await requirePermission(actorUser, "roles.manage");
+        }
         const role = await createRole(String(actorUser._id), body);
         return apiSuccess(role, "Tạo vai trò thành công", 201);
     } catch (err) {

@@ -404,16 +404,28 @@ export const TRANG_THAI_PHAN_ANH_LABEL: Record<TrangThaiPhanAnh, string> = {
 // ---------------------------------------------------------------------------
 // Ho tro (Mini App - Ho so ca nhan)
 // ---------------------------------------------------------------------------
-export const LOAI_YEU_CAU_HO_TRO = ["bao_loi", "gop_y"] as const;
+// "bao_loi"/"gop_y": phan hoi ve chinh ung dung (loi ky thuat/gop y). Cac gia
+// tri con lai la ho tro ho dan thuc su (FLOW-C06) - Ho can Phuong/To ho tro
+// mot van de doi song, khong phai bao loi phan mem.
+export const LOAI_YEU_CAU_HO_TRO = [
+    "bao_loi",
+    "gop_y",
+    "ho_tro_ho_dan",
+] as const;
 export type LoaiYeuCauHoTro = typeof LOAI_YEU_CAU_HO_TRO[number];
 export const LOAI_YEU_CAU_HO_TRO_LABEL: Record<LoaiYeuCauHoTro, string> = {
-    bao_loi: "Báo lỗi",
-    gop_y: "Góp ý",
+    bao_loi: "Báo lỗi ứng dụng",
+    gop_y: "Góp ý ứng dụng",
+    ho_tro_ho_dan: "Hỗ trợ hộ dân",
 };
 
+// "can_bo_sung": nhan vien yeu cau Ho bo sung thong tin truoc khi tiep tuc xu
+// ly - cung quy uoc voi Complaint.can_bo_sung (xem updateSupportTicket:
+// nguoi gui bo sung -> tu dong quay ve "dang_xu_ly").
 export const TRANG_THAI_YEU_CAU_HO_TRO = [
     "moi",
     "dang_xu_ly",
+    "can_bo_sung",
     "da_xu_ly",
     "dong",
 ] as const;
@@ -424,6 +436,7 @@ export const TRANG_THAI_YEU_CAU_HO_TRO_LABEL: Record<
 > = {
     moi: "Mới",
     dang_xu_ly: "Đang xử lý",
+    can_bo_sung: "Cần bổ sung thông tin",
     da_xu_ly: "Đã xử lý",
     dong: "Đóng",
 };
@@ -686,7 +699,12 @@ export type SessionTokenPayload = {
 export type UploadTokenPayload = {
     purpose: "upload";
     userId: string;
-    relatedModel: "HouseRecord" | "Business" | "BusinessDocument" | "Complaint";
+    relatedModel:
+        | "HouseRecord"
+        | "Business"
+        | "BusinessDocument"
+        | "Complaint"
+        | "Request";
     relatedId: string;
 };
 
