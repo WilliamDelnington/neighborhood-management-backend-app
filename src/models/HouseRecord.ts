@@ -3,10 +3,12 @@ import {
     HOUSE_RECORD_STATUS,
     HOUSE_PHYSICAL_STATUS,
     HOUSE_USAGE_TYPE,
+    HOUSE_GIS_SOURCES,
     OWNER_TYPE,
     type HouseRecordStatus,
     type HousePhysicalStatus,
     type HouseUsageType,
+    type HouseGisSource,
     type OwnerType,
 } from "@/types";
 
@@ -59,11 +61,39 @@ export interface IHouseRecord extends Document {
     // du lieu duy nhat, duoc man hinh An ninh & Quan ly cu tru hien thi lai
     // (khong luu ban sao tren SecurityRecord).
     residenceDeclarationNumber?: string;
+    // Toa do GIS cua Nha so. Cac truong phang giup form/mobile cap nhat de
+    // dang; `location` la GeoJSON suy dan de phuc vu truy van ban do sau nay.
+    // Khi chua co du lieu (ke ca client gui 0/0), latitude/longitude la null
+    // va location khong ton tai.
+    gisLatitude?: number | null;
+    gisLongitude?: number | null;
+    gisAccuracyMeters?: number | null;
+    gisSource: HouseGisSource;
+    gisCapturedAt?: Date | null;
+    location?: {
+        type: "Point";
+        coordinates: [number, number];
+    };
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
+
+const HouseLocationSchema = new Schema(
+    {
+        type: { type: String, enum: ["Point"], required: true },
+        coordinates: {
+            type: [Number],
+            required: true,
+            validate: {
+                validator: (value: number[]) => value.length === 2,
+                message: "GeoJSON Point phai co [longitude, latitude]",
+            },
+        },
+    },
+    { _id: false },
+);
 
 const HouseRecordSchema = new Schema<IHouseRecord>(
     {
@@ -118,6 +148,17 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
         denialReason: { type: String },
         needsUpdateNote: { type: String },
         residenceDeclarationNumber: { type: String },
+        gisLatitude: { type: Number, default: null },
+        gisLongitude: { type: Number, default: null },
+        gisAccuracyMeters: { type: Number, default: null, min: 0 },
+        gisSource: {
+            type: String,
+            enum: HOUSE_GIS_SOURCES,
+            default: "unavailable",
+            index: true,
+        },
+        gisCapturedAt: { type: Date, default: null },
+        location: { type: HouseLocationSchema, default: undefined },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },
@@ -125,6 +166,7 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
 );
 
 HouseRecordSchema.index({ address: "text" });
+HouseRecordSchema.index({ location: "2dsphere" }, { sparse: true });
 
 // Ten model dang ky voi Mongoose van la "House" (khong doi) de giu nguyen
 // collection "houses" va cac `ref: "House"` o Household/Business - chi doi

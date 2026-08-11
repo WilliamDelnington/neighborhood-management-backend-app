@@ -188,12 +188,12 @@ export async function getDashboardSummary(actorUser: IUser) {
         await Promise.all([
             capabilities.population
                 ? Household.find(context.areaFilter).select(
-                      "_id cluster neighborhoodId ownershipType needsSupport",
+                      "_id houseId cluster neighborhoodId ownershipType needsSupport",
                   )
                 : Promise.resolve([]),
             capabilities.population || capabilities.pccc || capabilities.security
                 ? HouseRecord.find(context.areaFilter).select(
-                      "_id cluster neighborhoodId",
+                      "_id code address cluster neighborhoodId gisLatitude gisLongitude gisAccuracyMeters gisSource",
                   )
                 : Promise.resolve([]),
             listMyPendingRequestsForDashboard(String(actorUser._id)),
@@ -211,7 +211,14 @@ export async function getDashboardSummary(actorUser: IUser) {
         ),
     ];
 
-    const [neighborhoods, citizensByHousehold, complaintRows, latestPccc, latestSecurity] =
+    const [
+        neighborhoods,
+        citizensByHousehold,
+        complaintRows,
+        openComplaintsByHouse,
+        latestPccc,
+        latestSecurity,
+    ] =
         await Promise.all([
             neighborhoodIds.length > 0
                 ? Neighborhood.find({ _id: { $in: neighborhoodIds } }).select(
@@ -226,6 +233,18 @@ export async function getDashboardSummary(actorUser: IUser) {
                 : Promise.resolve([]),
             capabilities.complaints
                 ? getComplaintDashboardRows(actorUser, context.complaintFilter)
+                : Promise.resolve([]),
+            capabilities.complaints && houseIds.length > 0
+                ? Complaint.aggregate([
+                      {
+                          $match: {
+                              ...context.complaintFilter,
+                              houseId: { $in: houseIds },
+                              status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+                          },
+                      },
+                      { $group: { _id: "$houseId", count: { $sum: 1 } } },
+                  ])
                 : Promise.resolve([]),
             capabilities.pccc && houseIds.length > 0
                 ? PcccCheck.aggregate([
@@ -263,6 +282,25 @@ export async function getDashboardSummary(actorUser: IUser) {
         citizensByHousehold.map(row => [String(row._id), Number(row.count)]),
     );
     const houseById = new Map(houses.map(house => [String(house._id), house]));
+    const citizenCountByHouse = new Map<string, number>();
+    for (const household of households) {
+        if (!household.houseId) continue;
+        const houseId = String(household.houseId);
+        citizenCountByHouse.set(
+            houseId,
+            (citizenCountByHouse.get(houseId) || 0) +
+                (citizenCountByHousehold.get(String(household._id)) || 0),
+        );
+    }
+    const complaintCountByHouse = new Map(
+        openComplaintsByHouse.map(row => [String(row._id), Number(row.count)]),
+    );
+    const pcccRiskByHouse = new Map(
+        latestPccc.map(row => [String(row._id), String(row.riskLevel)]),
+    );
+    const securityLevelByHouse = new Map(
+        latestSecurity.map(row => [String(row._id), String(row.level)]),
+    );
     const areaKey = (row: { neighborhoodId?: unknown; cluster?: string }) =>
         row.neighborhoodId
             ? `neighborhood:${String(row.neighborhoodId)}`
@@ -403,6 +441,28 @@ export async function getDashboardSummary(actorUser: IUser) {
         )
         .slice(0, 10);
     const overdueRequests = requestReport?.overdueAssignments || 0;
+    const gisPoints = houses
+        .filter(
+            house =>
+                house.gisLatitude &&
+                house.gisLongitude &&
+                Number.isFinite(house.gisLatitude) &&
+                Number.isFinite(house.gisLongitude),
+        )
+        .map(house => ({
+            houseId: String(house._id),
+            code: house.code,
+            address: house.address,
+            latitude: Number(house.gisLatitude),
+            longitude: Number(house.gisLongitude),
+            accuracyMeters: house.gisAccuracyMeters,
+            citizenCount: citizenCountByHouse.get(String(house._id)) || 0,
+            openComplaintCount:
+                complaintCountByHouse.get(String(house._id)) || 0,
+            highRiskPccc: pcccRiskByHouse.get(String(house._id)) === "do",
+            urgentSecurity:
+                securityLevelByHouse.get(String(house._id)) === "khan_cap",
+        }));
     const taskList = buildDashboardTaskList({
         capabilities,
         newComplaints,
@@ -478,6 +538,12 @@ export async function getDashboardSummary(actorUser: IUser) {
             inspectionProgress: inspection.progress,
             riskByArea,
             financeByMonth,
+        },
+        gisOverview: {
+            provider: "internal_coordinates",
+            totalHouses: houses.length,
+            housesWithCoordinates: gisPoints.length,
+            points: gisPoints,
         },
         taskList,
         myRequests,

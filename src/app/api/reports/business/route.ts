@@ -26,10 +26,11 @@ export async function GET(req: Request) {
         });
 
         if (searchParams.get("format") === "excel") {
+            await requirePermission(actorUser, "reports.export");
             const workbook = buildBusinessReportWorkbook(data);
             await writeAuditLog({
                 actorId: String(actorUser._id),
-                action: "report.export",
+                action: "DATA_EXPORTED",
                 targetModel: "Report",
                 metadata: { report: "business" },
             });

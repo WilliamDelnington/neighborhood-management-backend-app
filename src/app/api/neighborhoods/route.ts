@@ -3,6 +3,7 @@ import {
     apiSuccess,
     apiErrorFromException,
     paginationParams,
+    HttpError,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
 import { createNeighborhoodSchema } from "@/validators/neighborhood";
@@ -27,7 +28,10 @@ export async function GET(req: Request) {
             limit,
             search: searchParams.get("search") || undefined,
             active: activeParam === null ? undefined : activeParam === "true",
+            status: (searchParams.get("status") || undefined) as any,
+            streetId: searchParams.get("streetId") || undefined,
             leaderUserId: searchParams.get("leaderUserId") || undefined,
+            filterLeaderUserId: searchParams.get("filterLeaderUserId") || undefined,
             actorUser: user,
         });
         return apiSuccess(result);
@@ -43,6 +47,12 @@ export async function POST(req: Request) {
         await requirePermission(user, "neighborhoods.manage");
 
         const body = createNeighborhoodSchema.parse(await req.json());
+        if (
+            !user.roles.includes("admin") &&
+            (!user.wardCode || body.wardCode !== user.wardCode)
+        ) {
+            throw new HttpError("Ban chi duoc tao To trong Phuong/Xa duoc phan cong", 403);
+        }
         const neighborhood = await createNeighborhood(String(user._id), body);
         return apiSuccess(neighborhood, "Tao to dan pho thanh cong", 201);
     } catch (err) {

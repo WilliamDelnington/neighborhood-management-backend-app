@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { updatePeriodicReportSchema } from "@/validators/periodicReport";
 import {
     getPeriodicReportById,
@@ -30,6 +30,7 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "reports.author");
         const body = updatePeriodicReportSchema.parse(await req.json());
         const report = await updatePeriodicReport(actorUser, params.id, body);
         return apiSuccess(report, "Da cap nhat bao cao");

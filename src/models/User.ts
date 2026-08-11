@@ -1,5 +1,13 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { USER_STATUS, type Role, type UserStatus } from "@/types";
+import {
+    IDENTITY_PROVIDERS,
+    IDENTITY_VERIFICATION_STATUS,
+    USER_STATUS,
+    type IdentityProvider,
+    type IdentityVerificationStatus,
+    type Role,
+    type UserStatus,
+} from "@/types";
 
 export interface IUser extends Document {
     zaloUserId?: string;
@@ -13,6 +21,9 @@ export interface IUser extends Document {
     roles: Role[];
     primaryRole: Role;
     status: UserStatus;
+    identityProvider: IdentityProvider;
+    identityVerificationStatus: IdentityVerificationStatus;
+    identityVerifiedAt?: Date;
     householdId?: mongoose.Types.ObjectId;
     citizenId?: mongoose.Types.ObjectId;
     neighborhoodId?: mongoose.Types.ObjectId;
@@ -52,6 +63,21 @@ const UserSchema = new Schema<IUser>(
         roles: { type: [String], default: ["house_owner"] },
         primaryRole: { type: String, default: "house_owner" },
         status: { type: String, enum: USER_STATUS, default: "active" },
+        // Dang nhap bang so dien thoai la co che tam thoi, khong phai xac minh
+        // VNeID. Adapter VNeID/CSDLQGDC sau nay chi can cap nhat 3 truong nay.
+        identityProvider: {
+            type: String,
+            enum: IDENTITY_PROVIDERS,
+            default: "phone_temporary",
+            index: true,
+        },
+        identityVerificationStatus: {
+            type: String,
+            enum: IDENTITY_VERIFICATION_STATUS,
+            default: "unverified",
+            index: true,
+        },
+        identityVerifiedAt: { type: Date },
         householdId: { type: Schema.Types.ObjectId, ref: "Household" },
         citizenId: { type: Schema.Types.ObjectId, ref: "Citizen" },
         neighborhoodId: {

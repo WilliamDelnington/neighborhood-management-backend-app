@@ -23,9 +23,10 @@ export async function GET(req: Request) {
             toDate: toDateRaw ? new Date(toDateRaw) : undefined,
         });
         if (searchParams.get("format") === "excel") {
+            await requirePermission(actorUser, "reports.export");
             await writeAuditLog({
                 actorId: String(actorUser._id),
-                action: "report.export",
+                action: "DATA_EXPORTED",
                 targetModel: "Report",
                 metadata: { report: "requests" },
             });

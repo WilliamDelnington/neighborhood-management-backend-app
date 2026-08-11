@@ -1,8 +1,19 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { REQUEST_PRIORITIES, REQUEST_TYPES, type RequestPriority, type RequestType } from "@/types";
+import { REQUEST_PRIORITIES, type RequestPriority, type RequestType } from "@/types";
+import type { IRequestFormField } from "@/models/RequestTypeDefinition";
 
 export interface IRequest extends Document {
     type: RequestType;
+    typeDefinitionId?: mongoose.Types.ObjectId;
+    formSchemaVersion?: number;
+    formDefinitionSnapshot?: {
+        name: string;
+        dataEntryMode: "sender" | "recipient";
+        fields: IRequestFormField[];
+    };
+    formDataEncrypted?: string;
+    formDataUpdatedAt?: Date;
+    formDataUpdatedBy?: mongoose.Types.ObjectId;
     title: string;
     description?: string;
     note?: string;
@@ -20,7 +31,21 @@ export interface IRequest extends Document {
 
 const RequestSchema = new Schema<IRequest>(
     {
-        type: { type: String, enum: REQUEST_TYPES, required: true, index: true },
+        type: { type: String, required: true, index: true, trim: true },
+        typeDefinitionId: {
+            type: Schema.Types.ObjectId,
+            ref: "RequestTypeDefinition",
+            index: true,
+        },
+        formSchemaVersion: { type: Number, min: 1 },
+        // Snapshot bat bien de yeu cau cu van hien/validate dung schema tai
+        // thoi diem giao viec, ke ca khi danh muc loai nhiem vu tang version.
+        formDefinitionSnapshot: { type: Schema.Types.Mixed },
+        // Toan bo payload bieu mau duoc ma hoa AES-256-GCM. `select: false`
+        // ngan ro ri vo tinh qua cac truy van khong can noi dung chi tiet.
+        formDataEncrypted: { type: String, select: false },
+        formDataUpdatedAt: { type: Date },
+        formDataUpdatedBy: { type: Schema.Types.ObjectId, ref: "User" },
         title: { type: String, required: true, trim: true },
         description: { type: String, trim: true },
         note: { type: String, trim: true },

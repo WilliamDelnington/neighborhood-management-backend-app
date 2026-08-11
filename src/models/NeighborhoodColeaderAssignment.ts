@@ -5,6 +5,8 @@ export interface INeighborhoodColeaderAssignment extends Document {
     coleaderUserId: mongoose.Types.ObjectId;
     assignedBy: mongoose.Types.ObjectId;
     assignedAt: Date;
+    termId?: mongoose.Types.ObjectId;
+    endAt?: Date;
     unassignedAt?: Date;
     unassignedBy?: mongoose.Types.ObjectId;
     note?: string;
@@ -34,6 +36,8 @@ const NeighborhoodColeaderAssignmentSchema =
                 required: true,
             },
             assignedAt: { type: Date, default: Date.now },
+            termId: { type: Schema.Types.ObjectId, ref: "NeighborhoodTerm", index: true },
+            endAt: { type: Date, index: true },
             unassignedAt: { type: Date },
             unassignedBy: { type: Schema.Types.ObjectId, ref: "User" },
             note: { type: String },

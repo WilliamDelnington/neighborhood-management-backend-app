@@ -356,6 +356,12 @@ export function sanitizeUser(user: IUser) {
         roles: user.roles,
         primaryRole: user.primaryRole,
         status: user.status,
+        // Tai khoan cu chua backfill duoc hieu dung theo che do dang nhap
+        // hien tai: so dien thoai tam thoi, chua xac minh danh tinh quoc gia.
+        identityProvider: user.identityProvider || "phone_temporary",
+        identityVerificationStatus:
+            user.identityVerificationStatus || "unverified",
+        identityVerifiedAt: user.identityVerifiedAt,
         householdId: user.householdId ? String(user.householdId) : undefined,
         citizenId: user.citizenId ? String(user.citizenId) : undefined,
         neighborhoodId: user.neighborhoodId

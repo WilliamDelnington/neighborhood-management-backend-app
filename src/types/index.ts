@@ -103,6 +103,27 @@ export const USER_STATUS_LABEL: Record<UserStatus, string> = {
     locked: "Đã khóa",
 };
 
+// Muc bao dam danh tinh cua tai khoan/cong dan. Trong giai doan chua co API
+// VNeID/CSDLQGDC, dang nhap bang so dien thoai chi la kenh truy cap tam thoi,
+// KHONG duoc dong nghia voi viec danh tinh quoc gia da duoc xac minh.
+export const IDENTITY_PROVIDERS = [
+    "phone_temporary",
+    "manual_declaration",
+    "vneid",
+    "national_population_db",
+] as const;
+export type IdentityProvider = typeof IDENTITY_PROVIDERS[number];
+
+export const IDENTITY_VERIFICATION_STATUS = [
+    "unverified",
+    "pending",
+    "verified",
+    "failed",
+    "revoked",
+] as const;
+export type IdentityVerificationStatus =
+    typeof IDENTITY_VERIFICATION_STATUS[number];
+
 // Luu y: scopeType/scopeValues cua RoleAssignment hien chi la snapshot audit
 // ghi lai luc cap quyen - khong co cho nao trong code doc lai de tinh scope
 // truy cap thuc te. Co che thuc thi thuc su cho "neighborhood" la
@@ -269,6 +290,16 @@ export const HOUSE_PHYSICAL_STATUS_LABEL: Record<HousePhysicalStatus, string> = 
     vacant: "Để trống",
     damaged: "Xuống cấp",
 };
+
+// Nguon toa do cua Nha so. "unavailable" la gia tri co nghia nghiep vu;
+// khong luu Point [0, 0] vao chi muc GIS de tranh hien thi nham tai Null Island.
+export const HOUSE_GIS_SOURCES = [
+    "unavailable",
+    "device_gps",
+    "manual",
+    "external_gis",
+] as const;
+export type HouseGisSource = typeof HOUSE_GIS_SOURCES[number];
 
 // Trang thai xac thuc dung chung cho ca House/Household/Business - ba thuc
 // the nay co trang thai xac thuc DOC LAP voi nhau (khong con Household/Business
@@ -561,8 +592,11 @@ export const TINH_TRANG_THEO_DOI_AN_NINH_LABEL: Record<
 // "{type}.assign" moi neu can gioi han nguoi co the nhan).
 // ---------------------------------------------------------------------------
 export const REQUEST_TYPES = ["pccc", "security", "other", "task"] as const;
-export type RequestType = typeof REQUEST_TYPES[number];
-export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
+export type BuiltInRequestType = typeof REQUEST_TYPES[number];
+// RequestType la key dong: ngoai 4 loai he thong, Phuong co the tao them
+// RequestTypeDefinition ma khong can deploy lai backend/frontend.
+export type RequestType = string;
+export const REQUEST_TYPE_LABEL: Record<string, string> = {
     pccc: "PCCC",
     security: "An ninh",
     other: "Khác",
@@ -788,6 +822,11 @@ export const PERIODIC_REPORT_TYPE_LABEL: Record<PeriodicReportType, string> = {
 export const PERIODIC_REPORT_STATUS = [
     "draft",
     "submitted",
+    "received",
+    "accepted",
+    "revision_required",
+    "recalled",
+    // Gia tri legacy, giu de doc du lieu cu trong luc chua chay migration.
     "revision_requested",
     "resubmitted",
 ] as const;
@@ -798,6 +837,31 @@ export const PERIODIC_REPORT_STATUS_LABEL: Record<
 > = {
     draft: "Bản nháp",
     submitted: "Đã nộp",
+    received: "Phường đã tiếp nhận",
+    accepted: "Phường đã chấp nhận",
+    revision_required: "Yêu cầu bổ sung",
+    recalled: "Đã thu hồi",
     revision_requested: "Yêu cầu bổ sung",
     resubmitted: "Đã nộp lại",
 };
+
+// KPI duoc cau hinh trong DB. Data source la adapter an toan do backend dang
+// ky; admin khong nhap Mongo query/code tuy y vao cong thuc.
+export const KPI_FORMULA_TYPES = ["ratio", "count", "average"] as const;
+export type KpiFormulaType = typeof KPI_FORMULA_TYPES[number];
+
+export const KPI_DATA_SOURCES = [
+    "task_completion",
+    "task_on_time",
+    "feedback_sla",
+    "inspection_completion",
+    "house_response",
+    "notification_read",
+] as const;
+export type KpiDataSource = typeof KPI_DATA_SOURCES[number];
+
+export const KPI_PERIODS = ["weekly", "monthly", "quarterly", "yearly"] as const;
+export type KpiPeriod = typeof KPI_PERIODS[number];
+
+export const KPI_TARGET_DIRECTIONS = ["gte", "lte"] as const;
+export type KpiTargetDirection = typeof KPI_TARGET_DIRECTIONS[number];

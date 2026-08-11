@@ -3,6 +3,12 @@ import {
     Neighborhood,
     NeighborhoodLeaderAssignment,
     NeighborhoodColeaderAssignment,
+    NeighborhoodTerm,
+    NeighborhoodHistory,
+    NeighborhoodCollaboratorAssignment,
+    FileAsset,
+    InspectionCampaign,
+    InspectionTarget,
     User,
     type INeighborhood,
     type IUser,
@@ -11,10 +17,96 @@ import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import type {
     CreateNeighborhoodInput,
+    CreateNeighborhoodTermInput,
+    AssignNeighborhoodCollaboratorInput,
+    UpdateNeighborhoodTermInput,
     UpdateNeighborhoodInput,
 } from "@/validators/neighborhood";
+import type { NeighborhoodStatus } from "@/models/Neighborhood";
 
 const LEADER_POPULATE = "displayName phone status";
+
+/**
+ * Ket thuc cac phan cong da qua han va dong bo lai scope tren User. Ham duoc
+ * goi khi xac thuc tai khoan de ngay ket thuc la rang buoc quyen thuc su,
+ * khong chi la thong tin hien thi.
+ */
+export async function expireNeighborhoodOfficerAssignments(userId?: string) {
+    const now = new Date();
+    const expiredTerms = await NeighborhoodTerm.updateMany(
+        { status: "ACTIVE", endAt: { $lt: now } },
+        { $set: { status: "ENDED" } },
+    );
+    const userFilter = userId ? { leaderUserId: userId } : {};
+    const expiredLeaders = await NeighborhoodLeaderAssignment.find({
+        ...userFilter,
+        unassignedAt: { $exists: false },
+        endAt: { $lt: now },
+    });
+    for (const assignment of expiredLeaders) {
+        assignment.unassignedAt = assignment.endAt || now;
+        await assignment.save();
+        await Neighborhood.updateOne(
+            {
+                _id: assignment.neighborhoodId,
+                leaderUserId: assignment.leaderUserId,
+            },
+            { $unset: { leaderUserId: "" } },
+        );
+        await User.updateOne(
+            { _id: assignment.leaderUserId, neighborhoodId: assignment.neighborhoodId },
+            { $unset: { neighborhoodId: "" } },
+        );
+        await User.updateOne(
+            { _id: assignment.leaderUserId },
+            { $pull: { assignedNeighborhoodIds: assignment.neighborhoodId } },
+        );
+    }
+
+    const coleaderFilter = userId ? { coleaderUserId: userId } : {};
+    const expiredColeaders = await NeighborhoodColeaderAssignment.find({
+        ...coleaderFilter,
+        unassignedAt: { $exists: false },
+        endAt: { $lt: now },
+    });
+    for (const assignment of expiredColeaders) {
+        assignment.unassignedAt = assignment.endAt || now;
+        await assignment.save();
+        await User.updateOne(
+            { _id: assignment.coleaderUserId },
+            { $pull: { assignedNeighborhoodIds: assignment.neighborhoodId } },
+        );
+    }
+
+    const collaboratorFilter = userId ? { collaboratorUserId: userId } : {};
+    const expiredCollaborators = await NeighborhoodCollaboratorAssignment.find({
+        ...collaboratorFilter,
+        unassignedAt: { $exists: false },
+        endAt: { $lt: now },
+    });
+    for (const assignment of expiredCollaborators) {
+        assignment.unassignedAt = assignment.endAt || now;
+        await assignment.save();
+        const remaining = await NeighborhoodCollaboratorAssignment.exists({
+            neighborhoodId: assignment.neighborhoodId,
+            collaboratorUserId: assignment.collaboratorUserId,
+            unassignedAt: { $exists: false },
+        });
+        if (!remaining) {
+            await User.updateOne(
+                { _id: assignment.collaboratorUserId },
+                { $pull: { assignedNeighborhoodIds: assignment.neighborhoodId } },
+            );
+        }
+    }
+
+    return (
+        expiredTerms.modifiedCount +
+        expiredLeaders.length +
+        expiredColeaders.length +
+        expiredCollaborators.length
+    );
+}
 
 /**
  * Tra ve danh sach id to dan pho ma user duoc phep xem khi KHONG phai admin:
@@ -40,9 +132,13 @@ export async function listNeighborhoods(params: {
     limit: number;
     search?: string;
     active?: boolean;
+    status?: NeighborhoodStatus;
+    streetId?: string;
     leaderUserId?: string;
+    filterLeaderUserId?: string;
     actorUser: IUser;
 }) {
+    await expireNeighborhoodOfficerAssignments();
     const filter: Record<string, unknown> = {};
 
     if (params.leaderUserId) {
@@ -83,7 +179,21 @@ export async function listNeighborhoods(params: {
         filter._id = { $in: ids };
     }
 
-    if (params.active !== undefined) filter.active = params.active;
+    if (params.status) {
+        // Ban ghi cu co the chua co status; ACTIVE/INACTIVE duoc suy ra tu active.
+        filter.$and = [
+            ...((filter.$and as unknown[]) || []),
+            params.status === "ACTIVE"
+                ? { $or: [{ status: "ACTIVE" }, { status: { $exists: false }, active: true }] }
+                : params.status === "INACTIVE"
+                  ? { $or: [{ status: "INACTIVE" }, { status: { $exists: false }, active: false }] }
+                  : { status: params.status },
+        ];
+    } else if (params.active !== undefined) {
+        filter.active = params.active;
+    }
+    if (params.streetId) filter.streetIds = params.streetId;
+    if (params.filterLeaderUserId) filter.leaderUserId = params.filterLeaderUserId;
     if (params.search) {
         filter.$or = [
             { name: { $regex: params.search, $options: "i" } },
@@ -96,25 +206,66 @@ export async function listNeighborhoods(params: {
             .sort({ sequence: 1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
-            .populate("leaderUserId", LEADER_POPULATE),
+            .populate("leaderUserId", LEADER_POPULATE)
+            .populate("streetIds", "name code active"),
         Neighborhood.countDocuments(filter),
     ]);
 
     // Mot truy van gop cho ca trang, khong truy van rieng tung to dan pho -
     // tranh N+1 khi hien thi so nha tren danh sach.
-    const houseCounts = items.length
-        ? await HouseRecord.aggregate([
+    const ids = items.map(n => n._id);
+    const [houseCounts, coleaderAssignments, currentTerms, attachmentCounts] = items.length
+        ? await Promise.all([
+          HouseRecord.aggregate([
               { $match: { neighborhoodId: { $in: items.map(n => n._id) } } },
               { $group: { _id: "$neighborhoodId", count: { $sum: 1 } } },
-          ])
-        : [];
+          ]),
+          NeighborhoodColeaderAssignment.find({
+              neighborhoodId: { $in: ids },
+              unassignedAt: { $exists: false },
+          }).populate("coleaderUserId", LEADER_POPULATE),
+          NeighborhoodTerm.find({
+              neighborhoodId: { $in: ids },
+              status: "ACTIVE",
+          }).sort({ startAt: -1 }),
+          FileAsset.aggregate([
+              { $match: { relatedModel: "Neighborhood", relatedId: { $in: ids } } },
+              { $group: { _id: "$relatedId", count: { $sum: 1 } } },
+          ]),
+        ])
+        : [[], [], [], []];
     const houseCountById = new Map<string, number>(
         houseCounts.map(h => [String(h._id), h.count as number]),
+    );
+    const coleadersById = new Map<string, unknown[]>();
+    for (const assignment of coleaderAssignments) {
+        const key = String(assignment.neighborhoodId);
+        coleadersById.set(key, [
+            ...(coleadersById.get(key) || []),
+            assignment.coleaderUserId,
+        ]);
+    }
+    const termById = new Map(
+        currentTerms.map(term => [String(term.neighborhoodId), term.toObject()]),
+    );
+    const attachmentCountById = new Map<string, number>(
+        attachmentCounts.map(item => [String(item._id), item.count as number]),
     );
 
     const itemsWithHouseCount = items.map(n => ({
         ...n.toObject(),
+        status: n.status || (n.active ? "ACTIVE" : "INACTIVE"),
         houseCount: houseCountById.get(String(n._id)) || 0,
+        coleaders: coleadersById.get(String(n._id)) || [],
+        currentTerm: termById.get(String(n._id)) || null,
+        termRemainingDays: termById.get(String(n._id))
+            ? Math.ceil(
+                  (new Date((termById.get(String(n._id)) as any).endAt).getTime() -
+                      Date.now()) /
+                      86_400_000,
+              )
+            : null,
+        attachmentCount: attachmentCountById.get(String(n._id)) || 0,
     }));
 
     return {
@@ -153,14 +304,28 @@ function assertNeighborhoodInScope(user: IUser, neighborhood: INeighborhood): vo
 export async function getNeighborhoodById(
     id: string,
     actorUser: IUser,
-): Promise<INeighborhood> {
-    const neighborhood = await Neighborhood.findById(id).populate(
-        "leaderUserId",
-        LEADER_POPULATE,
-    );
+): Promise<Record<string, unknown>> {
+    await expireNeighborhoodOfficerAssignments();
+    const neighborhood = await Neighborhood.findById(id)
+        .populate("leaderUserId", LEADER_POPULATE)
+        .populate("streetIds", "name code active");
     if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
     assertNeighborhoodInScope(actorUser, neighborhood);
-    return neighborhood;
+    const [houseCount, coleaders, currentTerm, attachmentCount] = await Promise.all([
+        HouseRecord.countDocuments({ neighborhoodId: neighborhood._id }),
+        listColeaders(id),
+        NeighborhoodTerm.findOne({ neighborhoodId: id, status: "ACTIVE" })
+            .sort({ startAt: -1 }),
+        FileAsset.countDocuments({ relatedModel: "Neighborhood", relatedId: id }),
+    ]);
+    return {
+        ...neighborhood.toObject(),
+        status: neighborhood.status || (neighborhood.active ? "ACTIVE" : "INACTIVE"),
+        houseCount,
+        coleaders,
+        currentTerm,
+        attachmentCount,
+    };
 }
 
 export async function createNeighborhood(
@@ -168,17 +333,21 @@ export async function createNeighborhood(
     input: CreateNeighborhoodInput,
 ): Promise<INeighborhood> {
     const existing = await Neighborhood.findOne({
-        $or: [{ code: input.code }, { sequence: input.sequence }],
+        $or: [
+            { code: input.code, wardCode: input.wardCode },
+            { sequence: input.sequence },
+        ],
     });
     if (existing) {
         throw new HttpError(
-            "Ma hoac so thu tu to dan pho da ton tai",
+            "Ma to trong Phuong/Xa hoac so thu tu da ton tai",
             409,
         );
     }
 
     const neighborhood = await Neighborhood.create({
         ...input,
+        active: input.status ? input.status === "ACTIVE" : input.active,
         createdBy: actorId,
         updatedBy: actorId,
     });
@@ -189,6 +358,12 @@ export async function createNeighborhood(
         targetModel: "Neighborhood",
         targetId: neighborhood._id,
         metadata: { code: neighborhood.code, name: neighborhood.name },
+    });
+    await NeighborhoodHistory.create({
+        neighborhoodId: neighborhood._id,
+        actorId,
+        action: "CREATED",
+        after: neighborhood.toObject(),
     });
 
     return neighborhood;
@@ -208,6 +383,17 @@ export async function updateNeighborhood(
             (neighborhood as unknown as Record<string, unknown>)[key] = value;
         }
     }
+    if (patch.status !== undefined) neighborhood.active = patch.status === "ACTIVE";
+    else if (patch.active !== undefined) {
+        neighborhood.status = patch.active ? "ACTIVE" : "INACTIVE";
+    }
+    if (
+        neighborhood.effectiveFrom &&
+        neighborhood.effectiveTo &&
+        neighborhood.effectiveTo < neighborhood.effectiveFrom
+    ) {
+        throw new HttpError("Ngay ket thuc hieu luc phai sau ngay bat dau", 422);
+    }
     neighborhood.updatedBy = actorId as any;
     await neighborhood.save();
 
@@ -217,6 +403,13 @@ export async function updateNeighborhood(
         targetModel: "Neighborhood",
         targetId: neighborhood._id,
         metadata: { before: priorState, after: patch },
+    });
+    await NeighborhoodHistory.create({
+        neighborhoodId: neighborhood._id,
+        actorId,
+        action: priorState.status !== neighborhood.status ? "STATUS_CHANGED" : "UPDATED",
+        before: priorState,
+        after: neighborhood.toObject(),
     });
 
     return neighborhood;
@@ -234,7 +427,9 @@ export async function assignNeighborhoodLeader(
     neighborhoodId: string,
     leaderUserId: string | null,
     note?: string,
+    options?: { termId?: string; endAt?: Date },
 ): Promise<INeighborhood> {
+    await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
 
@@ -247,6 +442,20 @@ export async function assignNeighborhoodLeader(
     }
 
     let newLeader: IUser | null = null;
+    let assignmentEndAt = options?.endAt;
+    let termId = options?.termId;
+    if (termId) {
+        const term = await NeighborhoodTerm.findOne({
+            _id: termId,
+            neighborhoodId,
+            status: "ACTIVE",
+        });
+        if (!term) throw new HttpError("Nhiem ky khong hop le", 422);
+        assignmentEndAt = term.endAt;
+    }
+    if (assignmentEndAt && assignmentEndAt <= new Date()) {
+        throw new HttpError("Ngay ket thuc phan cong phai o tuong lai", 422);
+    }
     if (leaderUserId) {
         newLeader = await User.findById(leaderUserId);
         if (!newLeader) throw new HttpError("Khong tim thay nguoi dung", 404);
@@ -325,6 +534,12 @@ export async function assignNeighborhoodLeader(
             targetId: neighborhood._id,
             metadata: { from: currentLeaderId, to: null },
         });
+        await NeighborhoodHistory.create({
+            neighborhoodId: neighborhood._id,
+            actorId,
+            action: "LEADER_UNASSIGNED",
+            metadata: { leaderUserId: currentLeaderId },
+        });
 
         return neighborhood;
     }
@@ -334,6 +549,8 @@ export async function assignNeighborhoodLeader(
         leaderUserId,
         assignedBy: actorId,
         assignedAt: now,
+        termId,
+        endAt: assignmentEndAt,
         note,
     });
 
@@ -353,6 +570,12 @@ export async function assignNeighborhoodLeader(
         targetId: neighborhood._id,
         metadata: { from: currentLeaderId, to: leaderUserId },
     });
+    await NeighborhoodHistory.create({
+        neighborhoodId: neighborhood._id,
+        actorId,
+        action: "LEADER_ASSIGNED",
+        metadata: { leaderUserId, termId, endAt: assignmentEndAt },
+    });
 
     return await neighborhood.populate("leaderUserId", LEADER_POPULATE);
 }
@@ -364,6 +587,7 @@ export async function getLeaderHistory(neighborhoodId: string) {
     return NeighborhoodLeaderAssignment.find({ neighborhoodId })
         .sort({ assignedAt: -1 })
         .populate("leaderUserId", LEADER_POPULATE)
+        .populate("termId", "name startAt endAt status")
         .populate("assignedBy", "displayName")
         .populate("unassignedBy", "displayName");
 }
@@ -374,12 +598,14 @@ export async function getLeaderHistory(neighborhoodId: string) {
  * (xem ghi chu trong model ve ly do khong can field rieng).
  */
 export async function listColeaders(neighborhoodId: string) {
+    await expireNeighborhoodOfficerAssignments();
     return NeighborhoodColeaderAssignment.find({
         neighborhoodId,
         unassignedAt: { $exists: false },
     })
         .sort({ assignedAt: -1 })
         .populate("coleaderUserId", LEADER_POPULATE)
+        .populate("termId", "name startAt endAt status")
         .populate("assignedBy", "displayName");
 }
 
@@ -395,9 +621,26 @@ export async function assignNeighborhoodColeader(
     neighborhoodId: string,
     coleaderUserId: string,
     note?: string,
+    options?: { termId?: string; endAt?: Date },
 ): Promise<void> {
+    await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+
+    let assignmentEndAt = options?.endAt;
+    const termId = options?.termId;
+    if (termId) {
+        const term = await NeighborhoodTerm.findOne({
+            _id: termId,
+            neighborhoodId,
+            status: "ACTIVE",
+        });
+        if (!term) throw new HttpError("Nhiem ky khong hop le", 422);
+        assignmentEndAt = term.endAt;
+    }
+    if (assignmentEndAt && assignmentEndAt <= new Date()) {
+        throw new HttpError("Ngay ket thuc phan cong phai o tuong lai", 422);
+    }
 
     const existing = await NeighborhoodColeaderAssignment.findOne({
         neighborhoodId,
@@ -438,6 +681,8 @@ export async function assignNeighborhoodColeader(
         coleaderUserId,
         assignedBy: actorId,
         assignedAt: new Date(),
+        termId,
+        endAt: assignmentEndAt,
         note,
     });
 
@@ -451,6 +696,12 @@ export async function assignNeighborhoodColeader(
         targetModel: "Neighborhood",
         targetId: neighborhood._id,
         metadata: { coleaderUserId },
+    });
+    await NeighborhoodHistory.create({
+        neighborhoodId: neighborhood._id,
+        actorId,
+        action: "COLEADER_ASSIGNED",
+        metadata: { coleaderUserId, termId, endAt: assignmentEndAt },
     });
 }
 
@@ -477,6 +728,12 @@ export async function unassignNeighborhoodColeader(
         targetId: neighborhoodId,
         metadata: { coleaderUserId },
     });
+    await NeighborhoodHistory.create({
+        neighborhoodId,
+        actorId,
+        action: "COLEADER_UNASSIGNED",
+        metadata: { coleaderUserId },
+    });
 }
 
 export async function getColeaderHistory(neighborhoodId: string) {
@@ -486,6 +743,282 @@ export async function getColeaderHistory(neighborhoodId: string) {
     return NeighborhoodColeaderAssignment.find({ neighborhoodId })
         .sort({ assignedAt: -1 })
         .populate("coleaderUserId", LEADER_POPULATE)
+        .populate("termId", "name startAt endAt status")
         .populate("assignedBy", "displayName")
         .populate("unassignedBy", "displayName");
+}
+
+export async function listNeighborhoodTerms(neighborhoodId: string) {
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    return NeighborhoodTerm.find({ neighborhoodId })
+        .sort({ startAt: -1 })
+        .populate("createdBy", "displayName")
+        .populate("updatedBy", "displayName");
+}
+
+async function assertSingleActiveTerm(
+    neighborhoodId: string,
+    status: string | undefined,
+    excludeId?: string,
+) {
+    if (status !== "ACTIVE") return;
+    const existing = await NeighborhoodTerm.exists({
+        neighborhoodId,
+        status: "ACTIVE",
+        ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    });
+    if (existing) {
+        throw new HttpError(
+            "To dan pho da co mot nhiem ky dang hoat dong; hay ket thuc nhiem ky cu truoc",
+            409,
+        );
+    }
+}
+
+export async function createNeighborhoodTerm(
+    actorId: string,
+    neighborhoodId: string,
+    input: CreateNeighborhoodTermInput,
+) {
+    const neighborhood = await Neighborhood.findById(neighborhoodId);
+    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    await assertSingleActiveTerm(neighborhoodId, input.status);
+    const term = await NeighborhoodTerm.create({
+        ...input,
+        neighborhoodId,
+        createdBy: actorId,
+        updatedBy: actorId,
+    });
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.term_create",
+            targetModel: "NeighborhoodTerm",
+            targetId: term._id,
+            metadata: { neighborhoodId, name: term.name },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "TERM_CREATED",
+            after: term.toObject(),
+        }),
+    ]);
+    return term;
+}
+
+export async function updateNeighborhoodTerm(
+    actorId: string,
+    neighborhoodId: string,
+    termId: string,
+    patch: UpdateNeighborhoodTermInput,
+) {
+    const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
+    if (!term) throw new HttpError("Khong tim thay nhiem ky", 404);
+    await assertSingleActiveTerm(neighborhoodId, patch.status, termId);
+    const before = term.toObject();
+    Object.assign(term, patch, { updatedBy: actorId });
+    if (term.endAt < term.startAt) {
+        throw new HttpError("Ngay ket thuc nhiem ky phai sau ngay bat dau", 422);
+    }
+    await term.save();
+
+    // Khi ket thuc/huy nhiem ky, phan cong lien quan se het hieu luc ngay.
+    if (term.status === "ENDED" || term.status === "CANCELLED") {
+        const endedAt = new Date();
+        await Promise.all([
+            NeighborhoodLeaderAssignment.updateMany(
+                { termId: term._id, unassignedAt: { $exists: false } },
+                { $set: { endAt: endedAt } },
+            ),
+            NeighborhoodColeaderAssignment.updateMany(
+                { termId: term._id, unassignedAt: { $exists: false } },
+                { $set: { endAt: endedAt } },
+            ),
+        ]);
+        await expireNeighborhoodOfficerAssignments();
+    }
+
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.term_update",
+            targetModel: "NeighborhoodTerm",
+            targetId: term._id,
+            metadata: { neighborhoodId, fields: Object.keys(patch) },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "TERM_UPDATED",
+            before,
+            after: term.toObject(),
+        }),
+    ]);
+    return term;
+}
+
+export async function listNeighborhoodHistory(neighborhoodId: string) {
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    return NeighborhoodHistory.find({ neighborhoodId })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .populate("actorId", "displayName");
+}
+
+export async function listNeighborhoodCollaborators(neighborhoodId: string) {
+    await expireNeighborhoodOfficerAssignments();
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    return NeighborhoodCollaboratorAssignment.find({
+        neighborhoodId,
+        unassignedAt: { $exists: false },
+    })
+        .sort({ startAt: -1 })
+        .populate("collaboratorUserId", LEADER_POPULATE)
+        .populate("streetId", "name code")
+        .populate("houseIds", "code address")
+        .populate("campaignId", "name status dueAt")
+        .populate("assignedBy", "displayName");
+}
+
+export async function assignNeighborhoodCollaborator(
+    actorId: string,
+    neighborhoodId: string,
+    input: AssignNeighborhoodCollaboratorInput,
+) {
+    await expireNeighborhoodOfficerAssignments();
+    const [neighborhood, collaborator] = await Promise.all([
+        Neighborhood.findById(neighborhoodId),
+        User.findById(input.collaboratorUserId),
+    ]);
+    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!collaborator || collaborator.status !== "active") {
+        throw new HttpError("Cong tac vien khong hop le", 422);
+    }
+    if (
+        !collaborator.roles.includes("neighborhood_collaborator") &&
+        !collaborator.roles.includes("cooperator")
+    ) {
+        throw new HttpError("Tai khoan phai co vai tro Cong tac vien", 422);
+    }
+    const startAt = input.startAt || new Date();
+    if (input.endAt && input.endAt <= startAt) {
+        throw new HttpError("Ngay ket thuc phai sau ngay bat dau", 422);
+    }
+
+    if (input.scopeType === "STREET") {
+        const allowed = neighborhood.streetIds.some(id => String(id) === input.streetId);
+        if (!allowed) throw new HttpError("Tuyen duong khong thuoc To dan pho", 422);
+    }
+    if (input.scopeType === "HOUSE_GROUP") {
+        const count = await HouseRecord.countDocuments({
+            _id: { $in: input.houseIds },
+            neighborhoodId,
+        });
+        if (count !== input.houseIds.length) {
+            throw new HttpError("Co Nha so khong thuoc To dan pho", 422);
+        }
+    }
+    if (input.scopeType === "CAMPAIGN") {
+        const [campaign, target] = await Promise.all([
+            InspectionCampaign.findById(input.campaignId),
+            InspectionTarget.exists({
+                campaignId: input.campaignId,
+                neighborhoodId,
+            }),
+        ]);
+        if (!campaign || !target) {
+            throw new HttpError("Chien dich khong giao cho To dan pho nay", 422);
+        }
+    }
+
+    const duplicateFilter: Record<string, unknown> = {
+        neighborhoodId,
+        collaboratorUserId: input.collaboratorUserId,
+        scopeType: input.scopeType,
+        unassignedAt: { $exists: false },
+    };
+    if (input.scopeType === "STREET") duplicateFilter.streetId = input.streetId;
+    if (input.scopeType === "CAMPAIGN") duplicateFilter.campaignId = input.campaignId;
+    if (await NeighborhoodCollaboratorAssignment.exists(duplicateFilter)) {
+        throw new HttpError("Pham vi cong tac nay da duoc phan cong", 409);
+    }
+
+    const assignment = await NeighborhoodCollaboratorAssignment.create({
+        ...input,
+        neighborhoodId,
+        startAt,
+        assignedBy: actorId,
+        streetId: input.scopeType === "STREET" ? input.streetId : undefined,
+        houseIds: input.scopeType === "HOUSE_GROUP" ? input.houseIds : [],
+        campaignId: input.scopeType === "CAMPAIGN" ? input.campaignId : undefined,
+    });
+    await User.updateOne(
+        { _id: collaborator._id },
+        { $addToSet: { assignedNeighborhoodIds: neighborhood._id } },
+    );
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.collaborator_assign",
+            targetModel: "NeighborhoodCollaboratorAssignment",
+            targetId: assignment._id,
+            metadata: { neighborhoodId, scopeType: input.scopeType },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "COLLABORATOR_ASSIGNED",
+            metadata: {
+                collaboratorUserId: input.collaboratorUserId,
+                scopeType: input.scopeType,
+            },
+        }),
+    ]);
+    return assignment;
+}
+
+export async function unassignNeighborhoodCollaborator(
+    actorId: string,
+    neighborhoodId: string,
+    assignmentId: string,
+) {
+    const assignment = await NeighborhoodCollaboratorAssignment.findOne({
+        _id: assignmentId,
+        neighborhoodId,
+        unassignedAt: { $exists: false },
+    });
+    if (!assignment) throw new HttpError("Khong tim thay phan cong", 404);
+    assignment.unassignedAt = new Date();
+    assignment.unassignedBy = actorId as any;
+    await assignment.save();
+    const remaining = await NeighborhoodCollaboratorAssignment.exists({
+        neighborhoodId,
+        collaboratorUserId: assignment.collaboratorUserId,
+        unassignedAt: { $exists: false },
+    });
+    if (!remaining) {
+        await User.updateOne(
+            { _id: assignment.collaboratorUserId },
+            { $pull: { assignedNeighborhoodIds: neighborhoodId } },
+        );
+    }
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.collaborator_unassign",
+            targetModel: "NeighborhoodCollaboratorAssignment",
+            targetId: assignment._id,
+            metadata: { neighborhoodId },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "COLLABORATOR_UNASSIGNED",
+            metadata: { collaboratorUserId: assignment.collaboratorUserId },
+        }),
+    ]);
 }

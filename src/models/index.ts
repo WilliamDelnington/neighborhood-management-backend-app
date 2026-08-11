@@ -93,6 +93,13 @@ export {
 } from "./NotificationDelivery";
 export { default as Request, type IRequest } from "./Request";
 export {
+    default as RequestTypeDefinition,
+    type IRequestTypeDefinition,
+    type IRequestFormField,
+    type RequestFormFieldType,
+    REQUEST_FORM_FIELD_TYPES,
+} from "./RequestTypeDefinition";
+export {
     default as InspectionCampaign,
     type IInspectionCampaign,
 } from "./InspectionCampaign";
@@ -114,6 +121,14 @@ export {
 } from "./RequestRecipient";
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
 export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
+export {
+    default as NeighborhoodTerm,
+    type INeighborhoodTerm,
+} from "./NeighborhoodTerm";
+export {
+    default as NeighborhoodHistory,
+    type INeighborhoodHistory,
+} from "./NeighborhoodHistory";
 export { default as Street, type IStreet } from "./Street";
 export {
     default as NeighborhoodLeaderAssignment,
@@ -123,6 +138,10 @@ export {
     default as NeighborhoodColeaderAssignment,
     type INeighborhoodColeaderAssignment,
 } from "./NeighborhoodColeaderAssignment";
+export {
+    default as NeighborhoodCollaboratorAssignment,
+    type INeighborhoodCollaboratorAssignment,
+} from "./NeighborhoodCollaboratorAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
 export {
@@ -142,8 +161,17 @@ export {
 export {
     default as PeriodicReport,
     type IPeriodicReport,
+    type IPeriodicReportAutoSummary,
     type IPeriodicReportSections,
 } from "./PeriodicReport";
+export {
+    default as PeriodicReportVersion,
+    type IPeriodicReportVersion,
+} from "./PeriodicReportVersion";
+export {
+    default as KpiDefinition,
+    type IKpiDefinition,
+} from "./KpiDefinition";
 export {
     default as Comment,
     type IComment,

@@ -22,7 +22,11 @@ async function createNeighborhood(
         makeRequest("/api/neighborhoods", {
             method: "POST",
             headers: adminHeaders,
-            body: { name: `To dan pho ${code}`, code, sequence },
+            body: {
+                name: `To dan pho ${code}`, code, sequence,
+                provinceCode: 79, provinceName: "TP Hồ Chí Minh",
+                wardCode: 26734, wardName: "Phường thử nghiệm",
+            },
         }),
     );
     return (await readJson(res)).data;
