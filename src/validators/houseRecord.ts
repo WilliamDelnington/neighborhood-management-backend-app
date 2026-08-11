@@ -3,6 +3,7 @@ import {
     HOUSE_RECORD_STATUS,
     HOUSE_PHYSICAL_STATUS,
     HOUSE_USAGE_TYPE,
+    HOUSE_GIS_SOURCES,
     ORGANIZATION_TYPE,
 } from "@/types";
 import { isValidVnPhone } from "@/lib/phone";
@@ -69,6 +70,13 @@ const houseRecordBaseSchema = z.object({
     otherUsageNote: z.string().optional(),
     note: z.string().optional(),
     residenceDeclarationNumber: z.string().optional(),
+    // Cho phep null/0 de tuong thich client va du lieu nhap tam thoi. Service
+    // se chuan hoa 0/0 (hoac null) thanh "chua co GIS", khong tao GeoJSON.
+    gisLatitude: z.number().min(-90).max(90).nullable().optional(),
+    gisLongitude: z.number().min(-180).max(180).nullable().optional(),
+    gisAccuracyMeters: z.number().min(0).nullable().optional(),
+    gisSource: z.enum(HOUSE_GIS_SOURCES).optional(),
+    gisCapturedAt: z.string().datetime().nullable().optional(),
     // Loai chu nha duoc khai bao luc tao nha so - "none" = chua biet/chua
     // khai bao (hanh vi cu khi khong nhap gi ca). Chi co y nghia luc tao moi -
     // xem houseRecordService.createHouseRecord.
@@ -100,6 +108,17 @@ export type CreateHouseRecordInput = z.infer<typeof createHouseRecordSchema>;
 
 export const updateHouseRecordSchema = houseRecordBaseSchema.partial();
 export type UpdateHouseRecordInput = z.infer<typeof updateHouseRecordSchema>;
+
+export const updateHouseRecordGisSchema = z.object({
+    gisLatitude: z.number().min(-90).max(90).nullable(),
+    gisLongitude: z.number().min(-180).max(180).nullable(),
+    gisAccuracyMeters: z.number().min(0).nullable().optional(),
+    gisSource: z.enum(HOUSE_GIS_SOURCES).default("device_gps"),
+    gisCapturedAt: z.string().datetime().nullable().optional(),
+});
+export type UpdateHouseRecordGisInput = z.infer<
+    typeof updateHouseRecordGisSchema
+>;
 
 export const updateHouseRecordStatusSchema = z
     .object({

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isValidPermissionKey } from "@/lib/permissionRegistry";
-import { NHOM_PHAN_ANH, REQUEST_TYPES } from "@/types";
+import { NHOM_PHAN_ANH } from "@/types";
 
 const permissionsField = z
     .array(z.string())
@@ -11,7 +11,9 @@ const permissionsField = z
     );
 
 const complaintCategoriesField = z.array(z.enum(NHOM_PHAN_ANH));
-const requestTypesField = z.array(z.enum(REQUEST_TYPES));
+const requestTypesField = z.array(
+    z.string().regex(/^[a-z][a-z0-9_]*$/, "Loai yeu cau khong hop le"),
+);
 
 export const createRoleSchema = z.object({
     key: z

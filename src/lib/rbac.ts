@@ -40,7 +40,7 @@ export function requireRole(
  */
 export async function requireUser(req: Request): Promise<IUser> {
     const session = requireSession(req);
-    const user = await UserModel.findById(session.userId);
+    let user = await UserModel.findById(session.userId);
     if (!user || user.status === "locked") {
         throw new HttpError("Tai khoan khong hop le hoac da bi khoa", 401);
     }
@@ -49,6 +49,25 @@ export async function requireUser(req: Request): Promise<IUser> {
             "Phien dang nhap da het hieu luc, vui long dang nhap lai",
             401,
         );
+    }
+    // Ngay ket thuc nhiem ky/phan cong la rang buoc quyen: thu hoi scope
+    // truoc khi bat ky bo loc nghiep vu nao doc neighborhoodId tu User.
+    if (
+        user.roles.includes("neighborhood_leader") ||
+        user.roles.includes("neighborhood_coleader") ||
+        user.roles.includes("neighborhood_collaborator") ||
+        user.roles.includes("cooperator")
+    ) {
+        const { expireNeighborhoodOfficerAssignments } = await import(
+            "@/services/neighborhoodService"
+        );
+        const expired = await expireNeighborhoodOfficerAssignments(String(user._id));
+        if (expired > 0) {
+            user = await UserModel.findById(session.userId);
+            if (!user) {
+                throw new HttpError("Tai khoan khong hop le hoac da bi khoa", 401);
+            }
+        }
     }
     return user;
 }
@@ -315,6 +334,11 @@ export function areaScopeFilter(
         user.roles.includes("cooperator") &&
         (!user.assignedClusters || user.assignedClusters.length === 0)
     ) {
+        return { _id: { $in: [] } };
+    }
+    if (user.roles.includes("neighborhood_collaborator")) {
+        // Cong tac vien chi thay ban ghi duoc giao tai service chuyen biet
+        // (vd InspectionTarget); khong duoc suy rong thanh toan bo To.
         return { _id: { $in: [] } };
     }
     return clusterScopeFilter(user, opts.clusterField ?? "cluster");

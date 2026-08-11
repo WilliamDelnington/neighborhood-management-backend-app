@@ -5,6 +5,7 @@ import { getBearerToken, verifyUploadToken } from "@/lib/auth";
 import { HouseRecord, Business, Complaint, FileAsset, User } from "@/models";
 import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
+import { getRequestById } from "@/services/requestService";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -88,6 +89,9 @@ export async function POST(req: Request) {
                 return zaloError("Chi chu phan anh moi duoc dinh kem tai lieu");
             }
             subDir = `complaints/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Request") {
+            await getRequestById(actorUser, payload.relatedId);
+            subDir = `requests/${payload.relatedId}`;
         } else {
             // BusinessDocument: chi chu ho (hoac admin) - kiem tra lai giong
             // het luc cap token (xem /api/uploads/token/route.ts) vi pham vi

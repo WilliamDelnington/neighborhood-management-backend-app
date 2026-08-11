@@ -16,7 +16,7 @@ export async function PATCH(
         await requirePermission(actorUser, "complaints.assign");
         const body = assignComplaintSchema.parse(await req.json());
         const complaint = await assignComplaint(
-            String(actorUser._id),
+            actorUser,
             params.id,
             body,
         );

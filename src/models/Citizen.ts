@@ -1,5 +1,14 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { GIOI_TINH, LOAI_CU_TRU, type GioiTinh, type LoaiCuTru } from "@/types";
+import {
+    GIOI_TINH,
+    IDENTITY_PROVIDERS,
+    IDENTITY_VERIFICATION_STATUS,
+    LOAI_CU_TRU,
+    type GioiTinh,
+    type IdentityProvider,
+    type IdentityVerificationStatus,
+    type LoaiCuTru,
+} from "@/types";
 import {
     encryptSensitive,
     decryptSensitive,
@@ -22,6 +31,9 @@ export interface ICitizen extends Document {
     relationToHead?: string;
     householdId: mongoose.Types.ObjectId;
     residenceType: LoaiCuTru;
+    identityProvider: IdentityProvider;
+    identityVerificationStatus: IdentityVerificationStatus;
+    identityVerifiedAt?: Date;
     isElderly: boolean;
     isChild: boolean;
     isDisabledOrSupportNeeded: boolean;
@@ -58,6 +70,21 @@ const CitizenSchema = new Schema<ICitizen>(
             enum: LOAI_CU_TRU,
             default: "thuong_tru",
         },
+        // Du lieu nhap tay/CCCD hien tai chi la khai bao. Khong gan nhan
+        // "verified" neu chua doi chieu that su qua VNeID/CSDLQGDC.
+        identityProvider: {
+            type: String,
+            enum: IDENTITY_PROVIDERS,
+            default: "manual_declaration",
+            index: true,
+        },
+        identityVerificationStatus: {
+            type: String,
+            enum: IDENTITY_VERIFICATION_STATUS,
+            default: "unverified",
+            index: true,
+        },
+        identityVerifiedAt: { type: Date },
         isElderly: { type: Boolean, default: false },
         isChild: { type: Boolean, default: false },
         isDisabledOrSupportNeeded: { type: Boolean, default: false },

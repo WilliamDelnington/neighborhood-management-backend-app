@@ -53,6 +53,10 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "houses.read", label: "Xem nhà số" },
             { key: "houses.create", label: "Tạo nhà số" },
             { key: "houses.update", label: "Cập nhật nhà số" },
+            {
+                key: "houses.update_gis",
+                label: "Gắn/cập nhật tọa độ GIS Nhà số",
+            },
             { key: "houses.delete", label: "Xóa nhà số" },
             { key: "houses.verify", label: "Duyệt / từ chối nhà số" },
             { key: "houses.lock", label: "Khóa / mở khóa nhà số" },
@@ -284,6 +288,14 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
             { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
             {
+                key: "request_types.read",
+                label: "Xem cấu hình loại nhiệm vụ",
+            },
+            {
+                key: "request_types.manage",
+                label: "Tạo/sửa loại nhiệm vụ và biểu mẫu thu thập",
+            },
+            {
                 key: "other.assign",
                 label: "Đủ điều kiện được chọn làm người phụ trách khi nhận yêu cầu loại Khác",
             },
@@ -298,6 +310,19 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "meetings.update", label: "Cập nhật cuộc họp" },
             { key: "meetings.publish", label: "Đăng cuộc họp" },
             { key: "meetings.register", label: "Đăng ký tham dự" },
+        ],
+    },
+    {
+        key: "inspections",
+        label: "Rà soát / chiến dịch",
+        permissions: [
+            { key: "inspections.read", label: "Xem chiến dịch và kết quả rà soát" },
+            { key: "inspections.create", label: "Tạo chiến dịch rà soát của Phường" },
+            { key: "inspections.manage", label: "Triển khai, khóa và kết thúc chiến dịch" },
+            { key: "inspections.execute", label: "Thực hiện rà soát tại Nhà số" },
+            { key: "inspections.assign", label: "Giao Nhà số và gửi biểu mẫu tự khai" },
+            { key: "inspections.verify", label: "Xác minh kết quả rà soát" },
+            { key: "inspections.submit_to_ward", label: "Nộp tổng hợp kết quả lên Phường" },
         ],
     },
     {
@@ -382,6 +407,10 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
                 label:
                     "Soạn / nộp báo cáo định kỳ (khác báo cáo thống kê ở trên)",
             },
+            { key: "reports.receive", label: "Tiếp nhận báo cáo Tổ dân phố" },
+            { key: "reports.review", label: "Duyệt / yêu cầu bổ sung báo cáo" },
+            { key: "reports.kpi_read", label: "Xem kết quả KPI" },
+            { key: "reports.kpi_manage", label: "Cấu hình định nghĩa KPI" },
         ],
     },
     {

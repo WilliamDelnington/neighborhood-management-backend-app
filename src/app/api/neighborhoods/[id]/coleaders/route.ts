@@ -9,6 +9,7 @@ import {
     assignNeighborhoodColeader,
     unassignNeighborhoodColeader,
     listColeaders,
+    getNeighborhoodById,
 } from "@/services/neighborhoodService";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export async function GET(
         await connectDB();
         const user = await requireUser(req);
         await requirePermission(user, "neighborhoods.manage");
+        await getNeighborhoodById(params.id, user);
 
         const coleaders = await listColeaders(params.id);
         return apiSuccess(coleaders);
@@ -37,6 +39,7 @@ export async function POST(
         await connectDB();
         const user = await requireUser(req);
         await requirePermission(user, "neighborhoods.manage");
+        await getNeighborhoodById(params.id, user);
 
         const body = assignColeaderSchema.parse(await req.json());
         await assignNeighborhoodColeader(
@@ -44,6 +47,7 @@ export async function POST(
             params.id,
             body.coleaderUserId,
             body.note,
+            { termId: body.termId, endAt: body.endAt },
         );
         return apiSuccess(null, "Da gan To pho thanh cong");
     } catch (err) {
@@ -59,6 +63,7 @@ export async function DELETE(
         await connectDB();
         const user = await requireUser(req);
         await requirePermission(user, "neighborhoods.manage");
+        await getNeighborhoodById(params.id, user);
 
         const body = unassignColeaderSchema.parse(await req.json());
         await unassignNeighborhoodColeader(

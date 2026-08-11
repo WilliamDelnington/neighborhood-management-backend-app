@@ -12,6 +12,7 @@ import type {
     UpdateProfileInput,
     PhoneRegisterInput,
     PhoneLoginInput,
+    ChangePhoneInput,
 } from "@/validators/auth";
 
 export async function loginWithZalo(input: ZaloLoginInput) {
@@ -221,7 +222,6 @@ export async function updateOwnProfile(
 ) {
     const user = await User.findById(userId);
     if (!user) throw new Error("Khong tim thay tai khoan");
-    if (input.phone !== undefined) user.phone = input.phone;
     if (input.email !== undefined) user.email = input.email;
     if (input.address !== undefined) user.address = input.address;
     if (input.notificationPermission !== undefined) {
@@ -291,6 +291,59 @@ export async function revokeSessions(userId: string) {
     return user;
 }
 
+/**
+ * Doi so dien thoai dang nhap - xac thuc lai qua Zalo getPhoneNumber (cung
+ * co che voi loginWithZalo o tren), KHONG nhan phone tho chua xac thuc tu
+ * client nhu updateOwnProfile truoc day (xem ghi chu tren
+ * updateProfileSchema/changePhoneSchema).
+ */
+export async function changeOwnPhone(
+    userId: string,
+    input: ChangePhoneInput,
+) {
+    const verifiedPhone = await verifyZaloPhoneToken(
+        input.accessToken,
+        input.phoneToken,
+        input.phone,
+    );
+    if (!verifiedPhone) {
+        throw new HttpError(
+            "Khong xac thuc duoc so dien thoai tu Zalo, vui long thu lai",
+            400,
+        );
+    }
+
+    const user = await User.findById(userId);
+    if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
+
+    const conflictingUser = await User.findOne({
+        phone: verifiedPhone,
+        _id: { $ne: user._id },
+    });
+    if (conflictingUser) {
+        throw new HttpError("So dien thoai nay da thuoc mot tai khoan khac", 409);
+    }
+
+    user.phone = verifiedPhone;
+    try {
+        await user.save();
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("So dien thoai da duoc su dung", 409);
+        }
+        throw err;
+    }
+
+    await writeAuditLog({
+        actorId: user._id,
+        action: "user.change_phone",
+        targetModel: "User",
+        targetId: user._id,
+    });
+
+    return sanitizeUserWithPermissions(user);
+}
+
 export function sanitizeUser(user: IUser) {
     return {
         id: String(user._id),
@@ -303,6 +356,12 @@ export function sanitizeUser(user: IUser) {
         roles: user.roles,
         primaryRole: user.primaryRole,
         status: user.status,
+        // Tai khoan cu chua backfill duoc hieu dung theo che do dang nhap
+        // hien tai: so dien thoai tam thoi, chua xac minh danh tinh quoc gia.
+        identityProvider: user.identityProvider || "phone_temporary",
+        identityVerificationStatus:
+            user.identityVerificationStatus || "unverified",
+        identityVerifiedAt: user.identityVerifiedAt,
         householdId: user.householdId ? String(user.householdId) : undefined,
         citizenId: user.citizenId ? String(user.citizenId) : undefined,
         neighborhoodId: user.neighborhoodId

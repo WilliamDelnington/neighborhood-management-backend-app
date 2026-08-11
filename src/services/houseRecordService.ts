@@ -49,6 +49,7 @@ import { addOrganizationRepresentative } from "@/services/organizationRepresenta
 import {
     HOUSE_RECORD_STATUS_LABEL,
     type HouseRecordStatus,
+    type HouseGisSource,
     type HouseUsageType,
     type OwnerType,
     type VerificationStatus,
@@ -63,6 +64,60 @@ const HOUSE_RECORD_POPULATE = [
     { path: "streetId", select: "name code" },
     { path: "neighborhoodId", select: "name code" },
 ];
+
+type HouseGisInput = {
+    gisLatitude?: number | null;
+    gisLongitude?: number | null;
+    gisAccuracyMeters?: number | null;
+    gisSource?: HouseGisSource;
+    gisCapturedAt?: string | null;
+};
+
+/**
+ * Chuan hoa toa do client/mobile thanh du lieu GIS noi bo. Theo quy uoc trien
+ * khai hien tai, null/undefined/0 nghia la chua co du lieu; tuyet doi khong
+ * dua [0, 0] vao chi muc 2dsphere. Khi co toa do that, luu dong thoi cac
+ * truong phang va GeoJSON [longitude, latitude] de san sang cho ban do/API.
+ */
+function normalizeHouseGis(input: HouseGisInput) {
+    const latitude = input.gisLatitude;
+    const longitude = input.gisLongitude;
+    const unavailable =
+        latitude === undefined ||
+        latitude === null ||
+        longitude === undefined ||
+        longitude === null ||
+        latitude === 0 ||
+        longitude === 0;
+
+    if (unavailable) {
+        return {
+            gisLatitude: null,
+            gisLongitude: null,
+            gisAccuracyMeters: null,
+            gisSource: "unavailable" as const,
+            gisCapturedAt: null,
+            location: undefined,
+        };
+    }
+
+    return {
+        gisLatitude: latitude,
+        gisLongitude: longitude,
+        gisAccuracyMeters: input.gisAccuracyMeters ?? null,
+        gisSource:
+            input.gisSource && input.gisSource !== "unavailable"
+                ? input.gisSource
+                : ("manual" as const),
+        gisCapturedAt: input.gisCapturedAt
+            ? new Date(input.gisCapturedAt)
+            : new Date(),
+        location: {
+            type: "Point" as const,
+            coordinates: [longitude, latitude] as [number, number],
+        },
+    };
+}
 
 /**
  * Nha co Ho dan/Ho kinh doanh/Cong ty da khai bao thuc te thi PHAI duoc coi la
@@ -561,6 +616,7 @@ export async function createHouseRecord(
     }
 
     const code = await generateSequentialCode(HouseRecord, "NS", 3);
+    const gis = normalizeHouseGis(input);
     const houseRecord = await HouseRecord.create({
         code,
         cluster,
@@ -573,6 +629,7 @@ export async function createHouseRecord(
         otherUsageNote: input.otherUsageNote,
         note: input.note,
         residenceDeclarationNumber: input.residenceDeclarationNumber,
+        ...gis,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });
@@ -808,9 +865,49 @@ export async function updateHouseRecord(
         };
     }
 
+    const updatesGis =
+        patch.gisLatitude !== undefined ||
+        patch.gisLongitude !== undefined ||
+        patch.gisAccuracyMeters !== undefined ||
+        patch.gisSource !== undefined ||
+        patch.gisCapturedAt !== undefined;
+    const normalizedGis = updatesGis
+        ? normalizeHouseGis({
+              gisLatitude:
+                  patch.gisLatitude !== undefined
+                      ? patch.gisLatitude
+                      : houseRecord.gisLatitude,
+              gisLongitude:
+                  patch.gisLongitude !== undefined
+                      ? patch.gisLongitude
+                      : houseRecord.gisLongitude,
+              gisAccuracyMeters:
+                  patch.gisAccuracyMeters !== undefined
+                      ? patch.gisAccuracyMeters
+                      : houseRecord.gisAccuracyMeters,
+              gisSource: patch.gisSource ?? houseRecord.gisSource,
+              gisCapturedAt:
+                  patch.gisCapturedAt !== undefined
+                      ? patch.gisCapturedAt
+                      : houseRecord.gisCapturedAt?.toISOString(),
+          })
+        : undefined;
+
     for (const [key, value] of Object.entries(patch)) {
         if (value !== undefined) {
             (houseRecord as unknown as Record<string, unknown>)[key] = value;
+        }
+    }
+    if (normalizedGis) {
+        houseRecord.gisLatitude = normalizedGis.gisLatitude;
+        houseRecord.gisLongitude = normalizedGis.gisLongitude;
+        houseRecord.gisAccuracyMeters = normalizedGis.gisAccuracyMeters;
+        houseRecord.gisSource = normalizedGis.gisSource;
+        houseRecord.gisCapturedAt = normalizedGis.gisCapturedAt;
+        if (normalizedGis.location) {
+            houseRecord.location = normalizedGis.location;
+        } else {
+            houseRecord.set("location", undefined);
         }
     }
     houseRecord.updatedBy = actorUser._id as any;
@@ -826,6 +923,43 @@ export async function updateHouseRecord(
 
     await houseRecord.populate(HOUSE_RECORD_POPULATE);
 
+    return withInferredUsageTypes(houseRecord);
+}
+
+/** Cap nhat GIS rieng de can bo di dong khong can quyen sua toan bo ho so. */
+export async function updateHouseRecordGis(
+    actorUser: IUser,
+    id: string,
+    input: HouseGisInput,
+): Promise<IHouseRecord> {
+    const houseRecord = await HouseRecord.findById(id);
+    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    await assertHouseRecordInScope(actorUser, houseRecord);
+
+    const gis = normalizeHouseGis(input);
+    houseRecord.gisLatitude = gis.gisLatitude;
+    houseRecord.gisLongitude = gis.gisLongitude;
+    houseRecord.gisAccuracyMeters = gis.gisAccuracyMeters;
+    houseRecord.gisSource = gis.gisSource;
+    houseRecord.gisCapturedAt = gis.gisCapturedAt;
+    if (gis.location) houseRecord.location = gis.location;
+    else houseRecord.set("location", undefined);
+    houseRecord.updatedBy = actorUser._id as any;
+    await houseRecord.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "house.gis_update",
+        targetModel: "HouseRecord",
+        targetId: houseRecord._id,
+        metadata: {
+            gisSource: houseRecord.gisSource,
+            hasCoordinates: Boolean(houseRecord.location),
+            accuracyMeters: houseRecord.gisAccuracyMeters,
+        },
+    });
+
+    await houseRecord.populate(HOUSE_RECORD_POPULATE);
     return withInferredUsageTypes(houseRecord);
 }
 

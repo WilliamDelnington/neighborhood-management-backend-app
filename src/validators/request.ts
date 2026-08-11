@@ -3,12 +3,17 @@ import {
     REQUEST_HOUSE_ROLES,
     REQUEST_PRIORITIES,
     REQUEST_STATUS,
-    REQUEST_TYPES,
 } from "@/types";
+
+const requestTypeKeySchema = z
+    .string()
+    .min(1, "Thieu loai yeu cau")
+    .max(50)
+    .regex(/^[a-z][a-z0-9_]*$/, "Loai yeu cau khong hop le");
 
 export const createRequestSchema = z
     .object({
-        type: z.enum(REQUEST_TYPES),
+        type: requestTypeKeySchema,
         title: z.string().min(1, "Thieu tieu de yeu cau"),
         description: z.string().optional(),
         priority: z.enum(REQUEST_PRIORITIES).default("normal"),
@@ -24,6 +29,9 @@ export const createRequestSchema = z
         // service, khong phai o day).
         houseRole: z.enum(REQUEST_HOUSE_ROLES).optional(),
         targetHouseNeighborhoodLeader: z.boolean().optional(),
+        // Payload bieu mau dong; service se validate theo dung version cua
+        // RequestTypeDefinition va ma hoa truoc khi luu.
+        formData: z.record(z.unknown()).optional(),
     })
     .refine(
         data =>
@@ -34,6 +42,13 @@ export const createRequestSchema = z
         { message: "Can chon it nhat mot nguoi nhan hoac mot loai nguoi dung" },
     );
 export type CreateRequestInput = z.infer<typeof createRequestSchema>;
+
+export const updateRequestFormDataSchema = z.object({
+    formData: z.record(z.unknown()),
+});
+export type UpdateRequestFormDataInput = z.infer<
+    typeof updateRequestFormDataSchema
+>;
 
 export const updateRequestSchema = z.object({
     title: z.string().min(1).optional(),

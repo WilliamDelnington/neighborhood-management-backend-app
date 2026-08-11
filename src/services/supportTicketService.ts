@@ -118,6 +118,51 @@ export async function getSupportTicketDetailForOwnerOrStaff(
     return ticket;
 }
 
+/**
+ * Nguoi gui bo sung thong tin cho yeu cau cua chinh minh - chi sua duoc noi
+ * dung (khong doi type/tieu de). Neu dang o trang thai "can_bo_sung" (nhan
+ * vien yeu cau bo sung), tu dong quay ve "dang_xu_ly" sau khi luu - cung quy
+ * uoc voi Complaint.updateComplaint, khong can nhan vien lam gi them.
+ */
+export async function updateSupportTicket(
+    actorUser: IUser,
+    ticketId: string,
+    patch: { content: string },
+): Promise<ISupportTicket> {
+    const ticket = await SupportTicket.findById(ticketId);
+    if (!ticket) throw new HttpError("Khong tim thay yeu cau ho tro", 404);
+
+    if (
+        !actorUser.roles.includes("admin") &&
+        String(ticket.createdByUserId) !== String(actorUser._id)
+    ) {
+        throw new HttpError("Ban khong co quyen sua yeu cau nay", 403);
+    }
+    if (ticket.status === "dong" || ticket.status === "da_xu_ly") {
+        throw new HttpError(
+            "Yeu cau da ket thuc, khong the bo sung them",
+            400,
+        );
+    }
+
+    ticket.content = patch.content;
+    const wasWaitingForInfo = ticket.status === "can_bo_sung";
+    if (wasWaitingForInfo) {
+        ticket.status = "dang_xu_ly";
+    }
+    await ticket.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "support_ticket.update",
+        targetModel: "SupportTicket",
+        targetId: ticket._id,
+        metadata: { content: patch.content },
+    });
+
+    return ticket;
+}
+
 export async function updateSupportTicketStatus(
     actorId: string,
     ticketId: string,

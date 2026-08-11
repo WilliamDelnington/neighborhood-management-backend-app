@@ -15,6 +15,8 @@ export const COMPLAINT_TIMELINE_ACTIONS = [
     "status_update",
     "edited",
     "reevaluation_request",
+    "assignment",
+    "responsibility_transfer",
 ] as const;
 export type ComplaintTimelineAction = typeof COMPLAINT_TIMELINE_ACTIONS[number];
 

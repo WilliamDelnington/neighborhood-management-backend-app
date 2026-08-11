@@ -19,3 +19,10 @@ export const updateSupportTicketStatusSchema = z.object({
 export type UpdateSupportTicketStatusInput = z.infer<
     typeof updateSupportTicketStatusSchema
 >;
+
+export const updateSupportTicketSchema = z.object({
+    content: z.string().min(10, "Noi dung qua ngan"),
+});
+export type UpdateSupportTicketInput = z.infer<
+    typeof updateSupportTicketSchema
+>;

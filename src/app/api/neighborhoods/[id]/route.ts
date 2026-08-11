@@ -34,6 +34,8 @@ export async function PATCH(
         const user = await requireUser(req);
         await requirePermission(user, "neighborhoods.manage");
 
+        await getNeighborhoodById(params.id, user);
+
         const body = updateNeighborhoodSchema.parse(await req.json());
         const neighborhood = await updateNeighborhood(
             String(user._id),

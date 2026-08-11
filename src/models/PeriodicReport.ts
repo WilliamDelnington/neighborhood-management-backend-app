@@ -13,6 +13,27 @@ export interface IPeriodicReportSections {
     proposals?: string;
 }
 
+export interface IPeriodicReportAutoSummary {
+    tasks: { received: number; completed: number; overdue: number };
+    feedback: {
+        received: number;
+        verified: number;
+        forwarded: number;
+        pending: number;
+    };
+    inspections: {
+        total: number;
+        completed: number;
+        passed: number;
+        failed: number;
+        pending: number;
+        revisionRequired: number;
+        fieldCheckRequired: number;
+    };
+    cases: { total: number; open: number; resolved: number };
+    generatedAt: Date;
+}
+
 // Bao cao dinh ky To/nhan vien nop len Phuong (B12) - tac gia KHONG gioi han
 // To truong (dung theo yeu cau: "Neighborhood Leader and staffs should
 // provide reports as well"). neighborhoodId chi dat khi tac gia dai dien mot
@@ -24,9 +45,18 @@ export interface IPeriodicReport extends Document {
     authorUserId: mongoose.Types.ObjectId;
     neighborhoodId?: mongoose.Types.ObjectId;
     sections: IPeriodicReportSections;
+    autoSummary: IPeriodicReportAutoSummary;
     status: PeriodicReportStatus;
     submittedToUserId?: mongoose.Types.ObjectId;
     submittedAt?: Date;
+    currentVersion: number;
+    receivedAt?: Date;
+    receivedByUserId?: mongoose.Types.ObjectId;
+    acceptedAt?: Date;
+    acceptedByUserId?: mongoose.Types.ObjectId;
+    recalledAt?: Date;
+    revisionRequestedAt?: Date;
+    revisionRequestedByUserId?: mongoose.Types.ObjectId;
     revisionNote?: string;
     createdAt: Date;
     updatedAt: Date;
@@ -59,6 +89,34 @@ const PeriodicReportSchema = new Schema<IPeriodicReport>(
             recommendations: { type: String },
             proposals: { type: String },
         },
+        autoSummary: {
+            tasks: {
+                received: { type: Number, default: 0 },
+                completed: { type: Number, default: 0 },
+                overdue: { type: Number, default: 0 },
+            },
+            feedback: {
+                received: { type: Number, default: 0 },
+                verified: { type: Number, default: 0 },
+                forwarded: { type: Number, default: 0 },
+                pending: { type: Number, default: 0 },
+            },
+            inspections: {
+                total: { type: Number, default: 0 },
+                completed: { type: Number, default: 0 },
+                passed: { type: Number, default: 0 },
+                failed: { type: Number, default: 0 },
+                pending: { type: Number, default: 0 },
+                revisionRequired: { type: Number, default: 0 },
+                fieldCheckRequired: { type: Number, default: 0 },
+            },
+            cases: {
+                total: { type: Number, default: 0 },
+                open: { type: Number, default: 0 },
+                resolved: { type: Number, default: 0 },
+            },
+            generatedAt: { type: Date, default: Date.now },
+        },
         status: {
             type: String,
             enum: PERIODIC_REPORT_STATUS,
@@ -67,6 +125,14 @@ const PeriodicReportSchema = new Schema<IPeriodicReport>(
         },
         submittedToUserId: { type: Schema.Types.ObjectId, ref: "User" },
         submittedAt: { type: Date },
+        currentVersion: { type: Number, default: 0, min: 0 },
+        receivedAt: { type: Date },
+        receivedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        acceptedAt: { type: Date },
+        acceptedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        recalledAt: { type: Date },
+        revisionRequestedAt: { type: Date },
+        revisionRequestedByUserId: { type: Schema.Types.ObjectId, ref: "User" },
         revisionNote: { type: String, trim: true },
     },
     { timestamps: true },

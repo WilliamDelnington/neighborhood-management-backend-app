@@ -31,15 +31,28 @@ export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;
 // displayName KHONG con trong danh sach nay - tu "danh tinh", chi sua duoc
 // qua ChangeRequest sau khi duyet (xem changeRequestService.ts). email duoc
 // them vao vi truoc gio field nay ton tai tren User nhung chua tung duoc noi
-// vao endpoint tu-cap-nhat nay.
+// vao endpoint tu-cap-nhat nay. phone CUNG KHONG con trong danh sach nay -
+// day la thong tin dang nhap (xem phoneLoginSchema), doi truc tiep khong xac
+// thuc la mot lo hong - phai di qua changePhoneSchema/changeOwnPhone (xac
+// thuc lai qua Zalo getPhoneNumber, xem app/api/auth/change-phone).
 export const updateProfileSchema = z.object({
-    phone: z.string().optional(),
     email: z.string().email("Email khong hop le").optional(),
     address: z.string().optional(),
     householdId: z.string().optional(),
     notificationPermission: z.boolean().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+// Doi so dien thoai dang nhap - cung tham so voi zaloLoginSchema (accessToken
+// + phoneToken mot-lan-dung tu zmp-sdk getPhoneNumber), KHONG nhan phone tho
+// tu client o production (xem lib/zalo.ts verifyZaloPhoneToken).
+export const changePhoneSchema = z.object({
+    accessToken: z.string().min(1, "Thieu accessToken"),
+    phoneToken: z.string().optional(),
+    // Sandbox-only helper for automated/local testing.
+    phone: z.string().optional(),
+});
+export type ChangePhoneInput = z.infer<typeof changePhoneSchema>;
 
 export const phoneRegisterSchema = z.object({
     phone: phoneField,

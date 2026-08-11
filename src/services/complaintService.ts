@@ -7,6 +7,7 @@ import {
     HouseRecord,
     Neighborhood,
     NeighborhoodColeaderAssignment,
+    User,
     type IComplaint,
     type IUser,
 } from "@/models";
@@ -283,6 +284,13 @@ export async function createComplaint(
         neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
     }
     const wardCode = await resolveComplaintWardCode(actorUser, neighborhoodId);
+    // Chi khi nguoi gui CHU DONG chon nha so, tu dong giao To truong cua to
+    // dan pho chua nha do lam nguoi phu trach chinh. Neu khong chon nha, cap
+    // phuong nhan thong bao nhung phan anh van chua co nguoi phu trach.
+    const targetNeighborhood = input.houseId && neighborhoodId
+        ? await Neighborhood.findById(neighborhoodId).select("leaderUserId")
+        : null;
+    const primaryAssigneeId = targetNeighborhood?.leaderUserId;
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
         // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
@@ -301,6 +309,7 @@ export async function createComplaint(
         targetHouseId,
         relatedAssetId: input.relatedAssetId,
         createdByUserId: userId,
+        assigneeId: primaryAssigneeId,
     });
 
     await ComplaintTimeline.create({
@@ -310,6 +319,18 @@ export async function createComplaint(
         isPublic: true,
         actorId: userId,
     });
+
+    if (primaryAssigneeId) {
+        await ComplaintTimeline.create({
+            complaintId: complaint._id,
+            status: complaint.status,
+            action: "assignment",
+            note: "Tự động giao Tổ trưởng của nhà số được chọn làm người phụ trách chính",
+            patch: { primaryAssigneeId: String(primaryAssigneeId), secondaryAssigneeIds: [] },
+            isPublic: true,
+            actorId: userId,
+        });
+    }
 
     // Neu xac dinh duoc to dan pho, chi bao To truong/To pho CUA TO DO (khong
     // blast toi moi neighborhood_leader trong he thong nhu truoc). Neu khong
@@ -348,11 +369,19 @@ export async function createComplaint(
             createdBy: userId,
         });
     } else {
+        const wardRecipients = wardCode
+            ? await User.find({
+                  status: "active",
+                  wardCode,
+                  roles: { $in: ["secretary", "people_committee_official"] },
+              }).select("_id")
+            : [];
         await createNotification({
             title: "Phản ánh mới cần xử lý (chưa xác định tổ dân phố)",
             body: `Mã ${code}: ${input.title}`,
             type: "complaint.created",
-            targetRoles: ["secretary", "people_committee_official", "admin"],
+            targetUserIds: wardRecipients.map(user => user._id),
+            targetRoles: ["admin"],
             relatedModel: "Complaint",
             relatedId: complaint._id,
             createdBy: userId,
@@ -573,9 +602,6 @@ export async function updateComplaintStatus(
     if (input.status === "da_xu_ly" || input.status === "dong") {
         complaint.actualCompletionDate = new Date();
     }
-    if (input.status === "da_chuyen_ubnd") {
-        complaint.escalatedToCommittee = true;
-    }
     await complaint.save();
 
     await ComplaintTimeline.create({
@@ -697,6 +723,7 @@ export async function updateComplaint(
 export async function confirmComplaintResolution(
     actorUser: IUser,
     complaintId: string,
+    input?: { rating?: number; ratingNote?: string },
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
@@ -707,14 +734,28 @@ export async function confirmComplaintResolution(
             400,
         );
     }
+    if (
+        input?.rating !== undefined &&
+        (input.rating < 1 || input.rating > 5)
+    ) {
+        throw new HttpError("Danh gia phai tu 1 den 5 sao", 400);
+    }
 
     complaint.status = "hoan_thanh";
+    if (input?.rating !== undefined) complaint.rating = input.rating;
+    if (input?.ratingNote !== undefined) complaint.ratingNote = input.ratingNote;
     await complaint.save();
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
         status: "hoan_thanh",
         action: "status_update",
+        note:
+            input?.rating !== undefined
+                ? `Đánh giá: ${input.rating}/5 sao${
+                      input.ratingNote ? ` - ${input.ratingNote}` : ""
+                  }`
+                : undefined,
         isPublic: true,
         actorId: actorUser._id,
     });
@@ -804,48 +845,58 @@ export async function deleteComplaint(actorId: string, complaintId: string) {
 }
 
 export async function assignComplaint(
-    actorId: string,
+    actorUser: IUser,
     complaintId: string,
     input: AssignComplaintInput,
 ) {
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
 
-    complaint.assigneeId = input.assigneeId as any;
+    assertComplaintInScope(actorUser, complaint, false);
+    const wasAssigned = !!complaint.assigneeId;
+    if (wasAssigned && !input.transferReason?.trim()) {
+        throw new HttpError("Phai nhap ly do khi chuyen nguoi phu trach", 422);
+    }
+    const primary = await User.findById(input.primaryAssigneeId).select("status");
+    if (!primary || primary.status !== "active") {
+        throw new HttpError("Nguoi phu trach chinh khong hop le", 422);
+    }
+    complaint.assigneeId = input.primaryAssigneeId as any;
+    complaint.secondaryAssigneeIds = [...new Set(input.secondaryAssigneeIds)] as any;
     if (input.expectedCompletionDate) {
         complaint.expectedCompletionDate = new Date(
             input.expectedCompletionDate,
         );
     }
-    if (complaint.status === "moi_tiep_nhan") {
-        complaint.status = "da_tiep_nhan";
-    }
+    if (complaint.status === "moi_tiep_nhan") complaint.status = "dang_xu_ly";
     await complaint.save();
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
         status: complaint.status,
-        note: "Đã phân công người phụ trách xử lý",
+        action: wasAssigned ? "responsibility_transfer" : "assignment",
+        note: wasAssigned ? input.transferReason : "Đã phân công người phụ trách chính",
+        patch: { primaryAssigneeId: input.primaryAssigneeId, secondaryAssigneeIds: input.secondaryAssigneeIds },
         isPublic: true,
-        actorId,
+        actorId: actorUser._id,
     });
 
     await createNotification({
         title: "Bạn được giao xử lý một phản ánh",
         body: `Phản ánh ${complaint.code}: ${complaint.title}`,
         type: "complaint.assigned",
-        targetUserIds: [input.assigneeId],
+        targetUserIds: [input.primaryAssigneeId, ...input.secondaryAssigneeIds],
         relatedModel: "Complaint",
         relatedId: complaint._id,
-        createdBy: actorId,
+        createdBy: actorUser._id,
     });
 
     await writeAuditLog({
-        actorId,
+        actorId: actorUser._id,
         action: "complaint.assign",
         targetModel: "Complaint",
         targetId: complaint._id,
-        metadata: { assigneeId: input.assigneeId },
+        metadata: { primaryAssigneeId: input.primaryAssigneeId, secondaryAssigneeIds: input.secondaryAssigneeIds, transferReason: input.transferReason },
     });
 
     return complaint;

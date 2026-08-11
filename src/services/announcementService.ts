@@ -244,7 +244,8 @@ export async function listAnnouncements(params: {
         Announcement.find(filter)
             .sort({ pinned: -1, publishedAt: -1, createdAt: -1 })
             .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
+            .limit(params.limit)
+            .populate("neighborhoodId", "name"),
         Announcement.countDocuments(filter),
     ]);
 
@@ -258,7 +259,10 @@ export async function listAnnouncements(params: {
 }
 
 export async function getAnnouncementById(id: string, publicOnly: boolean) {
-    const announcement = await Announcement.findById(id);
+    const announcement = await Announcement.findById(id).populate(
+        "neighborhoodId",
+        "name",
+    );
     if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
     if (publicOnly && announcement.status !== "da_dang") {
         throw new HttpError("Khong tim thay thong bao", 404);

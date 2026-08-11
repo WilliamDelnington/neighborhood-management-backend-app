@@ -25,10 +25,11 @@ export async function GET(req: Request) {
         const data = await getSurveyResultReport({ surveyId });
 
         if (searchParams.get("format") === "excel") {
+            await requirePermission(actorUser, "reports.export");
             const workbook = buildSurveyResultReportWorkbook(data);
             await writeAuditLog({
                 actorId: String(actorUser._id),
-                action: "report.export",
+                action: "DATA_EXPORTED",
                 targetModel: "Report",
                 targetId: surveyId,
                 metadata: { report: "survey_results" },

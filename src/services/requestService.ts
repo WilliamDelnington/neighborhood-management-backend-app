@@ -11,9 +11,11 @@ import {
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
+    RequestTypeDefinition,
     SecurityRecord,
     User,
     type IRequest,
+    type IRequestTypeDefinition,
 } from "@/models";
 import type { IUser } from "@/models/User";
 import { HttpError } from "@/lib/response";
@@ -27,8 +29,12 @@ import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import {
-    REQUEST_TYPE_LABEL,
-    REQUEST_TYPES,
+    findRequestTypeForActor,
+    getAvailableRequestTypes,
+    requestTypeLabel,
+} from "@/services/requestTypeDefinitionService";
+import { decryptSensitive, encryptSensitive } from "@/lib/encryption";
+import {
     type RequestHouseRole,
     type RequestPriority,
     type RequestType,
@@ -39,8 +45,75 @@ import type {
     UpdateRequestInput,
 } from "@/validators/request";
 
-function eligiblePermissionForType(type: RequestType): string {
+function eligiblePermissionForType(type: string): string {
     return `${type}.assign`;
+}
+
+function parseRequestFormData(encrypted?: string) {
+    if (!encrypted) return {};
+    try {
+        const value = JSON.parse(decryptSensitive(encrypted));
+        return value && typeof value === "object" && !Array.isArray(value)
+            ? value
+            : {};
+    } catch {
+        return {};
+    }
+}
+
+function validateRequestFormData(
+    definition: { fields: IRequestTypeDefinition["fields"] },
+    data: Record<string, unknown>,
+    requireRequiredFields: boolean,
+) {
+    const serialized = JSON.stringify(data);
+    if (Buffer.byteLength(serialized, "utf8") > 64 * 1024) {
+        throw new HttpError("Du lieu bieu mau vuot qua 64 KB", 422);
+    }
+    const allowedKeys = new Set(definition.fields.map(field => field.key));
+    const unknownKeys = Object.keys(data).filter(key => !allowedKeys.has(key));
+    if (unknownKeys.length > 0) {
+        throw new HttpError(
+            `Bieu mau co truong khong hop le: ${unknownKeys.join(", ")}`,
+            422,
+        );
+    }
+
+    for (const field of definition.fields) {
+        const value = data[field.key];
+        const missing =
+            value === undefined ||
+            value === null ||
+            value === "" ||
+            (Array.isArray(value) && value.length === 0);
+        if (requireRequiredFields && field.required && missing) {
+            throw new HttpError(`Thieu truong bat buoc: ${field.label}`, 422);
+        }
+        if (missing) continue;
+        const invalid =
+            ((field.type === "text" ||
+                field.type === "long_text" ||
+                field.type === "date" ||
+                field.type === "single_select") &&
+                typeof value !== "string") ||
+            (field.type === "number" && typeof value !== "number") ||
+            (field.type === "boolean" && typeof value !== "boolean") ||
+            (field.type === "multi_select" &&
+                (!Array.isArray(value) ||
+                    value.some(item => typeof item !== "string")));
+        if (invalid) {
+            throw new HttpError(`Sai kieu du lieu tai truong: ${field.label}`, 422);
+        }
+        if (
+            (field.type === "single_select" &&
+                !field.options.includes(value as string)) ||
+            (field.type === "multi_select" &&
+                (value as string[]).some(item => !field.options.includes(item)))
+        ) {
+            throw new HttpError(`Gia tri lua chon khong hop le: ${field.label}`, 422);
+        }
+    }
+    return serialized;
 }
 
 function withOverdue(
@@ -170,8 +243,12 @@ async function attachRecipients(request: IRequest) {
         requestId: request._id,
     }).populate("userId", "displayName phone");
 
+    const requestObject = request.toObject() as Record<string, unknown>;
+    const encrypted = request.formDataEncrypted;
+    delete requestObject.formDataEncrypted;
     return {
-        ...request.toObject(),
+        ...requestObject,
+        formData: parseRequestFormData(encrypted),
         recipients: recipients.map(r => ({
             _id: r._id,
             userId: (r.userId as unknown as { _id: Types.ObjectId })._id,
@@ -196,10 +273,11 @@ async function resolveRecipientIds(
     type: RequestType,
     targetUserIds: string[],
     targetRoles: string[],
+    definition?: IRequestTypeDefinition | null,
 ): Promise<Set<string>> {
-    const eligibleRoleKeys = await getRoleKeysWithPermission(
-        eligiblePermissionForType(type),
-    );
+    const eligibleRoleKeys = definition
+        ? definition.allowedReceiverRoles
+        : await getRoleKeysWithPermission(eligiblePermissionForType(type));
     const invalidRoles = targetRoles.filter(
         r => !eligibleRoleKeys.includes(r),
     );
@@ -211,6 +289,19 @@ async function resolveRecipientIds(
     }
 
     const recipientIds = new Set<string>(targetUserIds);
+    if (targetUserIds.length > 0) {
+        const eligibleUsers = await User.find({
+            _id: { $in: targetUserIds },
+            status: "active",
+            roles: { $in: eligibleRoleKeys },
+        }).select("_id");
+        if (eligibleUsers.length !== recipientIds.size) {
+            throw new HttpError(
+                "Co nguoi nhan cu the khong thuoc vai tro du dieu kien",
+                422,
+            );
+        }
+    }
     if (targetRoles.length > 0) {
         const users = await User.find({ roles: { $in: targetRoles } }).select(
             "_id",
@@ -300,10 +391,17 @@ export async function createRequest(
     actorUser: IUser,
     input: CreateRequestInput,
 ) {
+    const definition = await findRequestTypeForActor(actorUser, input.type);
+    if (
+        definition &&
+        !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
+    ) {
+        throw new HttpError("Vai tro cua ban khong duoc gui loai nhiem vu nay", 403);
+    }
     const allowedTypes = await getUserAllowedRequestTypes(actorUser);
     if (allowedTypes !== null && !allowedTypes.includes(input.type)) {
         throw new HttpError(
-            `Ban khong duoc phep gui yeu cau loai "${REQUEST_TYPE_LABEL[input.type]}"`,
+            `Ban khong duoc phep gui yeu cau loai "${requestTypeLabel(input.type, definition)}"`,
             403,
         );
     }
@@ -312,6 +410,7 @@ export async function createRequest(
         input.type,
         input.targetUserIds,
         input.targetRoles,
+        definition,
     );
 
     if (input.houseId && (input.houseRole || input.targetHouseNeighborhoodLeader)) {
@@ -358,6 +457,31 @@ export async function createRequest(
 
     const request = await RequestModel.create({
         type: input.type,
+        typeDefinitionId: definition?._id,
+        formSchemaVersion: definition?.version,
+        formDefinitionSnapshot: definition
+            ? {
+                  name: definition.name,
+                  dataEntryMode: definition.dataEntryMode,
+                  fields: definition.fields.map(field => ({
+                      key: field.key,
+                      label: field.label,
+                      type: field.type,
+                      required: field.required,
+                      options: [...field.options],
+                      classification: field.classification,
+                  })),
+              }
+            : undefined,
+        formDataEncrypted: definition
+            ? encryptSensitive(
+                  validateRequestFormData(
+                      definition,
+                      input.formData || {},
+                      definition.dataEntryMode === "sender",
+                  ),
+              )
+            : undefined,
         title: input.title,
         description: input.description,
         priority: input.priority,
@@ -383,7 +507,7 @@ export async function createRequest(
             input.description ||
             (houseLabel
                 ? `Nhà ${houseLabel.code} (${houseLabel.address})`
-                : `Yêu cầu ${REQUEST_TYPE_LABEL[input.type]}`),
+                : `Yêu cầu ${requestTypeLabel(input.type, definition)}`),
         type: `request.${input.type}`,
         targetUserIds: [...recipientIds],
         relatedModel: "Request",
@@ -452,6 +576,7 @@ export async function listRequests(params: {
 
     const [items, total] = await Promise.all([
         RequestModel.find(filter)
+            .select("+formDataEncrypted")
             .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
@@ -492,10 +617,9 @@ export async function assertCanViewRequest(
 }
 
 export async function getRequestById(actorUser: IUser, id: string) {
-    const request = await RequestModel.findById(id).populate(
-        "createdBy",
-        "displayName",
-    );
+    const request = await RequestModel.findById(id)
+        .select("+formDataEncrypted")
+        .populate("createdBy", "displayName");
     if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
 
     await assertCanViewRequest(actorUser, request);
@@ -508,9 +632,12 @@ export async function updateRequest(
     id: string,
     input: UpdateRequestInput,
 ) {
-    const request = await RequestModel.findById(id);
+    const request = await RequestModel.findById(id).select("+formDataEncrypted");
     if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
     await assertCanManageRequest(actorUser, request);
+    const definition = request.typeDefinitionId
+        ? await RequestTypeDefinition.findById(request.typeDefinitionId)
+        : null;
 
     if (input.title !== undefined) request.title = input.title;
     if (input.description !== undefined) request.description = input.description;
@@ -535,6 +662,7 @@ export async function updateRequest(
             request.type,
             input.addTargetUserIds || [],
             input.addTargetRoles || [],
+            definition,
         );
         const existing = await RequestRecipient.find({
             requestId: request._id,
@@ -553,7 +681,9 @@ export async function updateRequest(
 
             await createNotification({
                 title: request.title,
-                body: request.description || `Yêu cầu ${REQUEST_TYPE_LABEL[request.type]}`,
+                body:
+                    request.description ||
+                    `Yêu cầu ${requestTypeLabel(request.type, definition)}`,
                 type: `request.${request.type}`,
                 targetUserIds: newIds,
                 relatedModel: "Request",
@@ -743,10 +873,9 @@ export async function listMyRequests(
     const requestFilter: Record<string, unknown> = { _id: { $in: requestIds } };
     if (params.type) requestFilter.type = params.type;
 
-    const allMatching = await RequestModel.find(requestFilter).populate(
-        "createdBy",
-        "displayName",
-    );
+    const allMatching = await RequestModel.find(requestFilter)
+        .select("+formDataEncrypted")
+        .populate("createdBy", "displayName");
     const requestById = new Map(allMatching.map(r => [String(r._id), r]));
 
     let combined = recipientRows
@@ -781,6 +910,9 @@ export async function listMyRequests(
             type: c.request.type,
             title: c.request.title,
             description: c.request.description,
+            formSchemaVersion: c.request.formSchemaVersion,
+            formDefinitionSnapshot: c.request.formDefinitionSnapshot,
+            formData: parseRequestFormData(c.request.formDataEncrypted),
             priority: c.request.priority,
             houseId: c.request.houseId,
             dueDate: c.request.dueDate,
@@ -1006,18 +1138,92 @@ export async function confirmRequestRecipient(
     return recipient;
 }
 
+export async function updateRequestFormData(
+    actorUser: IUser,
+    requestId: string,
+    formData: Record<string, unknown>,
+) {
+    const request = await RequestModel.findById(requestId).select(
+        "+formDataEncrypted",
+    );
+    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request.typeDefinitionId) {
+        throw new HttpError("Yeu cau nay khong co bieu mau dong", 422);
+    }
+    const definition = await RequestTypeDefinition.findById(
+        request.typeDefinitionId,
+    );
+    if (!definition) {
+        throw new HttpError("Khong tim thay cau hinh bieu mau", 409);
+    }
+
+    const canManage =
+        actorUser.roles.includes("admin") ||
+        String(request.createdBy) === String(actorUser._id) ||
+        (await userHasPermission(actorUser, "requests.update"));
+    const recipient = await RequestRecipient.findOne({
+        requestId,
+        userId: actorUser._id,
+    });
+    const dataEntryMode =
+        request.formDefinitionSnapshot?.dataEntryMode || definition.dataEntryMode;
+    if (dataEntryMode === "sender" && !canManage) {
+        throw new HttpError("Chi nguoi giao viec duoc cap nhat bieu mau nay", 403);
+    }
+    if (dataEntryMode === "recipient" && !canManage && !recipient) {
+        throw new HttpError("Ban khong phai nguoi nhan cua yeu cau nay", 403);
+    }
+    if (recipient?.status === "resolved") {
+        throw new HttpError("Yeu cau da hoan thanh, khong the sua du lieu", 409);
+    }
+
+    request.formDataEncrypted = encryptSensitive(
+        validateRequestFormData(
+            request.formDefinitionSnapshot || definition,
+            formData,
+            true,
+        ),
+    );
+    request.formDataUpdatedAt = new Date();
+    request.formDataUpdatedBy = actorUser._id as any;
+    await request.save();
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "request.form_data_update",
+        targetModel: "Request",
+        targetId: request._id,
+        // Khong ghi gia tri nhay cam vao audit log; chi ghi danh sach khoa.
+        metadata: {
+            type: request.type,
+            schemaVersion: request.formSchemaVersion,
+            fieldKeys: Object.keys(formData),
+        },
+    });
+    return attachRecipients(request);
+}
+
 export async function getRequestMeta(actorUser: IUser) {
     const allowedTypes = await getUserAllowedRequestTypes(actorUser);
-    const types = (
-        allowedTypes === null ? [...REQUEST_TYPES] : allowedTypes
-    ) as RequestType[];
+    const availableDefinitions = await getAvailableRequestTypes(actorUser);
+    const types = availableDefinitions
+        .map(type => type.key)
+        .filter(type => allowedTypes === null || allowedTypes.includes(type));
 
     const eligibleRolesByType: Record<string, string[]> = {};
     for (const type of types) {
-        eligibleRolesByType[type] = await getRoleKeysWithPermission(
-            eligiblePermissionForType(type),
-        );
+        const custom = availableDefinitions.find(item => item.key === type);
+        eligibleRolesByType[type] =
+            custom && !custom.builtIn
+                ? custom.allowedReceiverRoles || []
+                : await getRoleKeysWithPermission(eligiblePermissionForType(type));
     }
 
-    return { allowedTypes: types, eligibleRolesByType };
+    return {
+        allowedTypes: types,
+        eligibleRolesByType,
+        typeDefinitions: availableDefinitions.filter(type =>
+            types.includes(type.key),
+        ),
+    };
 }

@@ -1,10 +1,11 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
 
-// Trao doi theo tung ho so nghiep vu (B14) - CHI ho tro entityType="Request"
-// trong lan nay (theo yeu cau cu the), khong phai mot khung "the loai chat"
-// chung cho moi entity. Mo rong sang Complaint/Report... sau nay chi can them
-// gia tri vao COMMENT_ENTITY_TYPES + kiem tra quyen xem tuong ung o service.
-export const COMMENT_ENTITY_TYPES = ["Request"] as const;
+// Trao doi theo tung ho so nghiep vu (B14) - luc dau CHI ho tro
+// entityType="Request", mo rong them "SupportTicket" (C12) theo dung mo hinh
+// cu: quyen xem trao doi = quyen xem chinh ho so, khong phai mot khung "the
+// loai chat" chung cho moi entity. Mo rong tiep sau nay chi can them gia tri
+// vao day + kiem tra quyen xem tuong ung o commentService.ts.
+export const COMMENT_ENTITY_TYPES = ["Request", "SupportTicket"] as const;
 export type CommentEntityType = typeof COMMENT_ENTITY_TYPES[number];
 
 export interface IComment extends Document {

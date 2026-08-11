@@ -18,7 +18,15 @@ async function createNeighborhood(
             makeRequest("/api/neighborhoods", {
                 method: "POST",
                 headers,
-                body: { name: `Tổ dân phố ${code}`, code, sequence },
+                body: {
+                    name: `Tổ dân phố ${code}`,
+                    code,
+                    sequence,
+                    provinceCode: 79,
+                    provinceName: "TP Hồ Chí Minh",
+                    wardCode: 26734,
+                    wardName: "Phường thử nghiệm",
+                },
             }),
         ),
     );
@@ -34,7 +42,11 @@ describe("Neighborhood: tao va gan to truong", () => {
             makeRequest("/api/neighborhoods", {
                 method: "POST",
                 headers,
-                body: { name: "Trung", code: "TDP-01", sequence: 2 },
+                body: {
+                    name: "Trung", code: "TDP-01", sequence: 2,
+                    provinceCode: 79, provinceName: "TP Hồ Chí Minh",
+                    wardCode: 26734, wardName: "Phường thử nghiệm",
+                },
             }),
         );
         expect(res.status).toBe(409);
@@ -47,7 +59,11 @@ describe("Neighborhood: tao va gan to truong", () => {
             makeRequest("/api/neighborhoods", {
                 method: "POST",
                 headers,
-                body: { name: "X", code: "TDP-09", sequence: 9 },
+                body: {
+                    name: "X", code: "TDP-09", sequence: 9,
+                    provinceCode: 79, provinceName: "TP Hồ Chí Minh",
+                    wardCode: 26734, wardName: "Phường thử nghiệm",
+                },
             }),
         );
         expect(res.status).toBe(403);

@@ -10,6 +10,7 @@ import { signUploadToken } from "@/lib/auth";
 import { HouseRecord, Business, Complaint } from "@/models";
 import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
+import { getRequestById } from "@/services/requestService";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ const createUploadTokenSchema = z.object({
         "Business",
         "BusinessDocument",
         "Complaint",
+        "Request",
     ]),
     relatedId: z.string().min(1),
 });
@@ -81,6 +83,11 @@ export async function POST(req: Request) {
                     403,
                 );
             }
+        } else if (body.relatedModel === "Request") {
+            // getRequestById tu nem loi neu actor khong phai quan ly/nguoi
+            // nhan (assertCanViewRequest) - dung lai dung y het dieu kien cua
+            // GET/POST attachments hien co, khong viet lai logic rieng.
+            await getRequestById(user, body.relatedId);
         } else {
             // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
             // len giay to - khac voi nhanh "Business" o tren (nhan vien co

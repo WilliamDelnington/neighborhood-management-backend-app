@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser } from "@/lib/rbac";
+import { requirePermission, requireUser } from "@/lib/rbac";
 import { requestPeriodicReportRevisionSchema } from "@/validators/periodicReport";
 import { requestPeriodicReportRevision } from "@/services/periodicReportService";
 
@@ -13,6 +13,7 @@ export async function POST(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
+        await requirePermission(actorUser, "reports.review");
         const body = requestPeriodicReportRevisionSchema.parse(
             await req.json(),
         );
