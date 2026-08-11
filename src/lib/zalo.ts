@@ -15,6 +15,45 @@ export type ZaloVerifiedProfile = {
     verifiedVia: "graph_api" | "sandbox";
 };
 
+/** Exchange the one-time getPhoneNumber token on the trusted server. */
+export async function verifyZaloPhoneToken(
+    accessToken: string,
+    phoneToken?: string,
+    sandboxPhone?: string,
+): Promise<string | undefined> {
+    if (ZALO_ENV !== "production") {
+        return sandboxPhone ? normalizeZaloPhone(sandboxPhone) : undefined;
+    }
+    if (!phoneToken) return undefined;
+    if (!ZALO_APP_SECRET) {
+        throw new HttpError("Chua cau hinh xac thuc so dien thoai Zalo", 503);
+    }
+
+    const res = await fetch("https://graph.zalo.me/v2.0/me/info", {
+        headers: {
+            access_token: accessToken,
+            code: phoneToken,
+            secret_key: ZALO_APP_SECRET,
+        },
+    });
+    const body = await res.json();
+    const rawPhone = body?.data?.number;
+    if (!res.ok || body?.error || !rawPhone) {
+        throw new HttpError(
+            "Khong the xac thuc so dien thoai tu Zalo, vui long thu lai",
+            401,
+        );
+    }
+    return normalizeZaloPhone(String(rawPhone));
+}
+
+function normalizeZaloPhone(value: string): string {
+    const digits = value.replace(/\D/g, "");
+    return digits.startsWith("84") && digits.length === 11
+        ? `0${digits.slice(2)}`
+        : digits;
+}
+
 /**
  * Xac thuc access token Zalo do client (zmp-sdk getAccessToken) gui len.
  *
@@ -32,7 +71,10 @@ export async function verifyZaloAccessToken(
         throw new HttpError("Thieu accessToken hoac zaloUserId", 422);
     }
 
-    if (ZALO_ENV === "production" && ZALO_APP_SECRET) {
+    if (ZALO_ENV === "production") {
+        if (!ZALO_APP_SECRET) {
+            throw new HttpError("Chua cau hinh xac thuc Zalo production", 503);
+        }
         // Tu 01/01/2024 Zalo Platform bat buoc gui appsecret_proof (HMAC-SHA256 cua accessToken,
         // dung app secret lam key) khi lay thong tin nguoi dung tu server, de xac nhan accessToken
         // thuc su duoc dung boi ung dung da dang ky (tuong tu appsecret_proof cua Facebook Graph API).

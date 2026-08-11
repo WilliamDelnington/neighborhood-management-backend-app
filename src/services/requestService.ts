@@ -1,7 +1,13 @@
 import { Types } from "mongoose";
 import {
+    Business,
+    Company,
     FileAsset,
+    Household,
+    HouseOwnership,
     HouseRecord,
+    Neighborhood,
+    NeighborhoodColeaderAssignment,
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
@@ -20,7 +26,13 @@ import {
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
-import { REQUEST_TYPE_LABEL, REQUEST_TYPES, type RequestType } from "@/types";
+import {
+    REQUEST_TYPE_LABEL,
+    REQUEST_TYPES,
+    type RequestHouseRole,
+    type RequestPriority,
+    type RequestType,
+} from "@/types";
 import type {
     CreateRequestInput,
     UpdateMyRequestStatusInput,
@@ -41,6 +53,12 @@ function withOverdue(
             recipient.status !== "resolved",
     );
 }
+
+const PRIORITY_WEIGHT: Record<RequestPriority, number> = {
+    urgent: 2,
+    high: 1,
+    normal: 0,
+};
 
 type SyncTier = "open" | "active" | "done";
 
@@ -202,6 +220,82 @@ async function resolveRecipientIds(
     return recipientIds;
 }
 
+/**
+ * Tra ve userId cua nguoi giu vai tro `houseRole` tai mot Nha so cu the - dung
+ * cho To truong/To pho gui nhiem vu ("task") thang xuong dung nguoi tai nha,
+ * thay vi chon tung tai khoan rieng le. Chi nguoi ĐÃ co tai khoan lien ket moi
+ * nhan duoc (house_owner qua HouseOwnership.ownerId khi ownerType="user";
+ * household_head qua Household.headOfHouseholdUserId; business_head/
+ * company_rep qua Business/Company.representativeUserId) - nha thuoc to chuc
+ * (ownerType="organization") hoac chua lien ket tai khoan dai dien se khong co
+ * nguoi nhan tu nhanh nay.
+ */
+async function resolveHouseRoleRecipientIds(
+    houseId: string,
+    houseRole: RequestHouseRole,
+): Promise<Set<string>> {
+    const ids = new Set<string>();
+    if (houseRole === "house_owner") {
+        const ownerships = await HouseOwnership.find({
+            houseId,
+            active: true,
+            relationshipType: "primary_owner",
+            ownerType: "user",
+        }).select("ownerId");
+        ownerships.forEach(o => ids.add(String(o.ownerId)));
+    } else if (houseRole === "household_head") {
+        const households = await Household.find({
+            houseId,
+            headOfHouseholdUserId: { $exists: true, $ne: null },
+        }).select("headOfHouseholdUserId");
+        households.forEach(h => {
+            if (h.headOfHouseholdUserId) ids.add(String(h.headOfHouseholdUserId));
+        });
+    } else if (houseRole === "business_head") {
+        const businesses = await Business.find({
+            houseId,
+            representativeUserId: { $exists: true, $ne: null },
+        }).select("representativeUserId");
+        businesses.forEach(b => {
+            if (b.representativeUserId) ids.add(String(b.representativeUserId));
+        });
+    } else if (houseRole === "company_rep") {
+        const companies = await Company.find({
+            houseId,
+            representativeUserId: { $exists: true, $ne: null },
+        }).select("representativeUserId");
+        companies.forEach(c => {
+            if (c.representativeUserId) ids.add(String(c.representativeUserId));
+        });
+    }
+    return ids;
+}
+
+/**
+ * Tra ve userId cua To truong + cac To pho dang hoat dong cua to dan pho chua
+ * mot Nha so cu the - dung cho Phuong giao nhiem vu xac minh xuong To (B13).
+ */
+async function resolveHouseLeaderRecipientIds(
+    houseId: string,
+): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const house = await HouseRecord.findById(houseId).select("neighborhoodId");
+    if (!house?.neighborhoodId) return ids;
+
+    const neighborhood = await Neighborhood.findById(
+        house.neighborhoodId,
+    ).select("leaderUserId");
+    if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
+
+    const coleaderAssignments = await NeighborhoodColeaderAssignment.find({
+        neighborhoodId: house.neighborhoodId,
+        unassignedAt: { $exists: false },
+    }).select("coleaderUserId");
+    coleaderAssignments.forEach(a => ids.add(String(a.coleaderUserId)));
+
+    return ids;
+}
+
 export async function createRequest(
     actorUser: IUser,
     input: CreateRequestInput,
@@ -219,6 +313,36 @@ export async function createRequest(
         input.targetUserIds,
         input.targetRoles,
     );
+
+    if (input.houseId && (input.houseRole || input.targetHouseNeighborhoodLeader)) {
+        // Chi To truong/To pho duoc chon nguoi nhan theo vai tro trong Nha -
+        // khac voi targetRoles/targetUserIds (mo cho moi loai type/nguoi gui
+        // du dieu kien), day la mot nhanh gui rieng, gioi han cung theo vai
+        // tro nguoi GUI thay vi permission rieng (xem cau hoi da duoc hoi).
+        if (
+            !actorUser.roles.includes("neighborhood_leader") &&
+            !actorUser.roles.includes("neighborhood_coleader")
+        ) {
+            throw new HttpError(
+                "Chi To truong/To pho moi duoc gui nhiem vu theo Nha so",
+                403,
+            );
+        }
+        if (input.houseRole) {
+            const houseRoleIds = await resolveHouseRoleRecipientIds(
+                input.houseId,
+                input.houseRole,
+            );
+            houseRoleIds.forEach(id => recipientIds.add(id));
+        }
+        if (input.targetHouseNeighborhoodLeader) {
+            const leaderIds = await resolveHouseLeaderRecipientIds(
+                input.houseId,
+            );
+            leaderIds.forEach(id => recipientIds.add(id));
+        }
+    }
+
     if (recipientIds.size === 0) {
         throw new HttpError("Khong tim thay nguoi nhan phu hop", 422);
     }
@@ -236,6 +360,7 @@ export async function createRequest(
         type: input.type,
         title: input.title,
         description: input.description,
+        priority: input.priority,
         relatedModel: input.relatedModel,
         relatedId: input.relatedId,
         houseId,
@@ -292,12 +417,37 @@ export async function listRequests(params: {
     if (params.relatedId) filter.relatedId = params.relatedId;
     if (params.houseId) filter.houseId = params.houseId;
 
-    if (!params.actorUser.roles.includes("admin")) {
+    const isAdmin = params.actorUser.roles.includes("admin");
+    const canManageAll =
+        isAdmin || (await userHasPermission(params.actorUser, "requests.update"));
+
+    if (!canManageAll) {
+        // Nguoi khong quan ly toan bo yeu cau (vd secretary chi gui yeu cau)
+        // chi duoc thay: yeu cau do minh tao, yeu cau minh la nguoi nhan, hoac
+        // (voi vai tro co pham vi khu vuc thuc su duoc gan, vd to truong) yeu
+        // cau gan voi nha trong khu vuc phu trach. Neu khong co dieu kien nao
+        // trong 3 dieu kien tren duoc gan (vd secretary chua duoc gan cum/to
+        // dan pho nao), KHONG con roi ve "xem tat ca" nhu truoc.
+        const orClauses: Record<string, unknown>[] = [
+            { createdBy: params.actorUser._id },
+        ];
+
         const scopeFilter = areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
-            filter.houseId = { $in: houses.map(h => h._id) };
+            orClauses.push({ houseId: { $in: houses.map(h => h._id) } });
         }
+
+        const recipientRows = await RequestRecipient.find({
+            userId: params.actorUser._id,
+        }).select("requestId");
+        if (recipientRows.length > 0) {
+            orClauses.push({
+                _id: { $in: recipientRows.map(r => r.requestId) },
+            });
+        }
+
+        filter.$or = orClauses;
     }
 
     const [items, total] = await Promise.all([
@@ -320,6 +470,27 @@ export async function listRequests(params: {
     };
 }
 
+/**
+ * Nem HttpError(403) neu actor khong duoc xem Request nay: admin, hoac co
+ * requests.read, hoac la MOT nguoi nhan (RequestRecipient) cua yeu cau. Dung
+ * chung boi getRequestById va commentService (B14 - binh luan tren Request
+ * chi hien voi nhung ai xem duoc chinh Request do).
+ */
+export async function assertCanViewRequest(
+    actorUser: IUser,
+    request: IRequest,
+): Promise<void> {
+    if (actorUser.roles.includes("admin")) return;
+    if (await userHasPermission(actorUser, "requests.read")) return;
+    const isRecipient = await RequestRecipient.exists({
+        requestId: request._id,
+        userId: actorUser._id,
+    });
+    if (!isRecipient) {
+        throw new HttpError("Ban khong co quyen xem yeu cau nay", 403);
+    }
+}
+
 export async function getRequestById(actorUser: IUser, id: string) {
     const request = await RequestModel.findById(id).populate(
         "createdBy",
@@ -327,18 +498,7 @@ export async function getRequestById(actorUser: IUser, id: string) {
     );
     if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
 
-    if (
-        !actorUser.roles.includes("admin") &&
-        !(await userHasPermission(actorUser, "requests.read"))
-    ) {
-        const isRecipient = await RequestRecipient.exists({
-            requestId: request._id,
-            userId: actorUser._id,
-        });
-        if (!isRecipient) {
-            throw new HttpError("Ban khong co quyen xem yeu cau nay", 403);
-        }
-    }
+    await assertCanViewRequest(actorUser, request);
 
     return attachRecipients(request);
 }
@@ -355,6 +515,7 @@ export async function updateRequest(
     if (input.title !== undefined) request.title = input.title;
     if (input.description !== undefined) request.description = input.description;
     if (input.note !== undefined) request.note = input.note;
+    if (input.priority !== undefined) request.priority = input.priority;
     if (input.dueDate !== undefined) request.dueDate = new Date(input.dueDate);
     await request.save();
 
@@ -600,6 +761,14 @@ export async function listMyRequests(
         combined = combined.filter(c => c.isOverdue);
     }
 
+    // Yeu cau muc do uu tien cao hon luon xep truoc, giu nguyen thu tu (moi
+    // nhat truoc) trong cung mot muc do uu tien.
+    combined.sort(
+        (a, b) =>
+            PRIORITY_WEIGHT[b.request.priority] -
+            PRIORITY_WEIGHT[a.request.priority],
+    );
+
     const total = combined.length;
     const page = params.page;
     const limit = params.limit;
@@ -612,6 +781,7 @@ export async function listMyRequests(
             type: c.request.type,
             title: c.request.title,
             description: c.request.description,
+            priority: c.request.priority,
             houseId: c.request.houseId,
             dueDate: c.request.dueDate,
             createdBy: c.request.createdBy,
@@ -627,6 +797,116 @@ export async function listMyRequests(
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+}
+
+export type DashboardRequestItem = {
+    _id: string;
+    requestId: string;
+    type: RequestType;
+    title: string;
+    priority: RequestPriority;
+    status: string;
+    dueDate?: Date;
+    isOverdue: boolean;
+};
+
+/**
+ * Danh sach yeu cau chua hoan thanh ma nguoi dung dang dang nhap la nguoi
+ * nhan, dung cho widget "Yeu cau can xu ly" tren dashboard - sap xep muc do
+ * uu tien cao truoc, sau do den han xu ly gan nhat (khong co han xep sau cung).
+ */
+export async function listMyPendingRequestsForDashboard(
+    userId: string,
+    limit = 5,
+): Promise<DashboardRequestItem[]> {
+    const recipientRows = await RequestRecipient.find({
+        userId,
+        status: { $ne: "resolved" },
+    });
+    if (recipientRows.length === 0) return [];
+
+    const requests = await RequestModel.find({
+        _id: { $in: recipientRows.map(r => r.requestId) },
+    }).select("title type priority dueDate");
+    const requestById = new Map(requests.map(r => [String(r._id), r]));
+
+    const combined = recipientRows
+        .filter(r => requestById.has(String(r.requestId)))
+        .map(r => {
+            const request = requestById.get(String(r.requestId))!;
+            return {
+                _id: String(r._id),
+                requestId: String(request._id),
+                type: request.type,
+                title: request.title,
+                priority: request.priority,
+                status: r.status,
+                dueDate: request.dueDate,
+                isOverdue: withOverdue(r, request.dueDate),
+            };
+        });
+
+    combined.sort((a, b) => {
+        const weightDiff = PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority];
+        if (weightDiff !== 0) return weightDiff;
+        if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+        const aDue = a.dueDate ? a.dueDate.getTime() : Infinity;
+        const bDue = b.dueDate ? b.dueDate.getTime() : Infinity;
+        return aDue - bDue;
+    });
+
+    return combined.slice(0, limit);
+}
+
+export type MyRequestCounts = {
+    inProgress: number;
+    dueSoon: number;
+    overdue: number;
+};
+
+// So ngay truoc han duoc coi la "sap het han". Chua co cau hinh rieng,
+// hardcode va co the tach thanh setting sau neu can.
+const DUE_SOON_DAYS = 3;
+
+/**
+ * Dem so Request ma nguoi dung dang dang nhap la nguoi nhan, chia theo dang
+ * xu ly / sap het han / qua han, dung cho widget ca nhan tren dashboard.
+ * Mot recipient chi roi vao dung mot nhom: qua han uu tien truoc, sau do
+ * sap het han, con lai la dang xu ly (neu status thuoc ACTIVE_TIER_STATUSES).
+ */
+export async function getMyRequestCounts(
+    userId: string,
+): Promise<MyRequestCounts> {
+    const recipientRows = await RequestRecipient.find({
+        userId,
+        status: { $in: ACTIVE_TIER_STATUSES },
+    }).select("status requestId");
+    if (recipientRows.length === 0) {
+        return { inProgress: 0, dueSoon: 0, overdue: 0 };
+    }
+
+    const requests = await RequestModel.find({
+        _id: { $in: recipientRows.map(r => r.requestId) },
+    }).select("dueDate");
+    const dueDateById = new Map(
+        requests.map(r => [String(r._id), r.dueDate]),
+    );
+
+    const dueSoonThreshold = Date.now() + DUE_SOON_DAYS * 24 * 60 * 60 * 1000;
+    const counts: MyRequestCounts = { inProgress: 0, dueSoon: 0, overdue: 0 };
+
+    for (const recipient of recipientRows) {
+        const dueDate = dueDateById.get(String(recipient.requestId));
+        if (withOverdue(recipient, dueDate)) {
+            counts.overdue += 1;
+        } else if (dueDate && dueDate.getTime() <= dueSoonThreshold) {
+            counts.dueSoon += 1;
+        } else {
+            counts.inProgress += 1;
+        }
+    }
+
+    return counts;
 }
 
 export async function updateMyRequestStatus(

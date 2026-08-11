@@ -7,7 +7,6 @@ export interface IMeeting extends Document {
     location: string;
     content: string;
     minutes?: string;
-    attachments: string[];
     published: boolean;
     eligibleRoles: Role[];
     eligibleStreetIds: mongoose.Types.ObjectId[];
@@ -27,7 +26,6 @@ const MeetingSchema = new Schema<IMeeting>(
         location: { type: String, required: true },
         content: { type: String, required: true },
         minutes: { type: String },
-        attachments: { type: [String], default: [] },
         published: { type: Boolean, default: false },
         eligibleRoles: { type: [String], default: [] },
         eligibleStreetIds: {

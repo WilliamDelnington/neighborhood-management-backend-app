@@ -10,13 +10,18 @@ export interface IOrganization extends Document {
     // houseRecordService.resolveOrCreateOrganizationOwner.
     taxCode?: string;
     organizationType: OrganizationType;
-    // Nguoi dai dien - tai khoan User (vai tro house_owner) thuc su dang nhap
-    // va thao tac thay cho to chuc (to chuc khong tu dang nhap duoc, xem
-    // authService.ts - dang nhap chi ho tro User). Optional: to chuc duoc khai
-    // bao luc tao nha so co the chua co nguoi dai dien nao dang nhap duoc (xem
+    // CACHE cua ban ghi OrganizationRepresentative (role="legal_representative")
+    // dang active - nguon su that thuc su la collection OrganizationRepresentative
+    // (ho tro nhieu nguoi dai dien, lich su, uy quyen tam thoi, xac thuc/thu
+    // hoi - xem organizationRepresentativeService.ts), duoc dong bo lai day boi
+    // syncPrimaryRepresentativeCache moi khi thay doi, giong het cach
+    // HouseRecord.ownerId/ownerType la cache cua HouseOwnership. KHONG sua
+    // truc tiep hai truong nay - chi doc nhanh khi khong can join (populate,
+    // resolveActingUserId...). Optional: to chuc duoc khai bao luc tao nha so
+    // co the chua co nguoi dai dien nao dang nhap duoc (xem
     // houseRecordService.resolveOrCreateOrganizationOwner) - khi do to chuc
     // chi hien thi thong tin lien he (phone/email/address) cua chinh no, khong
-    // co ai "thao tac thay" (resolveActingUserId tra ve undefined).
+    // co ai "thao tac thay".
     representativeUserId?: mongoose.Types.ObjectId;
     representativeRole?: string;
     phone?: string;

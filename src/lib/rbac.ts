@@ -2,6 +2,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { HttpError } from "@/lib/response";
 import UserModel, { type IUser } from "@/models/User";
 import RoleModel from "@/models/Role";
+import NeighborhoodModel from "@/models/Neighborhood";
 import type { Role, SessionTokenPayload } from "@/types";
 
 /**
@@ -264,19 +265,57 @@ export function neighborhoodScopeFilter(
 }
 
 /**
- * Diem goi chung cho scope theo khu vuc: to truong (neighborhood_leader) duoc
- * loc theo Neighborhood (xem neighborhoodScopeFilter), cac vai tro con lai giu
- * nguyen hanh vi loc theo cluster nhu truoc (clusterScopeFilter) - viec mo
- * rong scope-theo-neighborhood cho cac vai tro khac la quyet dinh rieng, chua
- * lam trong lan nay.
+ * Xay dung dieu kien Mongo de loc theo Neighborhood thuoc phuong/xa (wardCode)
+ * ma nguoi dung (people_committee_official hoac secretary) duoc gan phu trach.
+ * filter khac o tren, ham nay PHAI await: User chi luu wardCode (xem User.ts),
+ * khong luu san danh sach neighborhoodId, nen can tra Neighborhood.distinct
+ * truoc. Chua duoc gan wardCode nghia la KHONG THAY GI (cung quy uoc voi
+ * neighborhoodScopeFilter), khong phai xem tat ca.
+ */
+export async function wardScopeFilter(
+    user: IUser,
+    neighborhoodField = "neighborhoodId",
+): Promise<Record<string, unknown>> {
+    if (user.roles.includes("admin")) return {};
+    if (!user.wardCode) return { _id: { $in: [] } };
+    const neighborhoodIds = await NeighborhoodModel.distinct("_id", {
+        wardCode: user.wardCode,
+    });
+    if (neighborhoodIds.length === 0) return { _id: { $in: [] } };
+    return { [neighborhoodField]: { $in: neighborhoodIds } };
+}
+
+/**
+ * Diem goi chung cho scope theo khu vuc: to truong (neighborhood_leader) VA to
+ * pho (neighborhood_coleader) duoc loc theo Neighborhood duoc gan
+ * (neighborhoodScopeFilter doc tu user.neighborhoodId/assignedNeighborhoodIds -
+ * ca hai vai tro deu duoc gan vao assignedNeighborhoodIds, xem
+ * neighborhoodService.assignNeighborhoodColeader). Cong tac vien (cooperator)
+ * KHONG duoc cap scope rong o day theo thiet ke (BR-NB-003) - ho chi thay du
+ * lieu duoc phan cong rieng (loc theo userId, vd RequestRecipient.userId).
+ * QUAN TRONG: khong the dua vao nhanh clusterScopeFilter mac dinh de "tu choi"
+ * cho cooperator - quy uoc cua clusterScopeFilter la NGUOC LAI, assignedClusters
+ * rong nghia la KHONG GIOI HAN (xem toan bo), khong phai tu choi. Vi vay
+ * cooperator can mot nhanh rieng, tu choi ro rang (giong quy uoc cua
+ * neighborhoodScopeFilter) truoc khi roi vao clusterScopeFilter. Cac vai tro
+ * con lai giu nguyen hanh vi loc theo cluster nhu truoc.
  */
 export function areaScopeFilter(
     user: IUser,
     opts: { clusterField?: string; neighborhoodField?: string } = {},
 ): Record<string, unknown> {
     if (user.roles.includes("admin")) return {};
-    if (user.roles.includes("neighborhood_leader")) {
+    if (
+        user.roles.includes("neighborhood_leader") ||
+        user.roles.includes("neighborhood_coleader")
+    ) {
         return neighborhoodScopeFilter(user, opts.neighborhoodField ?? "neighborhoodId");
+    }
+    if (
+        user.roles.includes("cooperator") &&
+        (!user.assignedClusters || user.assignedClusters.length === 0)
+    ) {
+        return { _id: { $in: [] } };
     }
     return clusterScopeFilter(user, opts.clusterField ?? "cluster");
 }

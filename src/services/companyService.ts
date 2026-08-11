@@ -45,6 +45,8 @@ export async function createCompany(
         streetId: houseRecord.streetId,
         neighborhoodId: houseRecord.neighborhoodId,
         ownerName: input.ownerName,
+        representativeUserId: input.representativeUserId || undefined,
+        organizationId: input.organizationId || undefined,
         phone: input.phone,
         active: input.active ?? true,
         status: resolveInitialVerificationStatus(houseRecord),
@@ -106,7 +108,8 @@ export async function listCompanies(params: {
     let query = Company.find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(limit);
+        .limit(limit)
+        .populate("organizationId", "name");
     if (!params.houseId) {
         query = query.populate("houseId", "code address cluster");
     }
@@ -126,10 +129,10 @@ export async function listCompanies(params: {
 }
 
 export async function getCompanyById(id: string): Promise<ICompany> {
-    const company = await Company.findById(id).populate(
-        "houseId",
-        "code address cluster ownerId ownerType status",
-    );
+    const company = await Company.findById(id)
+        .populate("houseId", "code address cluster ownerId ownerType status")
+        .populate("representativeUserId", "displayName phone")
+        .populate("organizationId", "name");
     if (!company) throw new HttpError("Khong tim thay cong ty", 404);
     return company;
 }
@@ -154,6 +157,8 @@ export async function updateCompany(
     }
     company.updatedBy = actorUser._id as any;
     await company.save();
+    await company.populate("representativeUserId", "displayName phone");
+    await company.populate("organizationId", "name");
 
     await writeAuditLog({
         actorId: String(actorUser._id),

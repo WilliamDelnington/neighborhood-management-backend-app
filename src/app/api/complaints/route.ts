@@ -48,6 +48,7 @@ export async function GET(req: Request) {
             status: searchParams.get("status") || undefined,
             category: searchParams.get("category") || undefined,
             search: searchParams.get("search") || undefined,
+            relatedAssetId: searchParams.get("relatedAssetId") || undefined,
             allowedCategories,
             actorUser,
             canReadEscalated,

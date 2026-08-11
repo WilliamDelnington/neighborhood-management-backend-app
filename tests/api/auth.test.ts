@@ -1,9 +1,34 @@
 import { describe, it, expect } from "vitest";
 import { POST as loginRoute } from "@/app/api/auth/zalo/login/route";
 import { GET as meRoute } from "@/app/api/auth/me/route";
-import { makeRequest, readJson } from "../helpers";
+import { createTestUser, makeRequest, readJson } from "../helpers";
 
 describe("POST /api/auth/zalo/login", () => {
+    it("lien ket Zalo vao tai khoan tao truoc khi so dien thoai da duoc xac thuc", async () => {
+        const existing = await createTestUser({
+            roles: ["house_owner"],
+            phone: "0901112233",
+            zaloUserId: undefined,
+            displayName: "Chu ho tao truoc",
+        });
+        const result = await readJson(
+            await loginRoute(
+                makeRequest("/api/auth/zalo/login", {
+                    method: "POST",
+                    body: {
+                        accessToken: "sandbox-link-token",
+                        zaloUserId: "zalo-linked-owner",
+                        phone: "0901112233",
+                        name: "Ten Zalo",
+                    },
+                }),
+            ),
+        );
+
+        expect(result.data.user.id).toBe(String(existing._id));
+        expect(result.data.user.zaloUserId).toBe("zalo-linked-owner");
+    });
+
     it("tao tai khoan houseOwner moi va tra ve session token khi lan dau dang nhap", async () => {
         const res = await loginRoute(
             makeRequest("/api/auth/zalo/login", {

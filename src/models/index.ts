@@ -10,6 +10,10 @@ export {
     type IHouseOwnership,
 } from "./HouseOwnership";
 export { default as Organization, type IOrganization } from "./Organization";
+export {
+    default as OrganizationRepresentative,
+    type IOrganizationRepresentative,
+} from "./OrganizationRepresentative";
 export { default as Person, type IPerson } from "./Person";
 export { default as Household, type IHousehold } from "./Household";
 export {
@@ -36,12 +40,28 @@ export { default as Complaint, type IComplaint } from "./Complaint";
 export {
     default as ComplaintTimeline,
     type IComplaintTimeline,
+    type ComplaintTimelineAction,
+    COMPLAINT_TIMELINE_ACTIONS,
 } from "./ComplaintTimeline";
 export {
     default as SupportTicket,
     type ISupportTicket,
 } from "./SupportTicket";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
+export {
+    default as CorrespondenceType,
+    type ICorrespondenceType,
+} from "./CorrespondenceType";
+export {
+    default as Correspondence,
+    type ICorrespondence,
+    type CorrespondenceStatus,
+    CORRESPONDENCE_STATUS,
+} from "./Correspondence";
+export {
+    default as CorrespondenceReply,
+    type ICorrespondenceReply,
+} from "./CorrespondenceReply";
 export { default as Meeting, type IMeeting } from "./Meeting";
 export {
     default as MeetingRegistration,
@@ -83,6 +103,10 @@ export {
     default as NeighborhoodLeaderAssignment,
     type INeighborhoodLeaderAssignment,
 } from "./NeighborhoodLeaderAssignment";
+export {
+    default as NeighborhoodColeaderAssignment,
+    type INeighborhoodColeaderAssignment,
+} from "./NeighborhoodColeaderAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
 export {
@@ -95,3 +119,28 @@ export {
     default as ZaloWebhookEvent,
     type IZaloWebhookEvent,
 } from "./ZaloWebhookEvent";
+export {
+    default as InfrastructureAsset,
+    type IInfrastructureAsset,
+} from "./InfrastructureAsset";
+export {
+    default as PeriodicReport,
+    type IPeriodicReport,
+    type IPeriodicReportSections,
+} from "./PeriodicReport";
+export {
+    default as Comment,
+    type IComment,
+    type CommentEntityType,
+    COMMENT_ENTITY_TYPES,
+} from "./Comment";
+export {
+    default as ChangeRequest,
+    type IChangeRequest,
+    type ChangeRequestTargetModel,
+    type ChangeRequestType,
+    type ChangeRequestStatus,
+    CHANGE_REQUEST_TARGET_MODELS,
+    CHANGE_REQUEST_TYPES,
+    CHANGE_REQUEST_STATUS,
+} from "./ChangeRequest";

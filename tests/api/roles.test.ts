@@ -37,6 +37,11 @@ describe("GET /api/roles/permissions", () => {
             key: "dashboard.read",
             label: "Xem bảng điều khiển",
         });
+        const wardGroup = json.data.find((g: any) => g.key === "wards");
+        expect(wardGroup.permissions).toContainEqual({
+            key: "wards.manage",
+            label: "Phân công người quản lý phường/xã",
+        });
     });
 });
 

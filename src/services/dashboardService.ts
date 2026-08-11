@@ -11,24 +11,30 @@ import {
     FinanceTransaction,
     type IUser,
 } from "@/models";
-import { clusterScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter } from "@/lib/rbac";
+import {
+    getMyRequestCounts,
+    listMyPendingRequestsForDashboard,
+} from "@/services/requestService";
+import { getMyAssignedComplaintCounts } from "@/services/complaintService";
 
 export type DashboardTask = { label: string; count: number; link: string };
 
 /**
- * To truong chi duoc xem so lieu dan cu/ho dan trong pham vi cum duoc phan cong
- * (assignedClusters); admin/canh sat khu vuc/can bo UBND van xem tong so toan
- * to dan pho nhu cu.
+ * To truong chi duoc xem so lieu dan cu/ho dan trong pham vi to dan pho (Neighborhood)
+ * duoc phan cong (areaScopeFilter); admin/canh sat khu vuc/can bo UBND van xem tong so
+ * toan to dan pho nhu cu.
  */
 async function residentScopeFor(
     actorUser: IUser,
 ): Promise<{ householdFilter: Record<string, unknown>; scoped: boolean }> {
     const isLeaderOnly =
         !actorUser.roles.includes("admin") &&
-        actorUser.roles.includes("neighborhood_leader");
+        (actorUser.roles.includes("neighborhood_leader") ||
+            actorUser.roles.includes("neighborhood_coleader"));
     if (!isLeaderOnly) return { householdFilter: {}, scoped: false };
 
-    const scope = clusterScopeFilter(actorUser);
+    const scope = areaScopeFilter(actorUser);
     if (Object.keys(scope).length === 0) return { householdFilter: {}, scoped: false };
 
     return { householdFilter: scope, scoped: true };
@@ -37,16 +43,17 @@ async function residentScopeFor(
 /**
  * Tong hop toan bo so lieu cho dashboard admin/can bo: dan cu, phan anh, PCCC,
  * cuoc hop sap toi, tai chinh, khao sat, va danh sach viec can xu ly theo vai tro.
- * Cac so lieu gan voi ho dan (so ho, nhan khau, PCCC, an ninh) duoc loc theo
- * cum dan cu duoc phan cong (clusterScopeFilter) - to truong chi thay so lieu
- * trong pham vi cum cua minh, giong nhu danh sach ho dan/nhan khau. Cuoc hop,
- * tai chinh, khao sat van la du lieu chung toan to nen khong loc theo cum.
+ * Cac so lieu gan voi ho dan (so ho, nhan khau, nha, PCCC, an ninh) duoc loc theo
+ * khu vuc phu trach (areaScopeFilter: to truong theo to dan pho, cac vai tro
+ * khac theo cum neu duoc gan) - to truong chi thay so lieu trong pham vi to dan
+ * pho cua minh, giong nhu danh sach ho dan/nhan khau/nha. Cuoc hop, tai chinh,
+ * khao sat van la du lieu chung toan to nen khong loc theo khu vuc.
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const householdScope = clusterScopeFilter(actorUser);
+    const householdScope = areaScopeFilter(actorUser);
     const isClusterScoped = Object.keys(householdScope).length > 0;
     const scopedHouseholdIds = isClusterScoped
         ? (await Household.find(householdScope).select("_id")).map(h => h._id)
@@ -81,6 +88,9 @@ export async function getDashboardSummary(actorUser: IUser) {
         openSurveys,
         openSurveyDocs,
         urgentSecurityCount,
+        myRequests,
+        myRequestCounts,
+        myComplaintCounts,
     ] = await Promise.all([
         Household.countDocuments(householdFilter),
         HouseRecord.countDocuments(
@@ -130,6 +140,9 @@ export async function getDashboardSummary(actorUser: IUser) {
             level: "khan_cap",
             ...(isClusterScoped ? { houseId: { $in: scopedHouseIds } } : {}),
         }),
+        listMyPendingRequestsForDashboard(String(actorUser._id)),
+        getMyRequestCounts(String(actorUser._id)),
+        getMyAssignedComplaintCounts(String(actorUser._id)),
     ]);
 
     const openSurveyIds = openSurveyDocs.map(s => s._id);
@@ -179,6 +192,9 @@ export async function getDashboardSummary(actorUser: IUser) {
             totalResponses,
         },
         taskList,
+        myRequests,
+        myRequestCounts,
+        myComplaintCounts,
     };
 }
 
@@ -201,7 +217,9 @@ async function buildTaskList(
     const tasks: DashboardTask[] = [];
 
     const isAdmin = roles.includes("admin");
-    const isLeader = roles.includes("neighborhood_leader");
+    const isLeader =
+        roles.includes("neighborhood_leader") ||
+        roles.includes("neighborhood_coleader");
     const isPolice = roles.includes("regional_police");
 
     if (isAdmin || isLeader) {

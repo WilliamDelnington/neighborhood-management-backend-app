@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { USER_STATUS } from "@/types";
-import { phoneRegisterSchema } from "@/validators/auth";
+import { isValidVnPhone } from "@/lib/phone";
 
 // Nhan vien (to truong/admin) tao tai khoan chu ho thay - cung dinh dang voi
 // registerWithPhone (phone+password tu dang ky), chi khac o cho ai la actor
 // va co them dia chi tuy chon (xem userService.createHouseOwnerByStaff).
-export const createHouseOwnerSchema = phoneRegisterSchema.extend({
+export const createHouseOwnerSchema = z.object({
+    phone: z
+        .string()
+        .min(1, "Thieu so dien thoai")
+        .refine(isValidVnPhone, "So dien thoai khong hop le"),
+    displayName: z.string().min(1, "Thieu ho ten"),
     address: z.string().optional(),
 });
 export type CreateHouseOwnerInput = z.infer<typeof createHouseOwnerSchema>;
@@ -24,6 +29,12 @@ export const updateUserSchema = z
         // Vai tro la du lieu dong - tinh hop le (ton tai, active) duoc kiem tra
         // trong updateUserByAdmin, khong con the kiem bang z.enum tinh.
         primaryRole: z.string().min(1).optional(),
+        // Pham vi phuong/xa cho people_committee_official va secretary - xem
+        // User.ts. Gui ca 4 truong cung luc (tu WardPicker), null de xoa gan.
+        provinceCode: z.number().nullable().optional(),
+        provinceName: z.string().nullable().optional(),
+        wardCode: z.number().nullable().optional(),
+        wardName: z.string().nullable().optional(),
     })
     .refine(data => data.status === undefined || !!data.statusReason?.trim(), {
         message: "Vui long nhap ly do khi khoa/mo tai khoan",

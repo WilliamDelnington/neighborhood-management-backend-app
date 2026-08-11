@@ -14,6 +14,25 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
+
+// Danh sach truong duoc coi la "dinh danh/dia chi" cua nha so - mot khi ho so
+// da "verified", nhung truong nay khong con sua truc tiep duoc nua (phai gui
+// ChangeRequest, xem changeRequestService.ts). Cac truong con lai (vd
+// physicalStatus, note) van sua tu do bat ke trang thai xac minh - xem ghi
+// chu trong validators/houseRecord.ts.
+export const HOUSE_RECORD_PROTECTED_FIELDS = [
+    "address",
+    "cluster",
+    "streetId",
+    "neighborhoodId",
+    "provinceCode",
+    "provinceName",
+    "wardCode",
+    "wardName",
+    "usageTypes",
+    "otherUsageNote",
+    "residenceDeclarationNumber",
+];
 import { clusterScopeFilter, areaScopeFilter, userHasPermission } from "@/lib/rbac";
 import { resolveClusterForStreet, resolveStreetClusterPair } from "@/lib/streetSync";
 import { writeAuditLog } from "@/services/auditService";
@@ -26,6 +45,7 @@ import {
     resolveActiveHouseOwnerActingUserIds,
     syncPrimaryOwnershipVerification,
 } from "@/services/houseOwnershipService";
+import { addOrganizationRepresentative } from "@/services/organizationRepresentativeService";
 import {
     HOUSE_RECORD_STATUS_LABEL,
     type HouseRecordStatus,
@@ -123,24 +143,34 @@ export async function assertHouseRecordInScope(
     if (await isHouseOwnerActor(houseRecord._id, user._id)) {
         return;
     }
-    if (user.roles.includes("house_owner")) {
+    // Mot nguoi co the VUA la chu nha (o mot to khac) VUA la To truong/To pho -
+    // kiem tra scope To truong TRUOC khi tu choi theo house_owner, thay vi
+    // tu choi ngay khi co role house_owner (truoc day se chan ca cac nha
+    // trong chinh to dan pho ho phu trach, chi vi ho cung so huu mot nha khac
+    // o noi khac).
+    const isLeaderOrColeader =
+        user.roles.includes("neighborhood_leader") ||
+        user.roles.includes("neighborhood_coleader");
+    if (isLeaderOrColeader) {
+        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
+            .filter(Boolean)
+            .map(String);
+        const houseNeighborhoodId = refIdToString(houseRecord.neighborhoodId);
+        if (houseNeighborhoodId && ids.includes(houseNeighborhoodId)) {
+            return;
+        }
+    }
+    if (user.roles.includes("house_owner") && !isLeaderOrColeader) {
         throw new HttpError(
             "Bạn không có quyền thao tác với nhà số của người khác",
             403,
         );
     }
-    if (user.roles.includes("neighborhood_leader")) {
-        const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
-            .filter(Boolean)
-            .map(String);
-        const houseNeighborhoodId = refIdToString(houseRecord.neighborhoodId);
-        if (!houseNeighborhoodId || !ids.includes(houseNeighborhoodId)) {
-            throw new HttpError(
-                "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
-                403,
-            );
-        }
-        return;
+    if (isLeaderOrColeader) {
+        throw new HttpError(
+            "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
+            403,
+        );
     }
     if (
         user.assignedClusters?.length &&
@@ -477,8 +507,14 @@ async function resolveOrCreateOrganizationOwner(
             actorUser,
             input.representative,
         );
-        organization.representativeUserId = representativeUserId;
-        await organization.save();
+        // Tao ban ghi OrganizationRepresentative (role="legal_representative")
+        // thay vi ghi truc tiep len Organization - tu dong bo lai cache
+        // representativeUserId/representativeRole - xem
+        // organizationRepresentativeService.ts.
+        await addOrganizationRepresentative(actorUser, String(organization._id), {
+            userId: String(representativeUserId),
+            role: "legal_representative",
+        });
     }
 
     return organization._id as Types.ObjectId;
@@ -588,17 +624,33 @@ export async function listHouseRecords(params: {
             : params.status;
     }
 
-    const isNeighborhoodLeader = params.actorUser.roles.includes(
-        "neighborhood_leader",
-    );
+    const isNeighborhoodLeader =
+        params.actorUser.roles.includes("neighborhood_leader") ||
+        params.actorUser.roles.includes("neighborhood_coleader");
     // House_owner luon bi gioi han theo ownerId, khong duoc dung query
     // `cluster`/`streetId` de "mo rong" pham vi xem (ho khong co
     // assignedClusters de doi chieu). To truong (neighborhood_leader) cung
     // khong duoc di qua nhanh cluster/streetId ben duoi, vi nhanh do doi chieu
     // theo assignedClusters (thuong rong voi to truong) - se vo tinh bo qua
     // scope theo Neighborhood.
-    if (isNeighborhoodLeader && !isHouseOwnerUser) {
-        Object.assign(filter, areaScopeFilter(params.actorUser));
+    //
+    // Chi co MOT man hinh danh sach Nha so duy nhat dung chung cho ca chu nha
+    // (xem "nha cua toi") lan can bo (xem "nha trong pham vi phu trach") - khong
+    // co man hinh/endpoint rieng cho tung doi tuong. Mot nguoi co the VUA la
+    // chu nha (o mot to khac, khong lien quan) VUA la To truong/To pho, nen khi
+    // ho xem danh sach nay, pham vi phai la HOP (OR) ca hai: nha ho so huu VA
+    // nha trong to dan pho ho phu trach - khong the bo mot phia, vi khong co
+    // man hinh nao khac de xem phia con lai.
+    if (isNeighborhoodLeader) {
+        const neighborhoodFilter = areaScopeFilter(params.actorUser);
+        if (isHouseOwnerUser) {
+            const ownedHouseIds = await getHouseIdsForActingOwner(
+                params.actorUser._id,
+            );
+            filter.$or = [neighborhoodFilter, { _id: { $in: ownedHouseIds } }];
+        } else {
+            Object.assign(filter, neighborhoodFilter);
+        }
         if (params.streetId) filter.streetId = params.streetId;
         else if (params.cluster) filter.cluster = params.cluster;
     } else if ((params.cluster || params.streetId) && !isHouseOwnerUser) {
@@ -663,6 +715,33 @@ export async function listHouseRecords(params: {
     };
 }
 
+/**
+ * Tim kiem nha so RUT GON (chi ma/dia chi), KHONG loc theo pham vi so huu/phu
+ * trach (khac listHouseRecords) - dung rieng cho luong chon "nha so lien
+ * quan" khi gui phan anh: nguoi gui co the bao ve mot nha KHONG PHAI cua ho
+ * (vd nha hang xom), nen khong the gioi han theo ownerId/assignedClusters
+ * nhu man quan ly nha so thong thuong. Chi tra ve du lieu dia chi cong khai
+ * (khong ten chu ho, so dien thoai, trang thai xac minh...), tranh lo thong
+ * tin nhay cam qua tinh nang tim kiem mo nay.
+ */
+export async function searchHousesForComplaintTarget(
+    search?: string,
+    limit = 20,
+): Promise<Array<{ _id: unknown; code: string; address?: string; cluster?: string }>> {
+    const filter: Record<string, unknown> = search
+        ? {
+              $or: [
+                  { code: { $regex: search, $options: "i" } },
+                  { address: { $regex: search, $options: "i" } },
+              ],
+          }
+        : {};
+    return HouseRecord.find(filter)
+        .select("code address cluster")
+        .sort({ code: 1 })
+        .limit(limit);
+}
+
 export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
     const houseRecord =
         await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
@@ -674,6 +753,12 @@ export async function updateHouseRecord(
     actorUser: IUser,
     id: string,
     patch: UpdateHouseRecordInput,
+    // bypassVerifiedGate=true: dung DUY NHAT boi changeRequestService khi ap
+    // dung mot ChangeRequest da duoc duyet (chinh no la ly do hop le de sua
+    // truong da bi khoa boi trang thai "verified") - van chay lai toan bo logic
+    // resolve cluster/streetId/neighborhoodId->province/ward ben duoi thay vi
+    // update tho, tranh sai lech du lieu dia gioi.
+    opts: { bypassVerifiedGate?: boolean } = {},
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
     if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
@@ -681,6 +766,29 @@ export async function updateHouseRecord(
     if (houseRecord.status === "locked" && !actorUser.roles.includes("admin")) {
         throw new HttpError(
             "Nhà số đã bị khóa, chỉ quản trị viên mới có thể chỉnh sửa",
+            403,
+        );
+    }
+
+    const editsProtectedField = Object.keys(patch).some(key =>
+        HOUSE_RECORD_PROTECTED_FIELDS.includes(key),
+    );
+    // Chuyen to dan pho (neighborhoodId) KHONG duoc nam trong dien mien tru cua
+    // admin nhu cac truong bao ve khac - moi nguoi, ke ca admin, deu phai di qua
+    // ChangeRequest (transfer_neighborhood) de co lich su/duyet dung quy trinh.
+    // Chi loi thoat hop le la bypassVerifiedGate tu changeRequestService sau khi
+    // ChangeRequest da duoc duyet.
+    const editsNeighborhood = patch.neighborhoodId !== undefined;
+    if (
+        houseRecord.status === "verified" &&
+        editsProtectedField &&
+        !opts.bypassVerifiedGate &&
+        (editsNeighborhood || !actorUser.roles.includes("admin"))
+    ) {
+        throw new HttpError(
+            editsNeighborhood
+                ? "Nhà số đã được xác minh, việc chuyển tổ dân phố phải thực hiện qua yêu cầu thay đổi thông tin"
+                : "Nhà số đã được xác minh, vui lòng gửi yêu cầu thay đổi thông tin thay vì sửa trực tiếp",
             403,
         );
     }
@@ -710,7 +818,7 @@ export async function updateHouseRecord(
 
     await writeAuditLog({
         actorId: String(actorUser._id),
-        action: "house.update",
+        action: editsNeighborhood ? "house.transfer_neighborhood" : "house.update",
         targetModel: "HouseRecord",
         targetId: houseRecord._id,
         metadata: patch,

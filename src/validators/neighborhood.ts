@@ -30,3 +30,14 @@ export const assignLeaderSchema = z.object({
     note: z.string().optional(),
 });
 export type AssignLeaderInput = z.infer<typeof assignLeaderSchema>;
+
+export const assignColeaderSchema = z.object({
+    coleaderUserId: z.string(),
+    note: z.string().optional(),
+});
+export type AssignColeaderInput = z.infer<typeof assignColeaderSchema>;
+
+export const unassignColeaderSchema = z.object({
+    coleaderUserId: z.string(),
+});
+export type UnassignColeaderInput = z.infer<typeof unassignColeaderSchema>;

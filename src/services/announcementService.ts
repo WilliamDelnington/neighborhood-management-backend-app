@@ -2,7 +2,7 @@ import {
     Announcement,
     FileAsset,
     HouseRecord,
-    Organization,
+    OrganizationRepresentative,
     type IAnnouncement,
     type IUser,
 } from "@/models";
@@ -32,11 +32,15 @@ export async function createAnnouncement(
         targetNeighborhoodIds: input.targetNeighborhoodIds || [],
         isUrgent: input.isUrgent,
         audienceAll: input.audienceAll,
-        // Pham vi tac gia: chi gan khi nguoi tao la to truong (xem
+        // Pham vi tac gia: chi gan khi nguoi tao la to truong/to pho (xem
         // to-dan-pho-cua-minh), admin/secretary tao thong bao khong bi gioi han.
+        // To pho khong co neighborhoodId "chinh" (chi to truong co) nen fallback
+        // sang assignedNeighborhoodIds[0].
         neighborhoodId: actorUser.roles.includes("neighborhood_leader")
             ? actorUser.neighborhoodId
-            : undefined,
+            : actorUser.roles.includes("neighborhood_coleader")
+                ? actorUser.assignedNeighborhoodIds?.[0]
+                : undefined,
         status: "nhap",
         createdBy: actorUser._id,
     });
@@ -53,7 +57,12 @@ export function assertAnnouncementInScope(
     user: IUser,
     announcement: IAnnouncement,
 ): void {
-    if (!user.roles.includes("neighborhood_leader")) return;
+    if (
+        !user.roles.includes("neighborhood_leader") &&
+        !user.roles.includes("neighborhood_coleader")
+    ) {
+        return;
+    }
     const ids = [user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]
         .filter(Boolean)
         .map(String);
@@ -105,18 +114,22 @@ async function resolveAnnouncementRecipientIds(
         const orgOwnerIds = houses
             .filter(h => h.ownerType === "organization" && h.ownerId)
             .map(h => String(h.ownerId));
-        const representativeByOrgId = new Map<string, string>();
+        // Gui toi TAT CA nguoi dai dien dang active cua to chuc (bat ky role
+        // nao, ke ca contact_person - lien he cung nen duoc bao thong bao),
+        // khac Organization.representativeUserId cu (chi biet duoc mot
+        // legal_representative) - mot to chuc co the co nhieu nguoi dai dien
+        // cung nhan duoc thong bao nay.
+        const representativesByOrgId = new Map<string, string[]>();
         if (orgOwnerIds.length > 0) {
-            const orgs = await Organization.find({
-                _id: { $in: orgOwnerIds },
-            }).select("representativeUserId");
-            for (const org of orgs) {
-                if (org.representativeUserId) {
-                    representativeByOrgId.set(
-                        String(org._id),
-                        String(org.representativeUserId),
-                    );
-                }
+            const representatives = await OrganizationRepresentative.find({
+                organizationId: { $in: orgOwnerIds },
+                active: true,
+            }).select("organizationId userId");
+            for (const rep of representatives) {
+                const key = String(rep.organizationId);
+                const list = representativesByOrgId.get(key) || [];
+                list.push(String(rep.userId));
+                representativesByOrgId.set(key, list);
             }
         }
 
@@ -124,10 +137,9 @@ async function resolveAnnouncementRecipientIds(
             if (house.ownerType === "user" && house.ownerId) {
                 recipientIds.add(String(house.ownerId));
             } else if (house.ownerType === "organization" && house.ownerId) {
-                const representativeId = representativeByOrgId.get(
-                    String(house.ownerId),
-                );
-                if (representativeId) recipientIds.add(representativeId);
+                const representativeIds =
+                    representativesByOrgId.get(String(house.ownerId)) || [];
+                representativeIds.forEach(id => recipientIds.add(id));
             }
         }
     }
@@ -222,7 +234,8 @@ export async function listAnnouncements(params: {
     // (admin=1) - admin/secretary xem duoc tat ca nhu truoc.
     if (
         !params.publicOnly &&
-        params.actorUser?.roles.includes("neighborhood_leader")
+        (params.actorUser?.roles.includes("neighborhood_leader") ||
+            params.actorUser?.roles.includes("neighborhood_coleader"))
     ) {
         Object.assign(filter, areaScopeFilter(params.actorUser));
     }

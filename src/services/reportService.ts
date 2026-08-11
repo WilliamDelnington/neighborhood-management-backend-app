@@ -16,6 +16,8 @@ import {
     Company,
 } from "@/models";
 import { HttpError } from "@/lib/response";
+import { areaScopeFilter } from "@/lib/rbac";
+import type { IUser } from "@/models/User";
 import { addSummarySheet, addTableSheet } from "@/lib/excelResponse";
 import { getSurveyResults } from "@/services/surveyService";
 import {
@@ -42,6 +44,26 @@ import {
 } from "@/types";
 
 // ---------------------------------------------------------------------------
+// Khoang thoi gian dung chung cho cac loai bao cao "objects trong khoang thoi
+// gian" (loc theo ngay tao/ngay dien ra cua ban ghi, KHONG phai trang thai
+// tai mot thoi diem trong qua khu - vd bao cao Nha so voi khoang thoi gian se
+// tra ve nhung nha DUOC TAO trong khoang do, chu khong "tinh trang cac nha
+// nhu the nao vao thoi diem do").
+// ---------------------------------------------------------------------------
+export type ReportDateRangeParams = { fromDate?: Date; toDate?: Date };
+
+function dateRangeMatch(
+    field: string,
+    params: ReportDateRangeParams,
+): Record<string, unknown> {
+    if (!params.fromDate && !params.toDate) return {};
+    const range: Record<string, Date> = {};
+    if (params.fromDate) range.$gte = params.fromDate;
+    if (params.toDate) range.$lte = params.toDate;
+    return { [field]: range };
+}
+
+// ---------------------------------------------------------------------------
 // 1. Bao cao dan cu
 // ---------------------------------------------------------------------------
 
@@ -61,7 +83,29 @@ export type PopulationReport = {
     unionMemberCount: number;
 };
 
-export async function getPopulationReport(): Promise<PopulationReport> {
+export async function getPopulationReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<PopulationReport> {
+    const householdFilter = {
+        ...areaScopeFilter(actorUser),
+        ...dateRangeMatch("createdAt", params),
+    };
+    const isScoped = Object.keys(householdFilter).length > 0;
+    const scopedHouseholdIds = isScoped
+        ? (await Household.find(householdFilter).select("_id")).map(
+              h => h._id,
+          )
+        : undefined;
+    // Nhan khau duoc loc rieng theo ngay TAO CUA CHINH nhan khau do (khong
+    // phai ngay tao ho dan) de dung dung y nghia "nhan khau duoc khai bao
+    // trong khoang thoi gian nay", ket hop voi pham vi khu vuc qua danh sach
+    // ho dan trong scope o tren.
+    const citizenFilter: Record<string, unknown> = {
+        ...(isScoped ? { householdId: { $in: scopedHouseholdIds } } : {}),
+        ...dateRangeMatch("createdAt", params),
+    };
+
     const [
         totalHouseholds,
         totalCitizens,
@@ -73,9 +117,10 @@ export async function getPopulationReport(): Promise<PopulationReport> {
         partyMemberCount,
         unionMemberCount,
     ] = await Promise.all([
-        Household.countDocuments(),
-        Citizen.countDocuments(),
+        Household.countDocuments(householdFilter),
+        Citizen.countDocuments(citizenFilter),
         Household.aggregate([
+            ...(isScoped ? [{ $match: householdFilter }] : []),
             {
                 $lookup: {
                     from: "citizens",
@@ -94,13 +139,17 @@ export async function getPopulationReport(): Promise<PopulationReport> {
             { $sort: { _id: 1 } },
         ]),
         Citizen.aggregate([
+            ...(isScoped ? [{ $match: citizenFilter }] : []),
             { $group: { _id: "$residenceType", count: { $sum: 1 } } },
         ]),
-        Citizen.countDocuments({ isElderly: true }),
-        Citizen.countDocuments({ isChild: true }),
-        Citizen.countDocuments({ isDisabledOrSupportNeeded: true }),
-        Citizen.countDocuments({ isPartyMember: true }),
-        Citizen.countDocuments({ isUnionMember: true }),
+        Citizen.countDocuments({ ...citizenFilter, isElderly: true }),
+        Citizen.countDocuments({ ...citizenFilter, isChild: true }),
+        Citizen.countDocuments({
+            ...citizenFilter,
+            isDisabledOrSupportNeeded: true,
+        }),
+        Citizen.countDocuments({ ...citizenFilter, isPartyMember: true }),
+        Citizen.countDocuments({ ...citizenFilter, isUnionMember: true }),
     ]);
 
     return {
@@ -177,9 +226,10 @@ export type ComplaintReport = {
 };
 
 export async function getComplaintReport(
+    actorUser: IUser,
     params: ComplaintReportParams,
 ): Promise<ComplaintReport> {
-    const match: Record<string, unknown> = {};
+    const match: Record<string, unknown> = { ...areaScopeFilter(actorUser) };
     if (params.fromDate || params.toDate) {
         const range: Record<string, Date> = {};
         if (params.fromDate) range.$gte = params.fromDate;
@@ -307,10 +357,29 @@ export type PcccReport = {
     }[];
 };
 
-export async function getPcccReport(): Promise<PcccReport> {
+export async function getPcccReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<PcccReport> {
+    // PcccCheck chi co houseId, khong co cluster/neighborhoodId truc tiep nen
+    // phai loc gian tiep qua HouseRecord trong pham vi phu trach.
+    const scope = areaScopeFilter(actorUser);
+    const isAreaScoped = Object.keys(scope).length > 0;
+    const scopedHouseIds = isAreaScoped
+        ? (await HouseRecord.find(scope).select("_id")).map(h => h._id)
+        : undefined;
+    // Khoang thoi gian ap dung theo ngay KIEM TRA (inspectionDate), khong
+    // phai ngay tao ban ghi - day la ngay co y nghia nghiep vu cho PCCC.
+    const checkMatch: Record<string, unknown> = {
+        ...(isAreaScoped ? { houseId: { $in: scopedHouseIds } } : {}),
+        ...dateRangeMatch("inspectionDate", params),
+    };
+    const isScoped = Object.keys(checkMatch).length > 0;
+
     // Lay ban ghi kiem tra MOI NHAT cho tung nha: sap xep theo nha + ngay kiem tra giam dan,
     // group theo houseId lay $first, roi $replaceRoot de lam viec voi document goc.
     const latestChecks = await PcccCheck.aggregate([
+        ...(isScoped ? [{ $match: checkMatch }] : []),
         { $sort: { houseId: 1, inspectionDate: -1 } },
         { $group: { _id: "$houseId", latest: { $first: "$$ROOT" } } },
         { $replaceRoot: { newRoot: "$latest" } },
@@ -413,7 +482,29 @@ export type SecurityReport = {
     reportedToPoliceCount: number;
 };
 
-export async function getSecurityReport(): Promise<SecurityReport> {
+export async function getSecurityReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<SecurityReport> {
+    const scope = areaScopeFilter(actorUser);
+    const isAreaScoped = Object.keys(scope).length > 0;
+    // SecurityRecord/ResidentRecord chi co houseId, khong co cluster/neighborhoodId
+    // truc tiep nen phai loc gian tiep qua HouseRecord trong pham vi phu trach.
+    const scopedHouseIds = isAreaScoped
+        ? (await HouseRecord.find(scope).select("_id")).map(h => h._id)
+        : undefined;
+    // Khoang thoi gian ap dung theo ngay TAO ban ghi an ninh/cu tru (khong co
+    // truong ngay nghiep vu rieng nao khac phu hop hon).
+    const houseIdFilter: Record<string, unknown> = {
+        ...(isAreaScoped ? { houseId: { $in: scopedHouseIds } } : {}),
+        ...dateRangeMatch("createdAt", params),
+    };
+    const isScoped = Object.keys(houseIdFilter).length > 0;
+    const householdFilter = {
+        ...scope,
+        ...dateRangeMatch("createdAt", params),
+    };
+
     const [
         byLevelRaw,
         byMonitoringStatusRaw,
@@ -422,21 +513,29 @@ export async function getSecurityReport(): Promise<SecurityReport> {
         reportedToPoliceCount,
     ] = await Promise.all([
         SecurityRecord.aggregate([
+            ...(isScoped ? [{ $match: houseIdFilter }] : []),
             { $group: { _id: "$level", count: { $sum: 1 } } },
         ]),
         SecurityRecord.aggregate([
+            ...(isScoped ? [{ $match: houseIdFilter }] : []),
             { $group: { _id: "$monitoringStatus", count: { $sum: 1 } } },
         ]),
-        Household.countDocuments({ ownershipType: "cho_thue" }),
+        Household.countDocuments({
+            ...householdFilter,
+            ownershipType: "cho_thue",
+        }),
         // Chi bao gom ho so cu tru cua nha cho thue nhung nha lien quan CHUA
         // co so khai bao cu tru -> day la chi so khoang trong tuan thu, khong
         // phai tong so nha cho thue. ownershipType chuyen sang ResidentRecord
         // (tach khoi SecurityRecord) - xem models/ResidentRecord.ts.
-        ResidentRecord.find({ ownershipType: "cho_thue" }).populate(
-            "houseId",
-            "residenceDeclarationNumber",
-        ),
-        SecurityRecord.countDocuments({ reportedToPolice: true }),
+        ResidentRecord.find({
+            ...houseIdFilter,
+            ownershipType: "cho_thue",
+        }).populate("houseId", "residenceDeclarationNumber"),
+        SecurityRecord.countDocuments({
+            ...houseIdFilter,
+            reportedToPolice: true,
+        }),
     ]);
 
     const rentalMissingDeclarationCount = rentalRecordsForDeclarationCheck.filter(
@@ -740,18 +839,30 @@ export type HouseReport = {
     byCluster: { cluster: string; count: number }[];
 };
 
-export async function getHouseReport(): Promise<HouseReport> {
+export async function getHouseReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<HouseReport> {
+    const filter = {
+        ...areaScopeFilter(actorUser),
+        ...dateRangeMatch("createdAt", params),
+    };
+    const isScoped = Object.keys(filter).length > 0;
+
     const [total, byStatusRaw, byUsageTypeRaw, byClusterRaw] =
         await Promise.all([
-            HouseRecord.countDocuments(),
+            HouseRecord.countDocuments(filter),
             HouseRecord.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $group: { _id: "$status", count: { $sum: 1 } } },
             ]),
             HouseRecord.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $unwind: "$usageTypes" },
                 { $group: { _id: "$usageTypes", count: { $sum: 1 } } },
             ]),
             HouseRecord.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $group: { _id: "$cluster", count: { $sum: 1 } } },
                 { $sort: { _id: 1 } },
             ]),
@@ -827,18 +938,30 @@ export type BusinessReport = {
     byCluster: { cluster: string; count: number }[];
 };
 
-export async function getBusinessReport(): Promise<BusinessReport> {
+export async function getBusinessReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<BusinessReport> {
+    const filter = {
+        ...areaScopeFilter(actorUser),
+        ...dateRangeMatch("createdAt", params),
+    };
+    const isScoped = Object.keys(filter).length > 0;
+
     const [total, totalCompanies, byStatusRaw, byBusinessTypeRaw, byClusterRaw] =
         await Promise.all([
-            Business.countDocuments(),
-            Company.countDocuments(),
+            Business.countDocuments(filter),
+            Company.countDocuments(filter),
             Business.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $group: { _id: "$status", count: { $sum: 1 } } },
             ]),
             Business.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $group: { _id: "$businessType", count: { $sum: 1 } } },
             ]),
             Business.aggregate([
+                ...(isScoped ? [{ $match: filter }] : []),
                 { $group: { _id: "$cluster", count: { $sum: 1 } } },
                 { $sort: { _id: 1 } },
             ]),

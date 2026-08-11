@@ -20,7 +20,7 @@ export async function GET(req: Request) {
         const fromDateRaw = searchParams.get("fromDate");
         const toDateRaw = searchParams.get("toDate");
 
-        const data = await getComplaintReport({
+        const data = await getComplaintReport(actorUser, {
             fromDate: fromDateRaw ? new Date(fromDateRaw) : undefined,
             toDate: toDateRaw ? new Date(toDateRaw) : undefined,
         });

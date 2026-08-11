@@ -7,7 +7,6 @@ import {
 } from "@/models";
 import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
-import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
@@ -160,12 +159,10 @@ export async function createHouseOwnerByStaff(
         throw new HttpError("So dien thoai da duoc su dung", 409);
     }
 
-    const passwordHash = await hashPassword(input.password);
     let user: IUser;
     try {
         user = await User.create({
             phone: input.phone,
-            passwordHash,
             displayName: input.displayName,
             address: input.address,
             roles: ["house_owner"],
@@ -281,6 +278,17 @@ export async function updateUserByAdmin(
     const user = await User.findById(targetId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
 
+    if (
+        patch.wardCode != null &&
+        !user.roles.includes("secretary") &&
+        !user.roles.includes("people_committee_official")
+    ) {
+        throw new HttpError(
+            "Chi co the gan phuong/xa cho Bi thu hoac Can bo UBND",
+            422,
+        );
+    }
+
     const statusChanged =
         patch.status !== undefined && patch.status !== user.status;
 
@@ -295,6 +303,12 @@ export async function updateUserByAdmin(
     }
     if (patch.assignedClusters !== undefined)
         user.assignedClusters = patch.assignedClusters;
+    if (patch.provinceCode !== undefined)
+        user.provinceCode = patch.provinceCode ?? undefined;
+    if (patch.provinceName !== undefined)
+        user.provinceName = patch.provinceName ?? undefined;
+    if (patch.wardCode !== undefined) user.wardCode = patch.wardCode ?? undefined;
+    if (patch.wardName !== undefined) user.wardName = patch.wardName ?? undefined;
     if (patch.primaryRole !== undefined) {
         if (!user.roles.includes(patch.primaryRole)) {
             throw new HttpError(

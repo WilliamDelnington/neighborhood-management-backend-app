@@ -21,6 +21,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "users.lock",
         "neighborhoods.read",
         "streets.read",
+        // So ha tang (den/duong/cong/cay...) trong to dan pho minh phu trach -
+        // xem infrastructureAssetService.ts (B11).
+        "infrastructure.read",
+        "infrastructure.manage",
         "houses.read",
         "houses.create",
         "houses.verify",
@@ -42,6 +46,15 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "security.read",
         "residents.read",
         "requests.read",
+        // To truong/To pho gui nhiem vu (type "task") xuong dung Nha so/nguoi
+        // trong Nha (xem resolveHouseRoleRecipientIds/resolveHouseLeaderRecipientIds
+        // trong requestService.ts) - truoc day requests.create chi co secretary.
+        "requests.create",
+        // Du dieu kien duoc chon lam nguoi phu trach khi bi thu gui yeu cau
+        // loai "Khac" (vd van ban/giay to hanh chinh) - thieu quyen nay thi
+        // to truong khong hien ra trong bo chon nguoi nhan cho loai yeu cau
+        // nay (xem eligiblePermissionForType trong requestService.ts).
+        "other.assign",
         "meetings.read",
         "meetings.register",
         "announcements.read",
@@ -49,11 +62,29 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.respond",
         "reports.read",
         "reports.export",
+        "reports.author",
         "exports.export",
         "support_tickets.create",
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        // Van ban (Cong van/Bao cao/De xuat/Kien nghi...): to truong vua nhan
+        // Cong van tu can bo UBND/bi thu, vua co the gui Bao cao/De xuat len -
+        // chieu gui/nhan hop le do CorrespondenceType.allowedSenderRoles/
+        // allowedReceiverRoles quyet dinh (du lieu), khong con hardcode theo
+        // vai tro - xem correspondenceService.ts. Permission o day chi la cong
+        // tho chung cho ca hai chieu.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
+        // To truong duyet/tu choi de nghi thay doi cua chu nha (cung nhom
+        // quyen voi houses.verify) va tu gui de nghi doi thong tin cua chinh
+        // minh - xem changeRequestService.ts.
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     secretary: [
         "dashboard.read",
@@ -65,6 +96,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.read",
         "households.verify",
         "citizens.read",
+        "infrastructure.read",
         "business_types.read",
         "businesses.read",
         // Khong co businesses.verify: secretary chi xem duoc tien do duyet ho
@@ -86,6 +118,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "surveys.update",
         "surveys.publish",
         "surveys.respond",
+        "reports.author",
         "support_tickets.create",
         "support_tickets.read_own",
         "files.read",
@@ -93,10 +126,21 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.update",
         "files.delete",
         "notifications.read",
+        // Van ban - cung ly do voi neighborhood_leader (xem ghi chu o do): bi
+        // thu vua co the gui Cong van xuong to truong, vua co the nhan
+        // Bao cao/De xuat tu to truong.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
         // Bi thu ("ward secretary") la nguoi gui yeu cau cong viec (PCCC, an
         // ninh, ...) cho cac can bo lien quan.
         "requests.create",
         "requests.read",
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     regional_police: [
         "dashboard.read",
@@ -126,12 +170,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "requests.read",
         "reports.read",
         "reports.export",
+        "reports.author",
         "meetings.register",
         "surveys.respond",
         "support_tickets.create",
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        "change_requests.create",
     ],
     people_committee_official: [
         "dashboard.read",
@@ -140,6 +186,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.read",
         "households.verify",
         "citizens.read",
+        "infrastructure.read",
         "business_types.read",
         "businesses.read",
         "businesses.verify",
@@ -153,12 +200,24 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "security.read",
         "residents.read",
         "requests.read",
+        "reports.author",
         "meetings.register",
         "surveys.respond",
         "support_tickets.create",
         "support_tickets.read_own",
         "files.read",
         "notifications.read",
+        // Van ban - can bo UBND gui Cong van xuong to truong (pham vi
+        // phuong/xa - xem User.wardCode/wardScopeFilter trong rbac.ts) va
+        // nhan Bao cao/De xuat tu to truong.
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
     ],
     house_owner: [
         "organizations.read",
@@ -199,12 +258,18 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "usage_units.update",
         "complaints.create",
         "complaints.read_own",
+        // Sua noi dung, xac nhan hoan thanh, hoac de nghi xem xet lai phan
+        // anh CUA CHINH MINH - xem complaintService.ts.
+        "complaints.update_own",
         "support_tickets.create",
         "support_tickets.read_own",
         "meetings.register",
         "surveys.respond",
         "files.read",
         "notifications.read",
+        // Gui de nghi thay doi thong tin nha/ho khau da xac minh, hoac de nghi
+        // huy lien ket voi mot nha - xem changeRequestService.ts.
+        "change_requests.create",
     ],
     // Chu ho (dung dau hop khau) khac house_owner (chu nha/nguoi dang ky nha):
     // mot nha co the co nhieu ho dan (vd. chinh chu + nguoi thue), moi ho co
@@ -220,11 +285,13 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.delete",
         "complaints.create",
         "complaints.read_own",
+        "complaints.update_own",
         "support_tickets.create",
         "support_tickets.read_own",
         "meetings.register",
         "surveys.respond",
         "files.read",
         "notifications.read",
+        "change_requests.create",
     ],
 };

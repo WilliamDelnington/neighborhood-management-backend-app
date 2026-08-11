@@ -1,6 +1,6 @@
 import { Role as RoleModel, User, Household, Citizen, type IUser } from "@/models";
 import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
-import { verifyZaloAccessToken } from "@/lib/zalo";
+import { verifyZaloAccessToken, verifyZaloPhoneToken } from "@/lib/zalo";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdMemberCount } from "@/services/citizenService";
@@ -24,20 +24,67 @@ export async function loginWithZalo(input: ZaloLoginInput) {
         },
     );
 
+    const verifiedPhone = await verifyZaloPhoneToken(
+        input.accessToken,
+        input.phoneToken,
+        input.phone,
+    );
+
     let user = await User.findOne({ zaloUserId: profile.zaloUserId });
+
+    if (profile.verifiedVia === "graph_api" && !user && !verifiedPhone) {
+        throw new HttpError(
+            "Vui long cho phep chia se so dien thoai de lien ket tai khoan",
+            403,
+        );
+    }
+
+    if (user && verifiedPhone) {
+        const conflictingUser = await User.findOne({
+            phone: verifiedPhone,
+            _id: { $ne: user._id },
+        });
+        if (conflictingUser) {
+            throw new HttpError(
+                "So dien thoai nay da thuoc mot tai khoan khac",
+                409,
+            );
+        }
+    }
+
+    // A leader-created account initially has only a verified administrative
+    // phone record. Link it only after Zalo verifies the same phone for the
+    // authenticated Zalo identity.
+    if (!user && verifiedPhone) {
+        const phoneUser = await User.findOne({ phone: verifiedPhone });
+        if (phoneUser) {
+            if (
+                phoneUser.zaloUserId &&
+                phoneUser.zaloUserId !== profile.zaloUserId
+            ) {
+                throw new HttpError(
+                    "So dien thoai nay da lien ket voi tai khoan Zalo khac",
+                    409,
+                );
+            }
+            phoneUser.zaloUserId = profile.zaloUserId;
+            user = phoneUser;
+        }
+    }
 
     if (!user) {
         user = await User.create({
             zaloUserId: profile.zaloUserId,
             displayName: profile.name || input.name || "Người dùng Zalo",
             avatarUrl: profile.avatarUrl || input.avatarUrl,
-            phone: input.phone,
+            phone: verifiedPhone,
             roles: ["house_owner"],
             primaryRole: "house_owner",
             status: "active",
         });
     } else {
         user.lastLoginAt = new Date();
+        if (verifiedPhone && !user.phone) user.phone = verifiedPhone;
         if (profile.name) user.displayName = profile.name;
         if (profile.avatarUrl) user.avatarUrl = profile.avatarUrl;
         await user.save();
@@ -143,10 +190,27 @@ export async function loginWithPhone(input: PhoneLoginInput) {
     return { token, user: await sanitizeUserWithPermissions(user) };
 }
 
-export async function setPassword(userId: string, password: string) {
-    const user = await User.findById(userId);
+export async function setPassword(
+    userId: string,
+    input: { currentPassword?: string; password: string },
+) {
+    const user = await User.findById(userId).select("+passwordHash");
     if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
-    user.passwordHash = await hashPassword(password);
+
+    if (user.passwordHash) {
+        if (!input.currentPassword) {
+            throw new HttpError("Vui long nhap mat khau hien tai", 400);
+        }
+        const matches = await comparePassword(
+            input.currentPassword,
+            user.passwordHash,
+        );
+        if (!matches) {
+            throw new HttpError("Mat khau hien tai khong dung", 401);
+        }
+    }
+
+    user.passwordHash = await hashPassword(input.password);
     await user.save();
     return sanitizeUserWithPermissions(user);
 }
@@ -157,8 +221,8 @@ export async function updateOwnProfile(
 ) {
     const user = await User.findById(userId);
     if (!user) throw new Error("Khong tim thay tai khoan");
-    if (input.displayName !== undefined) user.displayName = input.displayName;
     if (input.phone !== undefined) user.phone = input.phone;
+    if (input.email !== undefined) user.email = input.email;
     if (input.address !== undefined) user.address = input.address;
     if (input.notificationPermission !== undefined) {
         user.notificationPermission = input.notificationPermission;
@@ -246,6 +310,10 @@ export function sanitizeUser(user: IUser) {
             : undefined,
         assignedNeighborhoodIds: (user.assignedNeighborhoodIds || []).map(String),
         assignedClusters: user.assignedClusters,
+        provinceCode: user.provinceCode,
+        provinceName: user.provinceName,
+        wardCode: user.wardCode,
+        wardName: user.wardName,
         notificationPermission: user.notificationPermission,
         createdAt: user.createdAt,
     };

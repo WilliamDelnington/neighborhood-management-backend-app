@@ -15,12 +15,21 @@ export interface IComplaint extends Document {
     status: TrangThaiPhanAnh;
     cluster?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
+    wardCode?: number;
+    // Nha so nguoi gui CHU DONG chon de gan phan anh vao - khong bat buoc, va
+    // KHONG can la nha cua chinh nguoi gui (vd bao phan anh ve nha hang xom).
+    // Neu co, uu tien dung neighborhoodId/cluster cua chinh nha nay thay vi
+    // suy tu ho khau/nha cua nguoi gui - xem createComplaint.
+    targetHouseId?: mongoose.Types.ObjectId;
     createdByUserId: mongoose.Types.ObjectId;
     assigneeId?: mongoose.Types.ObjectId;
     expectedCompletionDate?: Date;
     actualCompletionDate?: Date;
     escalatedToCommittee: boolean;
     internalNotes?: string;
+    // Chi dat khi category="ha_tang" va nguoi gui chon lien ket toi mot tai
+    // san cu the trong so ha tang (B11.03) - tuy chon, khong bat buoc.
+    relatedAssetId?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -50,6 +59,18 @@ const ComplaintSchema = new Schema<IComplaint>(
             ref: "Neighborhood",
             index: true,
         },
+        // Denormalized tai thoi diem gui phan anh: wardCode cua Neighborhood da
+        // resolve, hoac User.wardCode cua nguoi tao (nhan vien), hoac cuoi cung
+        // la setting "default_ward_code" khi khong resolve duoc gi ca - dam bao
+        // phan anh khong bao gio "mat tich" chi vi khong xac dinh duoc to dan
+        // pho, ke ca khi ung dung mo rong nhieu phuong sau nay - xem
+        // resolveComplaintWardCode trong complaintService.ts.
+        wardCode: { type: Number, index: true },
+        targetHouseId: {
+            type: Schema.Types.ObjectId,
+            ref: "House",
+            index: true,
+        },
         createdByUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",
@@ -61,6 +82,10 @@ const ComplaintSchema = new Schema<IComplaint>(
         actualCompletionDate: { type: Date },
         escalatedToCommittee: { type: Boolean, default: false },
         internalNotes: { type: String },
+        relatedAssetId: {
+            type: Schema.Types.ObjectId,
+            ref: "InfrastructureAsset",
+        },
     },
     { timestamps: true },
 );
