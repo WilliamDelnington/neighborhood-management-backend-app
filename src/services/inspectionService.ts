@@ -18,7 +18,11 @@ import { requirePermission, userHasPermission } from "@/lib/rbac";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
-import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
+import {
+    getActingOwnerUserIdsForHouses,
+    getHouseIdsForActingOwner,
+    isHouseOwnerActor,
+} from "@/services/houseOwnershipService";
 import type {
     InspectionOutcome,
     InspectionResultStatus,
@@ -26,6 +30,7 @@ import type {
 import type {
     AssignInspectionTargetsInput,
     CreateInspectionCampaignInput,
+    HouseInspectionSelfDeclarationInput,
     InspectionReviewInput,
     RemindInspectionInput,
     SaveInspectionResultInput,
@@ -37,6 +42,10 @@ const COLLABORATOR_ROLES = ["neighborhood_collaborator", "cooperator"];
 const MUTABLE_RESULT_STATUSES: InspectionResultStatus[] = [
     "DRAFT",
     "FIELD_CHECK_REQUIRED",
+];
+const HOUSE_MUTABLE_RESULT_STATUSES: InspectionResultStatus[] = [
+    "DRAFT",
+    "REQUEST_REVISION",
 ];
 
 function idStrings(values: unknown[]): string[] {
@@ -539,6 +548,156 @@ export async function sendInspectionSelfDeclaration(
     return { target, recipientCount: recipientIds.length };
 }
 
+async function houseSelfDeclarationContext(actorUser: IUser, targetId: string) {
+    const target = await InspectionTarget.findById(targetId)
+        .populate("houseId", "code address cluster neighborhoodId");
+    if (!target) throw new HttpError("Không tìm thấy biểu mẫu tự khai", 404);
+    if (!await isHouseOwnerActor(referenceId(target.houseId), actorUser._id)) {
+        throw new HttpError("Bạn không phải người đang quản lý Nhà số của biểu mẫu này", 403);
+    }
+    const campaign = await campaignForTarget(target);
+    if (!campaign.allowSelfDeclaration) {
+        throw new HttpError("Chiến dịch không cho phép Nhà số tự khai", 409);
+    }
+    if (target.selfDeclarationStatus === "NOT_SENT") {
+        throw new HttpError("Biểu mẫu chưa được Tổ dân phố gửi tới Nhà số", 403);
+    }
+    return { target, campaign };
+}
+
+async function houseSelfDeclarationDetails(
+    target: IInspectionTarget,
+    campaign: IInspectionCampaign,
+) {
+    const result = await InspectionResult.findOne({ targetId: target._id })
+        .populate("submittedByUserId", "displayName")
+        .populate("verifiedByUserId", "displayName");
+    const [answers, attachments] = result
+        ? await Promise.all([
+              InspectionAnswer.find({ resultId: result._id }).sort({ createdAt: 1 }),
+              FileAsset.find({ relatedModel: "InspectionResult", relatedId: result._id })
+                  .sort({ createdAt: -1 })
+                  .populate("uploadedBy", "displayName"),
+          ])
+        : [[], []];
+    return {
+        target,
+        campaign,
+        result: result
+            ? { ...result.toObject(), answers, attachments }
+            : null,
+    };
+}
+
+export async function listMyInspectionSelfDeclarations(actorUser: IUser) {
+    const houseIds = await getHouseIdsForActingOwner(actorUser._id);
+    if (houseIds.length === 0) return { items: [] };
+    const targets = await InspectionTarget.find({
+        houseId: { $in: houseIds },
+        selfDeclarationStatus: { $in: ["SENT", "SUBMITTED"] },
+    })
+        .sort({ updatedAt: -1 })
+        .populate("houseId", "code address cluster neighborhoodId");
+    const campaigns = await InspectionCampaign.find({
+        _id: { $in: targets.map(target => target.campaignId) },
+        allowSelfDeclaration: true,
+    });
+    const campaignById = new Map(campaigns.map(campaign => [String(campaign._id), campaign]));
+    return {
+        items: targets
+            .map(target => ({
+                target,
+                campaign: campaignById.get(String(target.campaignId)),
+            }))
+            .filter(item => item.campaign)
+            .sort((a, b) => a.campaign!.dueAt.getTime() - b.campaign!.dueAt.getTime()),
+    };
+}
+
+export async function getHouseInspectionSelfDeclaration(
+    actorUser: IUser,
+    targetId: string,
+) {
+    const { target, campaign } = await houseSelfDeclarationContext(actorUser, targetId);
+    if (!target.openedAt) {
+        target.openedAt = new Date();
+        await target.save();
+    }
+    return houseSelfDeclarationDetails(target, campaign);
+}
+
+export async function saveHouseInspectionSelfDeclaration(
+    actorUser: IUser,
+    targetId: string,
+    input: HouseInspectionSelfDeclarationInput,
+) {
+    const { target, campaign } = await houseSelfDeclarationContext(actorUser, targetId);
+    assertCampaignExecutable(campaign);
+    validateAnswerItems(campaign, input.answers);
+    let result = await InspectionResult.findOne({ targetId: target._id });
+    if (result) {
+        if (result.submittedBy !== "HOUSE") {
+            throw new HttpError("Tổ dân phố đã lập kết quả cho Nhà số này", 409);
+        }
+        if (!HOUSE_MUTABLE_RESULT_STATUSES.includes(result.status)) {
+            throw new HttpError("Biểu mẫu đã gửi hoặc đã xác minh, không thể ghi đè", 409);
+        }
+        result.note = input.note;
+        result.submittedByUserId = actorUser._id as Types.ObjectId;
+        await result.save();
+    } else {
+        result = await InspectionResult.create({
+            targetId: target._id,
+            submittedBy: "HOUSE",
+            submittedByUserId: actorUser._id,
+            note: input.note,
+            status: "DRAFT",
+        });
+    }
+    await persistAnswers(result._id as Types.ObjectId, input.answers);
+    target.resultStatus = result.status;
+    target.openedAt ||= new Date();
+    await target.save();
+    return houseSelfDeclarationDetails(target, campaign);
+}
+
+export async function submitHouseInspectionSelfDeclaration(
+    actorUser: IUser,
+    targetId: string,
+) {
+    const { target, campaign } = await houseSelfDeclarationContext(actorUser, targetId);
+    assertCampaignExecutable(campaign);
+    const current = await InspectionResult.findOne({ targetId: target._id });
+    if (!current || current.submittedBy !== "HOUSE") {
+        throw new HttpError("Hãy lưu bản nháp biểu mẫu trước khi gửi", 409);
+    }
+    if (!HOUSE_MUTABLE_RESULT_STATUSES.includes(current.status)) {
+        throw new HttpError("Biểu mẫu không còn ở trạng thái có thể gửi", 409);
+    }
+    await assertResultComplete(campaign, current);
+    const result = await InspectionResult.findOneAndUpdate(
+        { _id: current._id, status: { $in: HOUSE_MUTABLE_RESULT_STATUSES } },
+        { $set: { status: "SUBMITTED", submittedAt: new Date() } },
+        { new: true },
+    );
+    if (!result) throw new HttpError("Biểu mẫu vừa được cập nhật ở nơi khác", 409);
+    target.resultStatus = "SUBMITTED";
+    target.selfDeclarationStatus = "SUBMITTED";
+    await target.save();
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.self_declaration.submit",
+        targetModel: "InspectionResult",
+        targetId: result._id,
+        metadata: {
+            campaignId: String(campaign._id),
+            inspectionTargetId: String(target._id),
+            houseId: referenceId(target.houseId),
+        },
+    });
+    return houseSelfDeclarationDetails(target, campaign);
+}
+
 function validateAnswerItems(
     campaign: IInspectionCampaign,
     answers: SaveInspectionResultInput["answers"],
@@ -766,8 +925,8 @@ async function reviewInspectionResult(
             body: input.note || campaign.name,
             type: `inspection.result.${nextStatus.toLowerCase()}`,
             targetUserIds: recipientIds,
-            relatedModel: "InspectionResult",
-            relatedId: result._id,
+            relatedModel: "InspectionTarget",
+            relatedId: target._id,
             createdBy: actorUser._id,
         });
     }
@@ -943,20 +1102,12 @@ export async function submitInspectionToWard(
 const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"];
 
-export async function uploadInspectionAttachment(
+async function persistInspectionAttachment(
     actorUser: IUser,
-    resultId: string,
+    campaign: IInspectionCampaign,
+    result: IInspectionResult,
     file: File,
 ) {
-    await requirePermission(actorUser, "inspections.execute");
-    const result = await InspectionResult.findById(resultId);
-    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
-    const target = await scopedTarget(actorUser, String(result.targetId));
-    const campaign = await campaignForTarget(target);
-    assertCampaignExecutable(campaign);
-    if (!MUTABLE_RESULT_STATUSES.includes(result.status)) {
-        throw new HttpError("Không thể thêm minh chứng vào kết quả đã gửi hoặc xác minh", 409);
-    }
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError("Tệp vượt quá dung lượng cho phép (tối đa 10MB)", 400);
     }
@@ -968,7 +1119,7 @@ export async function uploadInspectionAttachment(
     const { url } = await saveUploadedFile(
         buffer,
         file.name,
-        `inspections/${String(campaign._id)}/${resultId}`,
+        `inspections/${String(campaign._id)}/${String(result._id)}`,
     );
     const asset = await FileAsset.create({
         name: file.name,
@@ -991,4 +1142,38 @@ export async function uploadInspectionAttachment(
         metadata: { fileAssetId: String(asset._id), name: file.name },
     });
     return asset;
+}
+
+export async function uploadInspectionAttachment(
+    actorUser: IUser,
+    resultId: string,
+    file: File,
+) {
+    await requirePermission(actorUser, "inspections.execute");
+    const result = await InspectionResult.findById(resultId);
+    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await scopedTarget(actorUser, String(result.targetId));
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    if (!MUTABLE_RESULT_STATUSES.includes(result.status)) {
+        throw new HttpError("Không thể thêm minh chứng vào kết quả đã gửi hoặc xác minh", 409);
+    }
+    return persistInspectionAttachment(actorUser, campaign, result, file);
+}
+
+export async function uploadHouseInspectionAttachment(
+    actorUser: IUser,
+    targetId: string,
+    file: File,
+) {
+    const { target, campaign } = await houseSelfDeclarationContext(actorUser, targetId);
+    assertCampaignExecutable(campaign);
+    const result = await InspectionResult.findOne({ targetId: target._id });
+    if (!result || result.submittedBy !== "HOUSE") {
+        throw new HttpError("Hãy lưu bản nháp trước khi thêm minh chứng", 409);
+    }
+    if (!HOUSE_MUTABLE_RESULT_STATUSES.includes(result.status)) {
+        throw new HttpError("Không thể thêm minh chứng vào biểu mẫu đã gửi hoặc xác minh", 409);
+    }
+    return persistInspectionAttachment(actorUser, campaign, result, file);
 }

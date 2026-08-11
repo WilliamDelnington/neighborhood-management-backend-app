@@ -78,6 +78,15 @@ export type UpdateInspectionResultInput = z.infer<
     typeof updateInspectionResultSchema
 >;
 
+export const houseInspectionSelfDeclarationSchema = updateInspectionResultSchema.omit({
+    gpsLat: true,
+    gpsLng: true,
+    outcome: true,
+});
+export type HouseInspectionSelfDeclarationInput = z.infer<
+    typeof houseInspectionSelfDeclarationSchema
+>;
+
 export const assignInspectionTargetsSchema = z.object({
     targetIds: z.array(objectId).min(1).max(500),
     collaboratorUserId: objectId,

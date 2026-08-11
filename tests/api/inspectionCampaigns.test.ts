@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     AuditLog,
+    HouseOwnership,
     HouseRecord,
     InspectionAnswer,
     InspectionCampaign,
@@ -13,7 +14,13 @@ import {
     assignInspectionTargets,
     createInspectionCampaign,
     createInspectionResult,
+    getHouseInspectionSelfDeclaration,
+    listMyInspectionSelfDeclarations,
     listInspectionTargets,
+    requestInspectionRevision,
+    saveHouseInspectionSelfDeclaration,
+    sendInspectionSelfDeclaration,
+    submitHouseInspectionSelfDeclaration,
     submitInspectionResult,
     transitionInspectionCampaign,
     verifyInspectionResult,
@@ -54,6 +61,8 @@ async function fixture(options: { requiredEvidence?: boolean; status?: "ACTIVE" 
     });
     return {
         wardUser,
+        houseA,
+        houseB,
         neighborhoodA,
         neighborhoodB,
         campaign,
@@ -64,6 +73,62 @@ async function fixture(options: { requiredEvidence?: boolean; status?: "ACTIVE" 
 }
 
 describe("B07 inspection campaign security and workflow", () => {
+    it("cho chủ Nhà số mở, lưu và gửi biểu mẫu tự khai mà không cần quyền của Tổ", async () => {
+        const data = await fixture();
+        const owner = await createTestUser({ roles: ["house_owner"] });
+        const unrelatedOwner = await createTestUser({ roles: ["house_owner"] });
+        await HouseOwnership.create({
+            houseId: data.houseA._id,
+            ownerType: "user",
+            ownerId: owner._id,
+            relationshipType: "primary_owner",
+            active: true,
+            verificationStatus: "verified",
+        });
+
+        await sendInspectionSelfDeclaration(data.leaderA, String(data.targetA._id));
+        const list = await listMyInspectionSelfDeclarations(owner);
+        expect(list.items).toHaveLength(1);
+        expect(String(list.items[0].target._id)).toBe(String(data.targetA._id));
+
+        await expect(getHouseInspectionSelfDeclaration(
+            unrelatedOwner,
+            String(data.targetA._id),
+        )).rejects.toMatchObject({ status: 403 });
+
+        const opened = await getHouseInspectionSelfDeclaration(owner, String(data.targetA._id));
+        expect(opened.result).toBeNull();
+        const saved = await saveHouseInspectionSelfDeclaration(
+            owner,
+            String(data.targetA._id),
+            { answers: [{ checklistItemId: "safe", value: true }] },
+        );
+        expect(saved.result?.submittedBy).toBe("HOUSE");
+        expect(saved.result?.status).toBe("DRAFT");
+
+        const submitted = await submitHouseInspectionSelfDeclaration(
+            owner,
+            String(data.targetA._id),
+        );
+        expect(submitted.result?.status).toBe("SUBMITTED");
+        expect(submitted.target.selfDeclarationStatus).toBe("SUBMITTED");
+
+        await requestInspectionRevision(data.leaderA, String(submitted.result?._id), {
+            note: "Vui lòng kiểm tra và khai lại",
+        });
+        const revised = await saveHouseInspectionSelfDeclaration(
+            owner,
+            String(data.targetA._id),
+            { answers: [{ checklistItemId: "safe", value: false }] },
+        );
+        expect(revised.result?.status).toBe("REQUEST_REVISION");
+        const resubmitted = await submitHouseInspectionSelfDeclaration(
+            owner,
+            String(data.targetA._id),
+        );
+        expect(resubmitted.result?.status).toBe("SUBMITTED");
+    });
+
     it("chỉ tạo chiến dịch trong đúng Phường và chỉ chủ chiến dịch được phát hành", async () => {
         const wardCode = 70001;
         const creator = await createTestUser({
