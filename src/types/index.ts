@@ -373,9 +373,7 @@ export const INFRASTRUCTURE_ASSET_CONDITION_LABEL: Record<
 
 export const TRANG_THAI_PHAN_ANH = [
     "moi_tiep_nhan",
-    "da_tiep_nhan",
     "dang_xu_ly",
-    "da_chuyen_ubnd",
     "da_xu_ly",
     // Nguoi gui XAC NHAN da hai long voi ket qua xu ly (khac da_xu_ly - do la
     // nhan vien BAO da xu ly) - CHI nguoi gui phan anh duoc dat trang thai
@@ -396,9 +394,7 @@ export const TRANG_THAI_PHAN_ANH = [
 export type TrangThaiPhanAnh = typeof TRANG_THAI_PHAN_ANH[number];
 export const TRANG_THAI_PHAN_ANH_LABEL: Record<TrangThaiPhanAnh, string> = {
     moi_tiep_nhan: "Mới tiếp nhận",
-    da_tiep_nhan: "Đã tiếp nhận",
     dang_xu_ly: "Đang xử lý",
-    da_chuyen_ubnd: "Đã chuyển UBND phường",
     da_xu_ly: "Đã xử lý",
     hoan_thanh: "Hoàn thành",
     dong: "Đóng",

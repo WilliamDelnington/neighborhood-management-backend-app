@@ -23,6 +23,7 @@ export interface IComplaint extends Document {
     targetHouseId?: mongoose.Types.ObjectId;
     createdByUserId: mongoose.Types.ObjectId;
     assigneeId?: mongoose.Types.ObjectId;
+    secondaryAssigneeIds: mongoose.Types.ObjectId[];
     expectedCompletionDate?: Date;
     actualCompletionDate?: Date;
     escalatedToCommittee: boolean;
@@ -78,6 +79,10 @@ const ComplaintSchema = new Schema<IComplaint>(
             index: true,
         },
         assigneeId: { type: Schema.Types.ObjectId, ref: "User" },
+        secondaryAssigneeIds: {
+            type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+            default: [],
+        },
         expectedCompletionDate: { type: Date },
         actualCompletionDate: { type: Date },
         escalatedToCommittee: { type: Boolean, default: false },

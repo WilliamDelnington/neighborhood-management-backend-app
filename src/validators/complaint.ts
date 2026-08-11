@@ -51,8 +51,10 @@ export type RequestReevaluationInput = z.infer<
 >;
 
 export const assignComplaintSchema = z.object({
-    assigneeId: z.string().min(1),
+    primaryAssigneeId: z.string().min(1),
+    secondaryAssigneeIds: z.array(z.string()).default([]),
     expectedCompletionDate: z.string().datetime().optional(),
+    transferReason: z.string().min(1).optional(),
 });
 export type AssignComplaintInput = z.infer<typeof assignComplaintSchema>;
 
