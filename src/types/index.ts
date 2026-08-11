@@ -34,10 +34,65 @@ export const ROLE_LABEL: Record<string, string> = {
     house_owner: "Chủ sở hữu",
     household_head: "Chủ hộ",
     neighborhood_leader: "Tổ trưởng",
+    neighborhood_coleader: "Tổ phó",
+    neighborhood_collaborator: "Cộng tác viên Tổ dân phố",
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
     people_committee_official: "Cán bộ UBND",
     admin: "Quản trị viên",
+};
+
+// ---------------------------------------------------------------------------
+// Rà soát / chiến dịch (Inspection)
+// ---------------------------------------------------------------------------
+export const INSPECTION_CAMPAIGN_STATUS = [
+    "DRAFT",
+    "ACTIVE",
+    "LOCKED",
+    "CLOSED",
+] as const;
+export type InspectionCampaignStatus = typeof INSPECTION_CAMPAIGN_STATUS[number];
+
+export const INSPECTION_SELF_DECLARATION_STATUS = [
+    "NOT_SENT",
+    "SENT",
+    "SUBMITTED",
+] as const;
+export type InspectionSelfDeclarationStatus =
+    typeof INSPECTION_SELF_DECLARATION_STATUS[number];
+
+export const INSPECTION_RESULT_STATUS = [
+    "PENDING",
+    "DRAFT",
+    "SUBMITTED",
+    "VERIFIED",
+    "REQUEST_REVISION",
+    "FIELD_CHECK_REQUIRED",
+] as const;
+export type InspectionResultStatus = typeof INSPECTION_RESULT_STATUS[number];
+
+export const INSPECTION_SUBMITTED_BY = ["HOUSE", "NEIGHBORHOOD"] as const;
+export type InspectionSubmittedBy = typeof INSPECTION_SUBMITTED_BY[number];
+
+export const INSPECTION_OUTCOME = ["PASS", "FAIL", "NEEDS_SUPPLEMENT"] as const;
+export type InspectionOutcome = typeof INSPECTION_OUTCOME[number];
+
+export const INSPECTION_CHECKLIST_INPUT_TYPE = [
+    "BOOLEAN",
+    "TEXT",
+    "NUMBER",
+    "SINGLE_SELECT",
+    "MULTI_SELECT",
+] as const;
+export type InspectionChecklistInputType =
+    typeof INSPECTION_CHECKLIST_INPUT_TYPE[number];
+
+export type InspectionChecklistItem = {
+    itemId: string;
+    label: string;
+    inputType: InspectionChecklistInputType;
+    required: boolean;
+    options?: string[];
 };
 
 export const USER_STATUS = ["active", "pending", "locked"] as const;

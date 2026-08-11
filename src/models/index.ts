@@ -93,6 +93,22 @@ export {
 } from "./NotificationDelivery";
 export { default as Request, type IRequest } from "./Request";
 export {
+    default as InspectionCampaign,
+    type IInspectionCampaign,
+} from "./InspectionCampaign";
+export {
+    default as InspectionTarget,
+    type IInspectionTarget,
+} from "./InspectionTarget";
+export {
+    default as InspectionResult,
+    type IInspectionResult,
+} from "./InspectionResult";
+export {
+    default as InspectionAnswer,
+    type IInspectionAnswer,
+} from "./InspectionAnswer";
+export {
     default as RequestRecipient,
     type IRequestRecipient,
 } from "./RequestRecipient";

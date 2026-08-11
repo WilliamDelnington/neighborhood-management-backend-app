@@ -1,0 +1,773 @@
+import { Types, type FilterQuery } from "mongoose";
+import {
+    FileAsset,
+    InspectionAnswer,
+    InspectionCampaign,
+    InspectionResult,
+    InspectionTarget,
+    Neighborhood,
+    User,
+    type IInspectionCampaign,
+    type IInspectionResult,
+    type IInspectionTarget,
+    type IUser,
+} from "@/models";
+import { HttpError } from "@/lib/response";
+import { requirePermission, userHasPermission } from "@/lib/rbac";
+import { saveUploadedFile } from "@/lib/localUpload";
+import { writeAuditLog } from "@/services/auditService";
+import { createNotification } from "@/services/notificationService";
+import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
+import type {
+    InspectionOutcome,
+    InspectionResultStatus,
+} from "@/types";
+import type {
+    AssignInspectionTargetsInput,
+    InspectionReviewInput,
+    RemindInspectionInput,
+    SaveInspectionResultInput,
+    SubmitInspectionToWardInput,
+    UpdateInspectionResultInput,
+} from "@/validators/inspection";
+
+const COLLABORATOR_ROLES = ["neighborhood_collaborator", "cooperator"];
+const MUTABLE_RESULT_STATUSES: InspectionResultStatus[] = [
+    "DRAFT",
+    "FIELD_CHECK_REQUIRED",
+];
+
+function idStrings(values: unknown[]): string[] {
+    return values.filter(Boolean).map(String);
+}
+
+function referenceId(value: unknown): string {
+    if (value && typeof value === "object" && "_id" in value) {
+        return String((value as { _id: unknown })._id);
+    }
+    return value ? String(value) : "";
+}
+
+function actorNeighborhoodIds(user: IUser): string[] {
+    return [...new Set(idStrings([user.neighborhoodId, ...(user.assignedNeighborhoodIds || [])]))];
+}
+
+function isCollaborator(user: IUser): boolean {
+    return user.roles.some(role => COLLABORATOR_ROLES.includes(role));
+}
+
+function scopedTargetFilter(
+    actorUser: IUser,
+    filter: FilterQuery<IInspectionTarget> = {},
+): FilterQuery<IInspectionTarget> {
+    if (actorUser.roles.includes("admin")) return filter;
+    if (isCollaborator(actorUser)) {
+        return {
+            ...filter,
+            assignedCollaboratorUserId: actorUser._id,
+        };
+    }
+    return {
+        ...filter,
+        neighborhoodId: { $in: actorNeighborhoodIds(actorUser) },
+    };
+}
+
+function assertTargetInScope(actorUser: IUser, target: IInspectionTarget): void {
+    if (actorUser.roles.includes("admin")) return;
+    if (isCollaborator(actorUser)) {
+        if (referenceId(target.assignedCollaboratorUserId) !== String(actorUser._id)) {
+            throw new HttpError("Bạn không được phân công rà soát Nhà số này", 403);
+        }
+        return;
+    }
+    if (!actorNeighborhoodIds(actorUser).includes(String(target.neighborhoodId))) {
+        throw new HttpError("Nhà số nằm ngoài Tổ dân phố được phân công", 403);
+    }
+}
+
+function assertCampaignExecutable(campaign: IInspectionCampaign): void {
+    if (campaign.status === "LOCKED" || campaign.status === "CLOSED") {
+        throw new HttpError("Chiến dịch đã khóa, không thể thay đổi kết quả", 409);
+    }
+    if (campaign.status !== "ACTIVE") {
+        throw new HttpError("Chiến dịch chưa ở trạng thái đang thực hiện", 409);
+    }
+}
+
+async function campaignForTarget(target: IInspectionTarget) {
+    const campaign = await InspectionCampaign.findById(target.campaignId);
+    if (!campaign) throw new HttpError("Không tìm thấy chiến dịch", 404);
+    return campaign;
+}
+
+async function scopedTarget(actorUser: IUser, targetId: string) {
+    const target = await InspectionTarget.findById(targetId);
+    if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
+    assertTargetInScope(actorUser, target);
+    return target;
+}
+
+async function assertCampaignVisible(actorUser: IUser, campaignId: string) {
+    const campaign = await InspectionCampaign.findById(campaignId);
+    if (!campaign) throw new HttpError("Không tìm thấy chiến dịch", 404);
+    const visible = await InspectionTarget.exists(
+        scopedTargetFilter(actorUser, { campaignId: campaign._id }),
+    );
+    if (!visible) throw new HttpError("Chiến dịch nằm ngoài phạm vi được phân công", 403);
+    return campaign;
+}
+
+export async function listInspectionCampaigns(params: {
+    actorUser: IUser;
+    page: number;
+    limit: number;
+    status?: string;
+}) {
+    const targetFilter = scopedTargetFilter(params.actorUser);
+    const campaignIds = await InspectionTarget.distinct("campaignId", targetFilter);
+    const filter: Record<string, unknown> = { _id: { $in: campaignIds } };
+    if (params.status) filter.status = params.status;
+    const [items, total] = await Promise.all([
+        InspectionCampaign.find(filter)
+            .sort({ dueAt: 1, createdAt: -1 })
+            .skip((params.page - 1) * params.limit)
+            .limit(params.limit)
+            .populate("createdByWardUserId", "displayName"),
+        InspectionCampaign.countDocuments(filter),
+    ]);
+    return {
+        items,
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.max(1, Math.ceil(total / params.limit)),
+    };
+}
+
+export async function getInspectionCampaignById(actorUser: IUser, campaignId: string) {
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    const scopedTargets = scopedTargetFilter(actorUser, { campaignId: campaign._id });
+    const [summary, neighborhoodIds] = await Promise.all([
+        getInspectionSummary(actorUser, campaignId),
+        InspectionTarget.distinct("neighborhoodId", scopedTargets),
+    ]);
+    const availableNeighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("code name");
+    return { ...campaign.toObject(), summary, availableNeighborhoods };
+}
+
+export async function listInspectionTargets(params: {
+    actorUser: IUser;
+    campaignId: string;
+    page: number;
+    limit: number;
+    resultStatus?: string;
+    selfDeclarationStatus?: string;
+    pendingFilter?: "not_sent" | "unopened" | "not_submitted" | "overdue";
+    neighborhoodId?: string;
+}) {
+    const campaign = await assertCampaignVisible(params.actorUser, params.campaignId);
+    const base: FilterQuery<IInspectionTarget> = { campaignId: campaign._id };
+    if (params.resultStatus) base.resultStatus = params.resultStatus;
+    if (params.selfDeclarationStatus) {
+        base.selfDeclarationStatus = params.selfDeclarationStatus;
+    }
+    if (params.neighborhoodId) base.neighborhoodId = params.neighborhoodId;
+    if (params.pendingFilter === "not_sent") base.selfDeclarationStatus = "NOT_SENT";
+    if (params.pendingFilter === "unopened") base.openedAt = { $exists: false };
+    if (params.pendingFilter === "not_submitted") {
+        base.resultStatus = {
+            $in: ["PENDING", "DRAFT", "REQUEST_REVISION", "FIELD_CHECK_REQUIRED"],
+        };
+    }
+    if (params.pendingFilter === "overdue") {
+        if (campaign.dueAt >= new Date()) base._id = { $in: [] };
+        else base.resultStatus = { $ne: "VERIFIED" };
+    }
+    const filter = scopedTargetFilter(params.actorUser, base);
+    const [targets, total] = await Promise.all([
+        InspectionTarget.find(filter)
+            .sort({ resultStatus: 1, createdAt: 1 })
+            .skip((params.page - 1) * params.limit)
+            .limit(params.limit)
+            .populate("houseId", "code address cluster streetId neighborhoodId")
+            .populate("assignedCollaboratorUserId", "displayName phone"),
+        InspectionTarget.countDocuments(filter),
+    ]);
+    const resultRows = await InspectionResult.find({
+        targetId: { $in: targets.map(target => target._id) },
+    }).select("targetId status outcome updatedAt");
+    const resultByTarget = new Map(resultRows.map(row => [String(row.targetId), row]));
+    return {
+        items: targets.map(target => ({
+            ...target.toObject(),
+            result: resultByTarget.get(String(target._id)) || null,
+        })),
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.max(1, Math.ceil(total / params.limit)),
+    };
+}
+
+export async function getInspectionTargetById(actorUser: IUser, targetId: string) {
+    const target = await InspectionTarget.findById(targetId)
+        .populate("houseId", "code address cluster streetId neighborhoodId")
+        .populate("assignedCollaboratorUserId", "displayName phone");
+    if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
+    assertTargetInScope(actorUser, target);
+    const [campaign, result] = await Promise.all([
+        InspectionCampaign.findById(target.campaignId),
+        InspectionResult.findOne({ targetId: target._id }).select("_id status outcome updatedAt"),
+    ]);
+    if (!campaign) throw new HttpError("Không tìm thấy chiến dịch", 404);
+    if (!target.openedAt && await userHasPermission(actorUser, "inspections.execute")) {
+        target.openedAt = new Date();
+        await target.save();
+    }
+    return { ...target.toObject(), campaign, result };
+}
+
+export async function assignInspectionTargets(
+    actorUser: IUser,
+    campaignId: string,
+    input: AssignInspectionTargetsInput,
+) {
+    await requirePermission(actorUser, "inspections.assign");
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    assertCampaignExecutable(campaign);
+    const targets = await InspectionTarget.find({
+        _id: { $in: input.targetIds },
+        campaignId: campaign._id,
+    });
+    if (targets.length !== new Set(input.targetIds).size) {
+        throw new HttpError("Một hoặc nhiều Nhà số không thuộc chiến dịch", 404);
+    }
+    targets.forEach(target => assertTargetInScope(actorUser, target));
+
+    const collaborator = await User.findById(input.collaboratorUserId);
+    if (!collaborator || collaborator.status !== "active") {
+        throw new HttpError("Cộng tác viên không tồn tại hoặc đã bị khóa", 404);
+    }
+    if (!isCollaborator(collaborator) || !(await userHasPermission(collaborator, "inspections.execute"))) {
+        throw new HttpError("Người được giao chưa có vai trò và quyền thực hiện rà soát", 422);
+    }
+    const collaboratorNeighborhoods = actorNeighborhoodIds(collaborator);
+    if (targets.some(target => !collaboratorNeighborhoods.includes(String(target.neighborhoodId)))) {
+        throw new HttpError("Cộng tác viên không thuộc Tổ dân phố của Nhà số được chọn", 403);
+    }
+
+    for (const target of targets) {
+        const previous = target.assignedCollaboratorUserId
+            ? String(target.assignedCollaboratorUserId)
+            : null;
+        target.assignedCollaboratorUserId = collaborator._id as Types.ObjectId;
+        await target.save();
+        await writeAuditLog({
+            actorId: actorUser._id,
+            action: "inspection.assigned",
+            targetModel: "InspectionTarget",
+            targetId: target._id,
+            metadata: {
+                campaignId,
+                targetId: String(target._id),
+                neighborhoodId: String(target.neighborhoodId),
+                from: previous,
+                to: input.collaboratorUserId,
+            },
+        });
+    }
+    await createNotification({
+        title: `Được giao rà soát: ${campaign.name}`,
+        body: `Bạn được giao ${targets.length} Nhà số cần rà soát trước ${campaign.dueAt.toLocaleDateString("vi-VN")}.`,
+        type: "inspection.assigned",
+        targetUserIds: [collaborator._id],
+        relatedModel: "InspectionCampaign",
+        relatedId: campaign._id,
+        createdBy: actorUser._id,
+    });
+    return { assignedCount: targets.length };
+}
+
+export async function sendInspectionSelfDeclaration(
+    actorUser: IUser,
+    targetId: string,
+) {
+    await requirePermission(actorUser, "inspections.assign");
+    const target = await scopedTarget(actorUser, targetId);
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    if (!campaign.allowSelfDeclaration) {
+        throw new HttpError("Chiến dịch không cho phép Nhà số tự khai", 409);
+    }
+    const recipientIds = await getActingOwnerUserIdsForHouses([target.houseId]);
+    target.selfDeclarationStatus = "SENT";
+    target.selfDeclarationSentAt = new Date();
+    await target.save();
+    if (recipientIds.length > 0) {
+        await createNotification({
+            title: `Biểu mẫu tự khai: ${campaign.name}`,
+            body: `Vui lòng hoàn thành biểu mẫu trước ${campaign.dueAt.toLocaleDateString("vi-VN")}.`,
+            type: "inspection.self_declaration.sent",
+            targetUserIds: recipientIds,
+            relatedModel: "InspectionTarget",
+            relatedId: target._id,
+            createdBy: actorUser._id,
+        });
+    }
+    return { target, recipientCount: recipientIds.length };
+}
+
+function validateAnswerItems(
+    campaign: IInspectionCampaign,
+    answers: SaveInspectionResultInput["answers"],
+) {
+    const validIds = new Set(campaign.checklistTemplate.map(item => item.itemId));
+    const submittedIds = new Set<string>();
+    for (const answer of answers) {
+        if (!validIds.has(answer.checklistItemId)) {
+            throw new HttpError(`Mục checklist không tồn tại: ${answer.checklistItemId}`, 422);
+        }
+        if (submittedIds.has(answer.checklistItemId)) {
+            throw new HttpError(`Mục checklist bị trả lời trùng: ${answer.checklistItemId}`, 422);
+        }
+        submittedIds.add(answer.checklistItemId);
+    }
+}
+
+async function persistAnswers(
+    resultId: Types.ObjectId,
+    answers: SaveInspectionResultInput["answers"],
+) {
+    if (answers.length === 0) {
+        await InspectionAnswer.deleteMany({ resultId });
+        return;
+    }
+    await InspectionAnswer.bulkWrite(
+        answers.map(answer => ({
+            updateOne: {
+                filter: { resultId, checklistItemId: answer.checklistItemId },
+                update: { $set: { value: answer.value } },
+                upsert: true,
+            },
+        })),
+    );
+    await InspectionAnswer.deleteMany({
+        resultId,
+        checklistItemId: { $nin: answers.map(answer => answer.checklistItemId) },
+    });
+}
+
+export async function createInspectionResult(
+    actorUser: IUser,
+    input: SaveInspectionResultInput,
+) {
+    await requirePermission(actorUser, "inspections.execute");
+    const target = await scopedTarget(actorUser, input.targetId);
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    validateAnswerItems(campaign, input.answers);
+    if (await InspectionResult.exists({ targetId: target._id })) {
+        throw new HttpError("Nhà số đã có kết quả; hãy cập nhật bản hiện có", 409);
+    }
+    const result = await InspectionResult.create({
+        targetId: target._id,
+        submittedBy: "NEIGHBORHOOD",
+        submittedByUserId: actorUser._id,
+        gpsLat: input.gpsLat,
+        gpsLng: input.gpsLng,
+        note: input.note,
+        outcome: input.outcome,
+        status: "DRAFT",
+    });
+    await persistAnswers(result._id as Types.ObjectId, input.answers);
+    target.resultStatus = "DRAFT";
+    target.openedAt ||= new Date();
+    await target.save();
+    return getInspectionResult(actorUser, String(result._id));
+}
+
+export async function getInspectionResult(actorUser: IUser, resultId: string) {
+    const result = await InspectionResult.findById(resultId)
+        .populate("submittedByUserId", "displayName")
+        .populate("verifiedByUserId", "displayName");
+    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await InspectionTarget.findById(result.targetId)
+        .populate("houseId", "code address cluster neighborhoodId")
+        .populate("assignedCollaboratorUserId", "displayName phone");
+    if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
+    assertTargetInScope(actorUser, target);
+    const [answers, attachments, campaign] = await Promise.all([
+        InspectionAnswer.find({ resultId: result._id }).sort({ createdAt: 1 }),
+        FileAsset.find({ relatedModel: "InspectionResult", relatedId: result._id })
+            .sort({ createdAt: -1 })
+            .populate("uploadedBy", "displayName"),
+        InspectionCampaign.findById(target.campaignId),
+    ]);
+    return { ...result.toObject(), target, campaign, answers, attachments };
+}
+
+export async function updateInspectionResult(
+    actorUser: IUser,
+    resultId: string,
+    input: UpdateInspectionResultInput,
+) {
+    await requirePermission(actorUser, "inspections.execute");
+    const result = await InspectionResult.findById(resultId);
+    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await scopedTarget(actorUser, String(result.targetId));
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    if (!MUTABLE_RESULT_STATUSES.includes(result.status)) {
+        throw new HttpError("Kết quả đã gửi hoặc đã xác minh, không thể ghi đè", 409);
+    }
+    validateAnswerItems(campaign, input.answers);
+    result.gpsLat = input.gpsLat;
+    result.gpsLng = input.gpsLng;
+    result.note = input.note;
+    result.outcome = input.outcome;
+    result.submittedByUserId = actorUser._id as Types.ObjectId;
+    await result.save();
+    await persistAnswers(result._id as Types.ObjectId, input.answers);
+    return getInspectionResult(actorUser, resultId);
+}
+
+function isEmptyRequiredValue(value: unknown): boolean {
+    return value === undefined || value === null || value === "" ||
+        (Array.isArray(value) && value.length === 0);
+}
+
+async function assertResultComplete(
+    campaign: IInspectionCampaign,
+    result: IInspectionResult,
+) {
+    const answers = await InspectionAnswer.find({ resultId: result._id });
+    const answerMap = new Map(answers.map(answer => [answer.checklistItemId, answer.value]));
+    const missing = campaign.checklistTemplate.filter(
+        item => item.required && isEmptyRequiredValue(answerMap.get(item.itemId)),
+    );
+    if (missing.length > 0) {
+        throw new HttpError(`Chưa trả lời mục bắt buộc: ${missing.map(item => item.label).join(", ")}`, 422);
+    }
+    if (campaign.requiredEvidence) {
+        const evidenceCount = await FileAsset.countDocuments({
+            relatedModel: "InspectionResult",
+            relatedId: result._id,
+        });
+        if (evidenceCount === 0) {
+            throw new HttpError("Chiến dịch yêu cầu ít nhất một ảnh hoặc tệp minh chứng", 422);
+        }
+    }
+}
+
+export async function submitInspectionResult(actorUser: IUser, resultId: string) {
+    await requirePermission(actorUser, "inspections.execute");
+    const result = await InspectionResult.findById(resultId);
+    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await scopedTarget(actorUser, String(result.targetId));
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    if (!MUTABLE_RESULT_STATUSES.includes(result.status)) {
+        throw new HttpError("Chỉ bản nháp hoặc kết quả cần kiểm tra thực địa mới được gửi", 409);
+    }
+    await assertResultComplete(campaign, result);
+    result.status = "SUBMITTED";
+    result.submittedAt = new Date();
+    await result.save();
+    target.resultStatus = "SUBMITTED";
+    if (result.submittedBy === "HOUSE") target.selfDeclarationStatus = "SUBMITTED";
+    await target.save();
+    return getInspectionResult(actorUser, resultId);
+}
+
+async function reviewInspectionResult(
+    actorUser: IUser,
+    resultId: string,
+    nextStatus: "VERIFIED" | "REQUEST_REVISION" | "FIELD_CHECK_REQUIRED",
+    input: InspectionReviewInput,
+) {
+    await requirePermission(actorUser, "inspections.verify");
+    const current = await InspectionResult.findById(resultId);
+    if (!current) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await scopedTarget(actorUser, String(current.targetId));
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    const allowedFrom: InspectionResultStatus[] =
+        nextStatus === "VERIFIED" ? ["SUBMITTED", "FIELD_CHECK_REQUIRED"] : ["SUBMITTED"];
+    if (!allowedFrom.includes(current.status)) {
+        throw new HttpError("Chuyển trạng thái kết quả không hợp lệ", 409);
+    }
+    if (nextStatus !== "VERIFIED" && !input.note) {
+        throw new HttpError("Vui lòng nhập lý do hoặc nội dung cần bổ sung", 422);
+    }
+    if (nextStatus === "VERIFIED") await assertResultComplete(campaign, current);
+
+    const update: Record<string, unknown> = {
+        status: nextStatus,
+        reviewNote: input.note,
+    };
+    if (input.outcome !== undefined) update.outcome = input.outcome;
+    if (nextStatus === "VERIFIED") {
+        update.verifiedByUserId = actorUser._id;
+        update.verifiedAt = new Date();
+    }
+    const result = await InspectionResult.findOneAndUpdate(
+        { _id: resultId, status: { $in: allowedFrom } },
+        { $set: update },
+        { new: true },
+    );
+    if (!result) throw new HttpError("Kết quả vừa được người khác xử lý", 409);
+    target.resultStatus = nextStatus;
+    await target.save();
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.result.review",
+        targetModel: "InspectionResult",
+        targetId: result._id,
+        metadata: {
+            campaignId: String(campaign._id),
+            targetId: String(target._id),
+            neighborhoodId: String(target.neighborhoodId),
+            from: current.status,
+            to: nextStatus,
+            note: input.note,
+        },
+    });
+    const recipientIds = await getActingOwnerUserIdsForHouses([target.houseId]);
+    if (recipientIds.length > 0) {
+        const title = nextStatus === "VERIFIED"
+            ? "Kết quả tự khai đã được xác minh"
+            : nextStatus === "REQUEST_REVISION"
+              ? "Kết quả tự khai cần bổ sung"
+              : "Nhà số cần kiểm tra thực địa";
+        await createNotification({
+            title,
+            body: input.note || campaign.name,
+            type: `inspection.result.${nextStatus.toLowerCase()}`,
+            targetUserIds: recipientIds,
+            relatedModel: "InspectionResult",
+            relatedId: result._id,
+            createdBy: actorUser._id,
+        });
+    }
+    return getInspectionResult(actorUser, resultId);
+}
+
+export const verifyInspectionResult = (
+    actorUser: IUser,
+    resultId: string,
+    input: InspectionReviewInput,
+) => reviewInspectionResult(actorUser, resultId, "VERIFIED", input);
+
+export const requestInspectionRevision = (
+    actorUser: IUser,
+    resultId: string,
+    input: InspectionReviewInput,
+) => reviewInspectionResult(actorUser, resultId, "REQUEST_REVISION", input);
+
+export const requireInspectionFieldCheck = (
+    actorUser: IUser,
+    resultId: string,
+    input: InspectionReviewInput,
+) => reviewInspectionResult(actorUser, resultId, "FIELD_CHECK_REQUIRED", input);
+
+export async function getInspectionSummary(
+    actorUser: IUser,
+    campaignId: string,
+    neighborhoodId?: string,
+) {
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    const base: FilterQuery<IInspectionTarget> = { campaignId: campaign._id };
+    if (neighborhoodId) base.neighborhoodId = neighborhoodId;
+    const targets = await InspectionTarget.find(scopedTargetFilter(actorUser, base)).select(
+        "resultStatus",
+    );
+    const counts: Record<string, number> = {
+        totalHouses: targets.length,
+        pass: 0,
+        fail: 0,
+        unchecked: 0,
+        needsSupplement: 0,
+        pending: 0,
+        draft: 0,
+        submitted: 0,
+        verified: 0,
+    };
+    for (const target of targets) {
+        const key = target.resultStatus.toLowerCase();
+        if (key in counts) counts[key] += 1;
+        if (target.resultStatus === "PENDING" || target.resultStatus === "DRAFT") {
+            counts.unchecked += 1;
+        }
+        if (["REQUEST_REVISION", "FIELD_CHECK_REQUIRED"].includes(target.resultStatus)) {
+            counts.needsSupplement += 1;
+        }
+    }
+    const results = await InspectionResult.find({
+        targetId: { $in: targets.map(target => target._id) },
+        status: "VERIFIED",
+    }).select("outcome");
+    for (const result of results) {
+        if (result.outcome === "PASS") counts.pass += 1;
+        else if (result.outcome === "FAIL") counts.fail += 1;
+        else if (result.outcome === "NEEDS_SUPPLEMENT") counts.needsSupplement += 1;
+    }
+    return counts;
+}
+
+export async function remindInspectionTargets(
+    actorUser: IUser,
+    campaignId: string,
+    input: RemindInspectionInput,
+) {
+    await requirePermission(actorUser, "inspections.assign");
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    assertCampaignExecutable(campaign);
+    const base: FilterQuery<IInspectionTarget> = {
+        campaignId: campaign._id,
+        resultStatus: { $ne: "VERIFIED" },
+    };
+    if (input.targetIds) base._id = { $in: input.targetIds };
+    const targets = await InspectionTarget.find(scopedTargetFilter(actorUser, base));
+    if (input.targetIds && targets.length !== new Set(input.targetIds).size) {
+        throw new HttpError("Một hoặc nhiều Nhà số nằm ngoài phạm vi được nhắc", 403);
+    }
+    const ownerIds = await getActingOwnerUserIdsForHouses(targets.map(target => target.houseId));
+    const collaboratorIds = targets
+        .map(target => target.assignedCollaboratorUserId)
+        .filter(Boolean) as Types.ObjectId[];
+    const recipientIds = [...new Map(
+        [...ownerIds, ...collaboratorIds].map(id => [String(id), id]),
+    ).values()];
+    if (recipientIds.length > 0) {
+        await createNotification({
+            title: `Nhắc thực hiện: ${campaign.name}`,
+            body: input.message || `Vui lòng hoàn thành trước ${campaign.dueAt.toLocaleDateString("vi-VN")}.`,
+            type: "inspection.reminder",
+            targetUserIds: recipientIds,
+            relatedModel: "InspectionCampaign",
+            relatedId: campaign._id,
+            createdBy: actorUser._id,
+        });
+    }
+    return { targetCount: targets.length, recipientCount: recipientIds.length };
+}
+
+function resolveSubmissionNeighborhood(
+    actorUser: IUser,
+    requestedNeighborhoodId?: string,
+): string {
+    if (requestedNeighborhoodId) {
+        if (
+            !actorUser.roles.includes("admin") &&
+            !actorNeighborhoodIds(actorUser).includes(requestedNeighborhoodId)
+        ) {
+            throw new HttpError("Tổ dân phố nằm ngoài phạm vi được phân công", 403);
+        }
+        return requestedNeighborhoodId;
+    }
+    const ids = actorNeighborhoodIds(actorUser);
+    if (ids.length !== 1) {
+        throw new HttpError("Vui lòng chọn Tổ dân phố cần nộp tổng hợp", 422);
+    }
+    return ids[0];
+}
+
+export async function submitInspectionToWard(
+    actorUser: IUser,
+    campaignId: string,
+    input: SubmitInspectionToWardInput,
+) {
+    await requirePermission(actorUser, "inspections.submit_to_ward");
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    assertCampaignExecutable(campaign);
+    const neighborhoodId = resolveSubmissionNeighborhood(actorUser, input.neighborhoodId);
+    const targetExists = await InspectionTarget.exists({ campaignId, neighborhoodId });
+    if (!targetExists) throw new HttpError("Chiến dịch không giao Nhà số cho Tổ dân phố này", 404);
+    const summary = await getInspectionSummary(actorUser, campaignId, neighborhoodId);
+    const submission = {
+        neighborhoodId: new Types.ObjectId(neighborhoodId),
+        submittedByUserId: actorUser._id as Types.ObjectId,
+        submittedAt: new Date(),
+        summary,
+    };
+    const existingIndex = campaign.neighborhoodSubmissions.findIndex(
+        item => String(item.neighborhoodId) === neighborhoodId,
+    );
+    if (existingIndex >= 0) campaign.neighborhoodSubmissions[existingIndex] = submission;
+    else campaign.neighborhoodSubmissions.push(submission);
+    campaign.markModified("neighborhoodSubmissions");
+    await campaign.save();
+    await createNotification({
+        title: `Tổ dân phố đã nộp tổng hợp: ${campaign.name}`,
+        body: `Đã tổng hợp ${summary.totalHouses} Nhà số, ${summary.verified} kết quả đã xác minh.`,
+        type: "inspection.submitted_to_ward",
+        targetUserIds: [campaign.createdByWardUserId],
+        relatedModel: "InspectionCampaign",
+        relatedId: campaign._id,
+        createdBy: actorUser._id,
+    });
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.submitted_to_ward",
+        targetModel: "InspectionCampaign",
+        targetId: campaign._id,
+        metadata: { campaignId, neighborhoodId, summary },
+    });
+    return submission;
+}
+
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"];
+
+export async function uploadInspectionAttachment(
+    actorUser: IUser,
+    resultId: string,
+    file: File,
+) {
+    await requirePermission(actorUser, "inspections.execute");
+    const result = await InspectionResult.findById(resultId);
+    if (!result) throw new HttpError("Không tìm thấy kết quả rà soát", 404);
+    const target = await scopedTarget(actorUser, String(result.targetId));
+    const campaign = await campaignForTarget(target);
+    assertCampaignExecutable(campaign);
+    if (!MUTABLE_RESULT_STATUSES.includes(result.status)) {
+        throw new HttpError("Không thể thêm minh chứng vào kết quả đã gửi hoặc xác minh", 409);
+    }
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        throw new HttpError("Tệp vượt quá dung lượng cho phép (tối đa 10MB)", 400);
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+        throw new HttpError("Chỉ chấp nhận JPG, PNG hoặc PDF", 400);
+    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(
+        buffer,
+        file.name,
+        `inspections/${String(campaign._id)}/${resultId}`,
+    );
+    const asset = await FileAsset.create({
+        name: file.name,
+        url,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        category: "attachment",
+        relatedModel: "InspectionResult",
+        relatedId: result._id,
+        isPublic: false,
+        audienceAll: false,
+        targetRoles: [],
+        uploadedBy: actorUser._id,
+    });
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.attachment.upload",
+        targetModel: "InspectionResult",
+        targetId: result._id,
+        metadata: { fileAssetId: String(asset._id), name: file.name },
+    });
+    return asset;
+}

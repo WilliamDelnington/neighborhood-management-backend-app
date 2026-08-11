@@ -50,6 +50,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // trong Nha (xem resolveHouseRoleRecipientIds/resolveHouseLeaderRecipientIds
         // trong requestService.ts) - truoc day requests.create chi co secretary.
         "requests.create",
+        "inspections.read",
+        "inspections.execute",
+        "inspections.assign",
+        "inspections.verify",
+        "inspections.submit_to_ward",
         // Du dieu kien duoc chon lam nguoi phu trach khi bi thu gui yeu cau
         // loai "Khac" (vd van ban/giay to hanh chinh) - thieu quyen nay thi
         // to truong khong hien ra trong bo chon nguoi nhan cho loai yeu cau
