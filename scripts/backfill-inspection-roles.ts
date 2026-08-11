@@ -11,6 +11,24 @@ async function main() {
 
     const roles = [
         {
+            key: "secretary",
+            name: "Bí thư Đảng ủy Phường/xã",
+            permissions: [
+                "inspections.read",
+                "inspections.create",
+                "inspections.manage",
+            ],
+        },
+        {
+            key: "people_committee_official",
+            name: "Cán bộ UBND Phường/xã",
+            permissions: [
+                "inspections.read",
+                "inspections.create",
+                "inspections.manage",
+            ],
+        },
+        {
             key: "neighborhood_coleader",
             name: "Tổ phó",
             permissions: [

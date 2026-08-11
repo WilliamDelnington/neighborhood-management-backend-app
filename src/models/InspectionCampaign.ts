@@ -15,6 +15,8 @@ export interface IInspectionCampaign extends Document {
     startAt: Date;
     dueAt: Date;
     status: InspectionCampaignStatus;
+    wardCode?: number;
+    wardName?: string;
     createdByWardUserId: mongoose.Types.ObjectId;
     neighborhoodSubmissions: Array<{
         neighborhoodId: mongoose.Types.ObjectId;
@@ -74,6 +76,8 @@ const InspectionCampaignSchema = new Schema<IInspectionCampaign>(
             default: "DRAFT",
             index: true,
         },
+        wardCode: { type: Number, index: true },
+        wardName: { type: String, trim: true },
         createdByWardUserId: {
             type: Schema.Types.ObjectId,
             ref: "User",

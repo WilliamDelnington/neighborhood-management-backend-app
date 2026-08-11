@@ -305,6 +305,8 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         label: "Rà soát / chiến dịch",
         permissions: [
             { key: "inspections.read", label: "Xem chiến dịch và kết quả rà soát" },
+            { key: "inspections.create", label: "Tạo chiến dịch rà soát của Phường" },
+            { key: "inspections.manage", label: "Triển khai, khóa và kết thúc chiến dịch" },
             { key: "inspections.execute", label: "Thực hiện rà soát tại Nhà số" },
             { key: "inspections.assign", label: "Giao Nhà số và gửi biểu mẫu tự khai" },
             { key: "inspections.verify", label: "Xác minh kết quả rà soát" },

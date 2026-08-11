@@ -1,6 +1,7 @@
 import { Types, type FilterQuery } from "mongoose";
 import {
     FileAsset,
+    HouseRecord,
     InspectionAnswer,
     InspectionCampaign,
     InspectionResult,
@@ -24,6 +25,7 @@ import type {
 } from "@/types";
 import type {
     AssignInspectionTargetsInput,
+    CreateInspectionCampaignInput,
     InspectionReviewInput,
     RemindInspectionInput,
     SaveInspectionResultInput,
@@ -73,8 +75,28 @@ function scopedTargetFilter(
     };
 }
 
-function assertTargetInScope(actorUser: IUser, target: IInspectionTarget): void {
+function isCampaignCreator(actorUser: IUser, campaign: IInspectionCampaign): boolean {
+    return referenceId(campaign.createdByWardUserId) === String(actorUser._id);
+}
+
+function scopedCampaignTargetFilter(
+    actorUser: IUser,
+    campaign: IInspectionCampaign,
+    filter: FilterQuery<IInspectionTarget> = {},
+): FilterQuery<IInspectionTarget> {
+    if (isCampaignCreator(actorUser, campaign)) return filter;
+    return scopedTargetFilter(actorUser, filter);
+}
+
+async function assertTargetInScope(
+    actorUser: IUser,
+    target: IInspectionTarget,
+): Promise<void> {
     if (actorUser.roles.includes("admin")) return;
+    const campaign = await InspectionCampaign.findById(target.campaignId).select(
+        "createdByWardUserId",
+    );
+    if (campaign && isCampaignCreator(actorUser, campaign)) return;
     if (isCollaborator(actorUser)) {
         if (referenceId(target.assignedCollaboratorUserId) !== String(actorUser._id)) {
             throw new HttpError("Bạn không được phân công rà soát Nhà số này", 403);
@@ -104,18 +126,202 @@ async function campaignForTarget(target: IInspectionTarget) {
 async function scopedTarget(actorUser: IUser, targetId: string) {
     const target = await InspectionTarget.findById(targetId);
     if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
-    assertTargetInScope(actorUser, target);
+    await assertTargetInScope(actorUser, target);
     return target;
 }
 
 async function assertCampaignVisible(actorUser: IUser, campaignId: string) {
     const campaign = await InspectionCampaign.findById(campaignId);
     if (!campaign) throw new HttpError("Không tìm thấy chiến dịch", 404);
+    if (actorUser.roles.includes("admin") || isCampaignCreator(actorUser, campaign)) {
+        return campaign;
+    }
     const visible = await InspectionTarget.exists(
         scopedTargetFilter(actorUser, { campaignId: campaign._id }),
     );
     if (!visible) throw new HttpError("Chiến dịch nằm ngoài phạm vi được phân công", 403);
     return campaign;
+}
+
+function creationNeighborhoodFilter(actorUser: IUser): Record<string, unknown> {
+    const filter: Record<string, unknown> = { active: true };
+    if (actorUser.roles.includes("admin")) return filter;
+    if (!actorUser.wardCode) {
+        throw new HttpError(
+            "Tài khoản chưa được gán Phường/xã nên chưa thể tạo chiến dịch",
+            422,
+        );
+    }
+    filter.wardCode = actorUser.wardCode;
+    return filter;
+}
+
+export async function getInspectionCreationOptions(
+    actorUser: IUser,
+    selectedNeighborhoodIds: string[] = [],
+) {
+    await requirePermission(actorUser, "inspections.create");
+    const neighborhoodFilter = creationNeighborhoodFilter(actorUser);
+    const neighborhoods = await Neighborhood.find(neighborhoodFilter)
+        .sort({ sequence: 1, code: 1 })
+        .select("code name sequence wardCode wardName");
+    const allowedIds = new Set(neighborhoods.map(item => String(item._id)));
+    const selectedIds = [...new Set(selectedNeighborhoodIds)];
+    if (selectedIds.some(id => !allowedIds.has(id))) {
+        throw new HttpError("Có Tổ dân phố nằm ngoài Phường/xã được phân công", 403);
+    }
+    const houses = selectedIds.length > 0
+        ? await HouseRecord.find({ neighborhoodId: { $in: selectedIds } })
+              .sort({ code: 1, address: 1 })
+              .select("code address cluster neighborhoodId")
+        : [];
+    return { neighborhoods, houses };
+}
+
+export async function createInspectionCampaign(
+    actorUser: IUser,
+    input: CreateInspectionCampaignInput,
+) {
+    await requirePermission(actorUser, "inspections.create");
+    const neighborhoodIds = [...new Set(input.targetNeighborhoodIds)];
+    const neighborhoods = await Neighborhood.find({
+        ...creationNeighborhoodFilter(actorUser),
+        _id: { $in: neighborhoodIds },
+    }).select("_id wardCode wardName");
+    if (neighborhoods.length !== neighborhoodIds.length) {
+        throw new HttpError("Có Tổ dân phố nằm ngoài Phường/xã được phân công", 403);
+    }
+
+    const houseFilter: Record<string, unknown> = {
+        neighborhoodId: { $in: neighborhoodIds },
+    };
+    if (input.targetHouseIds) {
+        houseFilter._id = { $in: [...new Set(input.targetHouseIds)] };
+    }
+    const houses = await HouseRecord.find(houseFilter).select("_id neighborhoodId");
+    if (input.targetHouseIds && houses.length !== new Set(input.targetHouseIds).size) {
+        throw new HttpError("Có Nhà số không tồn tại hoặc không thuộc Tổ dân phố đã chọn", 422);
+    }
+    if (houses.length === 0) {
+        throw new HttpError("Không có Nhà số nào được chọn cho chiến dịch", 422);
+    }
+
+    const wardCodes = new Set(
+        neighborhoods.map(item => item.wardCode).filter(value => value !== undefined),
+    );
+    if (wardCodes.size > 1) {
+        throw new HttpError("Một chiến dịch chỉ được giao trong cùng một Phường/xã", 422);
+    }
+    const wardCode = actorUser.wardCode || [...wardCodes][0];
+    const wardName = actorUser.wardName || neighborhoods.find(item => item.wardName)?.wardName;
+    const campaign = await InspectionCampaign.create({
+        name: input.name,
+        purpose: input.purpose,
+        checklistTemplate: input.checklistTemplate,
+        allowSelfDeclaration: input.allowSelfDeclaration,
+        requiredEvidence: input.requiredEvidence,
+        startAt: new Date(input.startAt),
+        dueAt: new Date(input.dueAt),
+        status: "DRAFT",
+        wardCode,
+        wardName,
+        createdByWardUserId: actorUser._id,
+    });
+    try {
+        await InspectionTarget.insertMany(houses.map(house => ({
+            campaignId: campaign._id,
+            houseId: house._id,
+            neighborhoodId: house.neighborhoodId,
+            selfDeclarationStatus: "NOT_SENT",
+            resultStatus: "PENDING",
+        })));
+    } catch (err) {
+        await campaign.deleteOne();
+        throw err;
+    }
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.campaign.create",
+        targetModel: "InspectionCampaign",
+        targetId: campaign._id,
+        metadata: {
+            neighborhoodIds,
+            targetHouseCount: houses.length,
+            status: "DRAFT",
+        },
+    });
+    return getInspectionCampaignById(actorUser, String(campaign._id));
+}
+
+async function notifyCampaignDeployment(
+    actorUser: IUser,
+    campaign: IInspectionCampaign,
+) {
+    const neighborhoodIds = await InspectionTarget.distinct("neighborhoodId", {
+        campaignId: campaign._id,
+    });
+    const recipients = await User.find({
+        status: "active",
+        roles: { $in: ["neighborhood_leader", "neighborhood_coleader"] },
+        $or: [
+            { neighborhoodId: { $in: neighborhoodIds } },
+            { assignedNeighborhoodIds: { $in: neighborhoodIds } },
+        ],
+    }).select("_id");
+    if (recipients.length === 0) return;
+    await createNotification({
+        title: `Chiến dịch mới: ${campaign.name}`,
+        body: `Phường giao đợt rà soát, hạn hoàn thành ${campaign.dueAt.toLocaleDateString("vi-VN")}.`,
+        type: "inspection.campaign.deployed",
+        targetUserIds: recipients.map(item => item._id),
+        relatedModel: "InspectionCampaign",
+        relatedId: campaign._id,
+        createdBy: actorUser._id,
+    });
+}
+
+export type InspectionCampaignTransition = "publish" | "lock" | "reopen" | "close";
+
+export async function transitionInspectionCampaign(
+    actorUser: IUser,
+    campaignId: string,
+    action: InspectionCampaignTransition,
+) {
+    await requirePermission(actorUser, "inspections.manage");
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    if (!actorUser.roles.includes("admin") && !isCampaignCreator(actorUser, campaign)) {
+        throw new HttpError("Chỉ người tạo chiến dịch hoặc quản trị viên được quản lý", 403);
+    }
+    const transition = {
+        publish: { from: ["DRAFT"], to: "ACTIVE" },
+        lock: { from: ["ACTIVE"], to: "LOCKED" },
+        reopen: { from: ["LOCKED"], to: "ACTIVE" },
+        close: { from: ["ACTIVE", "LOCKED"], to: "CLOSED" },
+    }[action] as { from: string[]; to: "ACTIVE" | "LOCKED" | "CLOSED" };
+    if (!transition.from.includes(campaign.status)) {
+        throw new HttpError("Chuyển trạng thái chiến dịch không hợp lệ", 409);
+    }
+    if (action === "publish") {
+        const targetCount = await InspectionTarget.countDocuments({ campaignId });
+        if (targetCount === 0) throw new HttpError("Chiến dịch chưa có Nhà số mục tiêu", 422);
+    }
+    const updated = await InspectionCampaign.findOneAndUpdate(
+        { _id: campaignId, status: campaign.status },
+        { $set: { status: transition.to } },
+        { new: true },
+    );
+    if (!updated) throw new HttpError("Chiến dịch vừa được người khác cập nhật", 409);
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.campaign.status",
+        targetModel: "InspectionCampaign",
+        targetId: updated._id,
+        metadata: { from: campaign.status, to: transition.to, action },
+    });
+    if (action === "publish" || action === "reopen") {
+        await notifyCampaignDeployment(actorUser, updated);
+    }
+    return getInspectionCampaignById(actorUser, campaignId);
 }
 
 export async function listInspectionCampaigns(params: {
@@ -124,8 +330,15 @@ export async function listInspectionCampaigns(params: {
     limit: number;
     status?: string;
 }) {
-    const targetFilter = scopedTargetFilter(params.actorUser);
-    const campaignIds = await InspectionTarget.distinct("campaignId", targetFilter);
+    const [targetCampaignIds, ownCampaignIds] = await Promise.all([
+        InspectionTarget.distinct("campaignId", scopedTargetFilter(params.actorUser)),
+        InspectionCampaign.distinct("_id", {
+            createdByWardUserId: params.actorUser._id,
+        }),
+    ]);
+    const campaignIds = [...new Map(
+        [...targetCampaignIds, ...ownCampaignIds].map(id => [String(id), id]),
+    ).values()];
     const filter: Record<string, unknown> = { _id: { $in: campaignIds } };
     if (params.status) filter.status = params.status;
     const [items, total] = await Promise.all([
@@ -147,7 +360,11 @@ export async function listInspectionCampaigns(params: {
 
 export async function getInspectionCampaignById(actorUser: IUser, campaignId: string) {
     const campaign = await assertCampaignVisible(actorUser, campaignId);
-    const scopedTargets = scopedTargetFilter(actorUser, { campaignId: campaign._id });
+    const scopedTargets = scopedCampaignTargetFilter(
+        actorUser,
+        campaign,
+        { campaignId: campaign._id },
+    );
     const [summary, neighborhoodIds] = await Promise.all([
         getInspectionSummary(actorUser, campaignId),
         InspectionTarget.distinct("neighborhoodId", scopedTargets),
@@ -186,7 +403,7 @@ export async function listInspectionTargets(params: {
         if (campaign.dueAt >= new Date()) base._id = { $in: [] };
         else base.resultStatus = { $ne: "VERIFIED" };
     }
-    const filter = scopedTargetFilter(params.actorUser, base);
+    const filter = scopedCampaignTargetFilter(params.actorUser, campaign, base);
     const [targets, total] = await Promise.all([
         InspectionTarget.find(filter)
             .sort({ resultStatus: 1, createdAt: 1 })
@@ -217,7 +434,7 @@ export async function getInspectionTargetById(actorUser: IUser, targetId: string
         .populate("houseId", "code address cluster streetId neighborhoodId")
         .populate("assignedCollaboratorUserId", "displayName phone");
     if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
-    assertTargetInScope(actorUser, target);
+    await assertTargetInScope(actorUser, target);
     const [campaign, result] = await Promise.all([
         InspectionCampaign.findById(target.campaignId),
         InspectionResult.findOne({ targetId: target._id }).select("_id status outcome updatedAt"),
@@ -245,7 +462,9 @@ export async function assignInspectionTargets(
     if (targets.length !== new Set(input.targetIds).size) {
         throw new HttpError("Một hoặc nhiều Nhà số không thuộc chiến dịch", 404);
     }
-    targets.forEach(target => assertTargetInScope(actorUser, target));
+    for (const target of targets) {
+        await assertTargetInScope(actorUser, target);
+    }
 
     const collaborator = await User.findById(input.collaboratorUserId);
     if (!collaborator || collaborator.status !== "active") {
@@ -398,7 +617,7 @@ export async function getInspectionResult(actorUser: IUser, resultId: string) {
         .populate("houseId", "code address cluster neighborhoodId")
         .populate("assignedCollaboratorUserId", "displayName phone");
     if (!target) throw new HttpError("Không tìm thấy Nhà số cần rà soát", 404);
-    assertTargetInScope(actorUser, target);
+    await assertTargetInScope(actorUser, target);
     const [answers, attachments, campaign] = await Promise.all([
         InspectionAnswer.find({ resultId: result._id }).sort({ createdAt: 1 }),
         FileAsset.find({ relatedModel: "InspectionResult", relatedId: result._id })
@@ -581,9 +800,9 @@ export async function getInspectionSummary(
     const campaign = await assertCampaignVisible(actorUser, campaignId);
     const base: FilterQuery<IInspectionTarget> = { campaignId: campaign._id };
     if (neighborhoodId) base.neighborhoodId = neighborhoodId;
-    const targets = await InspectionTarget.find(scopedTargetFilter(actorUser, base)).select(
-        "resultStatus",
-    );
+    const targets = await InspectionTarget.find(
+        scopedCampaignTargetFilter(actorUser, campaign, base),
+    ).select("resultStatus");
     const counts: Record<string, number> = {
         totalHouses: targets.length,
         pass: 0,
@@ -630,7 +849,9 @@ export async function remindInspectionTargets(
         resultStatus: { $ne: "VERIFIED" },
     };
     if (input.targetIds) base._id = { $in: input.targetIds };
-    const targets = await InspectionTarget.find(scopedTargetFilter(actorUser, base));
+    const targets = await InspectionTarget.find(
+        scopedCampaignTargetFilter(actorUser, campaign, base),
+    );
     if (input.targetIds && targets.length !== new Set(input.targetIds).size) {
         throw new HttpError("Một hoặc nhiều Nhà số nằm ngoài phạm vi được nhắc", 403);
     }

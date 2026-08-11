@@ -11,11 +11,14 @@ import {
 } from "@/models";
 import {
     assignInspectionTargets,
+    createInspectionCampaign,
     createInspectionResult,
     listInspectionTargets,
     submitInspectionResult,
+    transitionInspectionCampaign,
     verifyInspectionResult,
 } from "@/services/inspectionService";
+import type { CreateInspectionCampaignInput } from "@/validators/inspection";
 import { createTestUser } from "../helpers";
 
 async function fixture(options: { requiredEvidence?: boolean; status?: "ACTIVE" | "LOCKED" } = {}) {
@@ -61,6 +64,89 @@ async function fixture(options: { requiredEvidence?: boolean; status?: "ACTIVE" 
 }
 
 describe("B07 inspection campaign security and workflow", () => {
+    it("chỉ tạo chiến dịch trong đúng Phường và chỉ chủ chiến dịch được phát hành", async () => {
+        const wardCode = 70001;
+        const creator = await createTestUser({
+            roles: ["secretary"],
+            wardCode,
+            wardName: "Phường kiểm thử",
+        });
+        const otherManager = await createTestUser({
+            roles: ["people_committee_official"],
+            wardCode,
+            wardName: "Phường kiểm thử",
+        });
+        const [insideNeighborhood, outsideNeighborhood] = await Neighborhood.create([
+            {
+                name: "Tổ trong Phường",
+                code: "INS-CREATE-IN",
+                sequence: 811,
+                wardCode,
+                wardName: "Phường kiểm thử",
+                active: true,
+            },
+            {
+                name: "Tổ ngoài Phường",
+                code: "INS-CREATE-OUT",
+                sequence: 812,
+                wardCode: 70002,
+                wardName: "Phường khác",
+                active: true,
+            },
+        ]);
+        const house = await HouseRecord.create({
+            code: "INS-CREATE-HOUSE",
+            cluster: "Cụm kiểm thử",
+            address: "12 đường kiểm thử",
+            neighborhoodId: insideNeighborhood._id,
+        });
+        const input: CreateInspectionCampaignInput = {
+            name: "Rà soát do Phường tạo",
+            purpose: "Kiểm tra quyền tạo và phạm vi dữ liệu",
+            checklistTemplate: [{
+                itemId: "fire-safety",
+                label: "Đảm bảo điều kiện PCCC",
+                inputType: "BOOLEAN",
+                required: true,
+            }],
+            allowSelfDeclaration: false,
+            requiredEvidence: true,
+            startAt: new Date(Date.now() + 60_000).toISOString(),
+            dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+            targetNeighborhoodIds: [String(insideNeighborhood._id)],
+            targetHouseIds: [String(house._id)],
+        };
+
+        const created = await createInspectionCampaign(creator, input);
+        expect(created.status).toBe("DRAFT");
+        expect(created.wardCode).toBe(wardCode);
+        expect(created.summary.totalHouses).toBe(1);
+        expect(await InspectionTarget.countDocuments({ campaignId: created._id })).toBe(1);
+
+        await expect(createInspectionCampaign(creator, {
+            ...input,
+            targetNeighborhoodIds: [String(outsideNeighborhood._id)],
+            targetHouseIds: undefined,
+        })).rejects.toMatchObject({ status: 403 });
+
+        await expect(transitionInspectionCampaign(
+            otherManager,
+            String(created._id),
+            "publish",
+        )).rejects.toMatchObject({ status: 403 });
+
+        const published = await transitionInspectionCampaign(
+            creator,
+            String(created._id),
+            "publish",
+        );
+        expect(published.status).toBe("ACTIVE");
+        expect(await AuditLog.countDocuments({
+            action: "inspection.campaign.status",
+            targetId: created._id,
+        })).toBe(1);
+    });
+
     it("không làm lộ hoặc cho giao target chéo Tổ dân phố", async () => {
         const data = await fixture();
         const list = await listInspectionTargets({
