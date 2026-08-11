@@ -15,6 +15,7 @@ import {
     createInspectionCampaign,
     createInspectionResult,
     getHouseInspectionSelfDeclaration,
+    getInspectionCampaignById,
     listMyInspectionSelfDeclarations,
     listInspectionTargets,
     requestInspectionRevision,
@@ -22,6 +23,7 @@ import {
     sendInspectionSelfDeclaration,
     submitHouseInspectionSelfDeclaration,
     submitInspectionResult,
+    submitInspectionToWard,
     transitionInspectionCampaign,
     verifyInspectionResult,
 } from "@/services/inspectionService";
@@ -73,6 +75,25 @@ async function fixture(options: { requiredEvidence?: boolean; status?: "ACTIVE" 
 }
 
 describe("B07 inspection campaign security and workflow", () => {
+    it("hiển thị đúng nơi nhận và trả về nơi nhận khi Tổ gửi tổng hợp lên Phường", async () => {
+        const data = await fixture();
+        const detail = await getInspectionCampaignById(
+            data.leaderA,
+            String(data.campaign._id),
+        );
+        expect(detail.submissionDestination.recipients.map(item => String(item._id)))
+            .toContain(String(data.wardUser._id));
+
+        const submitted = await submitInspectionToWard(
+            data.leaderA,
+            String(data.campaign._id),
+            { neighborhoodId: String(data.neighborhoodA._id) },
+        );
+        expect(submitted.destination.recipients.map(item => String(item._id)))
+            .toContain(String(data.wardUser._id));
+        expect(String(submitted.neighborhoodId)).toBe(String(data.neighborhoodA._id));
+    });
+
     it("cho chủ Nhà số mở, lưu và gửi biểu mẫu tự khai mà không cần quyền của Tổ", async () => {
         const data = await fixture();
         const owner = await createTestUser({ roles: ["house_owner"] });
@@ -186,6 +207,11 @@ describe("B07 inspection campaign security and workflow", () => {
         expect(created.status).toBe("DRAFT");
         expect(created.wardCode).toBe(wardCode);
         expect(created.summary.totalHouses).toBe(1);
+        expect(created.submissionDestination.recipients.map(item => String(item._id)))
+            .toEqual(expect.arrayContaining([
+                String(creator._id),
+                String(otherManager._id),
+            ]));
         expect(await InspectionTarget.countDocuments({ campaignId: created._id })).toBe(1);
 
         await expect(createInspectionCampaign(creator, {

@@ -14,9 +14,13 @@ import {
     Business,
     BusinessType,
     Company,
+    Request as RequestModel,
+    RequestRecipient,
+    User,
+    Neighborhood,
 } from "@/models";
 import { HttpError } from "@/lib/response";
-import { areaScopeFilter } from "@/lib/rbac";
+import { areaScopeFilter, wardScopeFilter } from "@/lib/rbac";
 import type { IUser } from "@/models/User";
 import { addSummarySheet, addTableSheet } from "@/lib/excelResponse";
 import { getSurveyResults } from "@/services/surveyService";
@@ -31,6 +35,10 @@ import {
     HOUSE_RECORD_STATUS_LABEL,
     HOUSE_USAGE_TYPE_LABEL,
     VERIFICATION_STATUS_LABEL,
+    LOAI_SO_HUU_LABEL,
+    REQUEST_TYPE_LABEL,
+    REQUEST_STATUS_LABEL,
+    REQUEST_PRIORITY_LABEL,
     type LoaiCuTru,
     type NhomPhanAnh,
     type TrangThaiPhanAnh,
@@ -41,6 +49,10 @@ import {
     type HouseRecordStatus,
     type HouseUsageType,
     type VerificationStatus,
+    type LoaiSoHuu,
+    type RequestType,
+    type RequestStatus,
+    type RequestPriority,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -829,7 +841,273 @@ export function buildSurveyResultReportWorkbook(
 }
 
 // ---------------------------------------------------------------------------
-// 8. Bao cao Nha so
+// Bao cao Ho dan
+// ---------------------------------------------------------------------------
+
+export type HouseholdReport = {
+    total: number;
+    totalMembers: number;
+    averageMembers: number;
+    needsSupportCount: number;
+    linkedToHouseCount: number;
+    withoutHouseCount: number;
+    byStatus: { status: string; label: string; count: number }[];
+    byOwnershipType: { ownershipType: string; label: string; count: number }[];
+    byCluster: { cluster: string; count: number }[];
+};
+
+export async function getHouseholdReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<HouseholdReport> {
+    const assignedNeighborhoodIds = [
+        actorUser.neighborhoodId,
+        ...(actorUser.assignedNeighborhoodIds || []),
+    ].filter(Boolean);
+    let scopeFilter: Record<string, unknown> = {};
+    if (!actorUser.roles.includes("admin")) {
+        if (assignedNeighborhoodIds.length > 0) {
+            scopeFilter = { neighborhoodId: { $in: assignedNeighborhoodIds } };
+        } else if (actorUser.wardCode) {
+            scopeFilter = await wardScopeFilter(actorUser);
+        } else {
+            scopeFilter = areaScopeFilter(actorUser);
+        }
+    }
+    const filter = {
+        ...scopeFilter,
+        ...dateRangeMatch("createdAt", params),
+    };
+    const matchStages = Object.keys(filter).length > 0 ? [{ $match: filter }] : [];
+    const [
+        total,
+        memberSummary,
+        needsSupportCount,
+        linkedToHouseCount,
+        byStatusRaw,
+        byOwnershipTypeRaw,
+        byClusterRaw,
+    ] = await Promise.all([
+        Household.countDocuments(filter),
+        Household.aggregate([
+            ...matchStages,
+            { $group: { _id: null, totalMembers: { $sum: "$memberCount" } } },
+        ]),
+        Household.countDocuments({ ...filter, needsSupport: true }),
+        Household.countDocuments({ ...filter, houseId: { $exists: true, $ne: null } }),
+        Household.aggregate([
+            ...matchStages,
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+        ]),
+        Household.aggregate([
+            ...matchStages,
+            { $group: { _id: "$ownershipType", count: { $sum: 1 } } },
+        ]),
+        Household.aggregate([
+            ...matchStages,
+            { $group: { _id: "$cluster", count: { $sum: 1 } } },
+            { $sort: { _id: 1 } },
+        ]),
+    ]);
+    const totalMembers = memberSummary[0]?.totalMembers || 0;
+    return {
+        total,
+        totalMembers,
+        averageMembers: total > 0 ? Number((totalMembers / total).toFixed(2)) : 0,
+        needsSupportCount,
+        linkedToHouseCount,
+        withoutHouseCount: total - linkedToHouseCount,
+        byStatus: byStatusRaw.map(row => ({
+            status: row._id,
+            label: VERIFICATION_STATUS_LABEL[row._id as VerificationStatus] || String(row._id),
+            count: row.count,
+        })),
+        byOwnershipType: byOwnershipTypeRaw.map(row => ({
+            ownershipType: row._id,
+            label: LOAI_SO_HUU_LABEL[row._id as LoaiSoHuu] || String(row._id),
+            count: row.count,
+        })),
+        byCluster: byClusterRaw.map(row => ({
+            cluster: row._id || "Chưa xác định",
+            count: row.count,
+        })),
+    };
+}
+
+export function buildHouseholdReportWorkbook(data: HouseholdReport): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    addSummarySheet(workbook, "Tong quan", [
+        { label: "Tổng số hộ dân", value: data.total },
+        { label: "Tổng thành viên", value: data.totalMembers },
+        { label: "Số thành viên trung bình/hộ", value: data.averageMembers },
+        { label: "Hộ cần hỗ trợ", value: data.needsSupportCount },
+        { label: "Hộ đã gắn Nhà số", value: data.linkedToHouseCount },
+        { label: "Hộ chưa gắn Nhà số", value: data.withoutHouseCount },
+    ]);
+    addTableSheet(workbook, "Theo trang thai", [
+        { header: "Trạng thái", key: "label", width: 28 },
+        { header: "Số hộ", key: "count", width: 15 },
+    ], data.byStatus);
+    addTableSheet(workbook, "Theo so huu", [
+        { header: "Hình thức", key: "label", width: 28 },
+        { header: "Số hộ", key: "count", width: 15 },
+    ], data.byOwnershipType);
+    addTableSheet(workbook, "Theo cum dan cu", [
+        { header: "Cụm dân cư", key: "cluster", width: 28 },
+        { header: "Số hộ", key: "count", width: 15 },
+    ], data.byCluster);
+    return workbook;
+}
+
+async function requestReportScopeFilter(actorUser: IUser): Promise<Record<string, unknown>> {
+    if (actorUser.roles.includes("admin")) return {};
+
+    const assignedNeighborhoodIds = [
+        actorUser.neighborhoodId,
+        ...(actorUser.assignedNeighborhoodIds || []),
+    ].filter(Boolean);
+    const hasAssignedNeighborhoodScope = assignedNeighborhoodIds.length > 0;
+    let neighborhoodIds = assignedNeighborhoodIds;
+    if (neighborhoodIds.length === 0 && actorUser.wardCode) {
+        neighborhoodIds = await Neighborhood.distinct("_id", { wardCode: actorUser.wardCode });
+    }
+
+    const houseFilter = neighborhoodIds.length > 0
+        ? { neighborhoodId: { $in: neighborhoodIds } }
+        : areaScopeFilter(actorUser);
+    const houseIds = Object.keys(houseFilter).length > 0
+        ? await HouseRecord.distinct("_id", houseFilter)
+        : [];
+
+    const userClauses: Record<string, unknown>[] = [{ _id: actorUser._id }];
+    if (neighborhoodIds.length > 0) {
+        userClauses.push(
+            { neighborhoodId: { $in: neighborhoodIds } },
+            { assignedNeighborhoodIds: { $in: neighborhoodIds } },
+        );
+    }
+    if (!hasAssignedNeighborhoodScope && actorUser.wardCode) {
+        userClauses.push({ wardCode: actorUser.wardCode });
+    }
+    const scopedUserIds = await User.distinct("_id", { $or: userClauses });
+    const receivedRequestIds = await RequestRecipient.distinct("requestId", {
+        userId: { $in: scopedUserIds },
+    });
+    const clauses: Record<string, unknown>[] = [
+        { createdBy: { $in: scopedUserIds } },
+        { _id: { $in: receivedRequestIds } },
+    ];
+    if (houseIds.length > 0) clauses.push({ houseId: { $in: houseIds } });
+    return { $or: clauses };
+}
+
+export type RequestReport = {
+    totalRequests: number;
+    totalRecipientAssignments: number;
+    resolvedAssignments: number;
+    overdueAssignments: number;
+    requestsWithoutRecipients: number;
+    averageResolutionDays: number;
+    byType: { type: string; label: string; count: number }[];
+    byPriority: { priority: string; label: string; count: number }[];
+    byStatus: { status: string; label: string; count: number }[];
+};
+
+export async function getRequestReport(
+    actorUser: IUser,
+    params: ReportDateRangeParams = {},
+): Promise<RequestReport> {
+    const filter = {
+        ...await requestReportScopeFilter(actorUser),
+        ...dateRangeMatch("createdAt", params),
+    };
+    const requests = await RequestModel.find(filter)
+        .select("type priority dueDate createdAt");
+    const requestIds = requests.map(request => request._id);
+    const recipients = requestIds.length > 0
+        ? await RequestRecipient.find({ requestId: { $in: requestIds } })
+              .select("requestId status resolvedAt createdAt")
+        : [];
+    const requestById = new Map(requests.map(request => [String(request._id), request]));
+    const typeCounts = new Map<string, number>();
+    const priorityCounts = new Map<string, number>();
+    const statusCounts = new Map<string, number>();
+    for (const request of requests) {
+        typeCounts.set(request.type, (typeCounts.get(request.type) || 0) + 1);
+        priorityCounts.set(request.priority, (priorityCounts.get(request.priority) || 0) + 1);
+    }
+    let overdueAssignments = 0;
+    let resolutionDurationMs = 0;
+    let resolvedWithDuration = 0;
+    const now = new Date();
+    for (const recipient of recipients) {
+        statusCounts.set(recipient.status, (statusCounts.get(recipient.status) || 0) + 1);
+        const request = requestById.get(String(recipient.requestId));
+        if (recipient.status !== "resolved" && request?.dueDate && request.dueDate < now) {
+            overdueAssignments += 1;
+        }
+        if (recipient.status === "resolved" && recipient.resolvedAt) {
+            resolutionDurationMs += recipient.resolvedAt.getTime() - recipient.createdAt.getTime();
+            resolvedWithDuration += 1;
+        }
+    }
+    const requestIdsWithRecipients = new Set(recipients.map(row => String(row.requestId)));
+    return {
+        totalRequests: requests.length,
+        totalRecipientAssignments: recipients.length,
+        resolvedAssignments: statusCounts.get("resolved") || 0,
+        overdueAssignments,
+        requestsWithoutRecipients: requests.filter(
+            request => !requestIdsWithRecipients.has(String(request._id)),
+        ).length,
+        averageResolutionDays: resolvedWithDuration > 0
+            ? Number((resolutionDurationMs / resolvedWithDuration / 86_400_000).toFixed(2))
+            : 0,
+        byType: [...typeCounts].map(([type, count]) => ({
+            type,
+            label: REQUEST_TYPE_LABEL[type as RequestType] || type,
+            count,
+        })),
+        byPriority: [...priorityCounts].map(([priority, count]) => ({
+            priority,
+            label: REQUEST_PRIORITY_LABEL[priority as RequestPriority] || priority,
+            count,
+        })),
+        byStatus: [...statusCounts].map(([status, count]) => ({
+            status,
+            label: REQUEST_STATUS_LABEL[status as RequestStatus] || status,
+            count,
+        })),
+    };
+}
+
+export function buildRequestReportWorkbook(data: RequestReport): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    addSummarySheet(workbook, "Tong quan", [
+        { label: "Tổng yêu cầu", value: data.totalRequests },
+        { label: "Tổng lượt giao", value: data.totalRecipientAssignments },
+        { label: "Lượt đã hoàn thành", value: data.resolvedAssignments },
+        { label: "Lượt quá hạn", value: data.overdueAssignments },
+        { label: "Yêu cầu chưa có người nhận", value: data.requestsWithoutRecipients },
+        { label: "Thời gian xử lý trung bình (ngày)", value: data.averageResolutionDays },
+    ]);
+    addTableSheet(workbook, "Theo loai", [
+        { header: "Loại yêu cầu", key: "label", width: 28 },
+        { header: "Số yêu cầu", key: "count", width: 15 },
+    ], data.byType);
+    addTableSheet(workbook, "Theo uu tien", [
+        { header: "Mức ưu tiên", key: "label", width: 28 },
+        { header: "Số yêu cầu", key: "count", width: 15 },
+    ], data.byPriority);
+    addTableSheet(workbook, "Theo trang thai", [
+        { header: "Trạng thái xử lý", key: "label", width: 28 },
+        { header: "Số lượt", key: "count", width: 15 },
+    ], data.byStatus);
+    return workbook;
+}
+
+// ---------------------------------------------------------------------------
+// Bao cao Nha so
 // ---------------------------------------------------------------------------
 
 export type HouseReport = {

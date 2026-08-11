@@ -289,6 +289,23 @@ async function notifyCampaignDeployment(
     });
 }
 
+async function getInspectionSubmissionRecipients(campaign: IInspectionCampaign) {
+    const creatorId = referenceId(campaign.createdByWardUserId);
+    const recipientClauses: Record<string, unknown>[] = [{ _id: creatorId }];
+    if (campaign.wardCode) {
+        recipientClauses.push({
+            wardCode: campaign.wardCode,
+            roles: { $in: ["secretary", "people_committee_official"] },
+        });
+    }
+    return User.find({
+        status: "active",
+        $or: recipientClauses,
+    })
+        .sort({ displayName: 1 })
+        .select("displayName roles wardCode wardName");
+}
+
 export type InspectionCampaignTransition = "publish" | "lock" | "reopen" | "close";
 
 export async function transitionInspectionCampaign(
@@ -369,19 +386,33 @@ export async function listInspectionCampaigns(params: {
 
 export async function getInspectionCampaignById(actorUser: IUser, campaignId: string) {
     const campaign = await assertCampaignVisible(actorUser, campaignId);
+    await campaign.populate([
+        { path: "createdByWardUserId", select: "displayName wardCode wardName" },
+        { path: "neighborhoodSubmissions.submittedByUserId", select: "displayName" },
+    ]);
     const scopedTargets = scopedCampaignTargetFilter(
         actorUser,
         campaign,
         { campaignId: campaign._id },
     );
-    const [summary, neighborhoodIds] = await Promise.all([
+    const [summary, neighborhoodIds, submissionRecipients] = await Promise.all([
         getInspectionSummary(actorUser, campaignId),
         InspectionTarget.distinct("neighborhoodId", scopedTargets),
+        getInspectionSubmissionRecipients(campaign),
     ]);
     const availableNeighborhoods = await Neighborhood.find({
         _id: { $in: neighborhoodIds },
     }).select("code name");
-    return { ...campaign.toObject(), summary, availableNeighborhoods };
+    return {
+        ...campaign.toObject(),
+        summary,
+        availableNeighborhoods,
+        submissionDestination: {
+            wardCode: campaign.wardCode,
+            wardName: campaign.wardName,
+            recipients: submissionRecipients,
+        },
+    };
 }
 
 export async function listInspectionTargets(params: {
@@ -1080,23 +1111,38 @@ export async function submitInspectionToWard(
     else campaign.neighborhoodSubmissions.push(submission);
     campaign.markModified("neighborhoodSubmissions");
     await campaign.save();
-    await createNotification({
-        title: `Tổ dân phố đã nộp tổng hợp: ${campaign.name}`,
-        body: `Đã tổng hợp ${summary.totalHouses} Nhà số, ${summary.verified} kết quả đã xác minh.`,
-        type: "inspection.submitted_to_ward",
-        targetUserIds: [campaign.createdByWardUserId],
-        relatedModel: "InspectionCampaign",
-        relatedId: campaign._id,
-        createdBy: actorUser._id,
-    });
+    const recipients = await getInspectionSubmissionRecipients(campaign);
+    if (recipients.length > 0) {
+        await createNotification({
+            title: `Tổ dân phố đã nộp tổng hợp: ${campaign.name}`,
+            body: `Đã tổng hợp ${summary.totalHouses} Nhà số, ${summary.verified} kết quả đã xác minh.`,
+            type: "inspection.submitted_to_ward",
+            targetUserIds: recipients.map(recipient => recipient._id),
+            relatedModel: "InspectionCampaign",
+            relatedId: campaign._id,
+            createdBy: actorUser._id,
+        });
+    }
     await writeAuditLog({
         actorId: actorUser._id,
         action: "inspection.submitted_to_ward",
         targetModel: "InspectionCampaign",
         targetId: campaign._id,
-        metadata: { campaignId, neighborhoodId, summary },
+        metadata: {
+            campaignId,
+            neighborhoodId,
+            summary,
+            recipientUserIds: recipients.map(recipient => String(recipient._id)),
+        },
     });
-    return submission;
+    return {
+        ...submission,
+        destination: {
+            wardCode: campaign.wardCode,
+            wardName: campaign.wardName,
+            recipients,
+        },
+    };
 }
 
 const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
