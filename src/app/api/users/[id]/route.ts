@@ -28,8 +28,15 @@ export async function PATCH(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        await requirePermission(actorUser, "users.update");
         const body = updateUserSchema.parse(await req.json());
+        const wardKeys = ["provinceCode", "provinceName", "wardCode", "wardName"];
+        const keys = Object.keys(body);
+        const hasWardUpdate = keys.some(key => wardKeys.includes(key));
+        const hasGeneralUpdate = keys.some(key => !wardKeys.includes(key));
+        if (hasWardUpdate) await requirePermission(actorUser, "wards.manage");
+        if (hasGeneralUpdate || !hasWardUpdate) {
+            await requirePermission(actorUser, "users.update");
+        }
         const user = await updateUserByAdmin(
             String(actorUser._id),
             params.id,

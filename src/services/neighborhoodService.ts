@@ -28,6 +28,13 @@ function ownNeighborhoodIds(user: IUser): string[] {
     return ids.map(id => String(id));
 }
 
+function isWardScoped(user: IUser): boolean {
+    return (
+        user.roles.includes("secretary") ||
+        user.roles.includes("people_committee_official")
+    );
+}
+
 export async function listNeighborhoods(params: {
     page: number;
     limit: number;
@@ -54,6 +61,14 @@ export async function listNeighborhoods(params: {
             ...(targetUser.assignedNeighborhoodIds || []),
         ].filter(Boolean);
         filter._id = { $in: ids };
+    } else if (
+        !params.actorUser.roles.includes("admin") &&
+        isWardScoped(params.actorUser)
+    ) {
+        // Bi thu va can bo UBND chi duoc thay cac to dan pho trong phuong/xa
+        // duoc gan tren tai khoan. Khong co wardCode thi tra ve danh sach rong,
+        // khong duoc mac dinh thanh toan he thong.
+        filter.wardCode = params.actorUser.wardCode ?? { $in: [] };
     } else if (
         params.actorUser.roles.includes("neighborhood_leader") ||
         params.actorUser.roles.includes("neighborhood_coleader")
@@ -113,11 +128,14 @@ export async function listNeighborhoods(params: {
 
 function assertNeighborhoodInScope(user: IUser, neighborhood: INeighborhood): void {
     if (user.roles.includes("admin")) return;
-    // Chi To truong/To pho bi gioi han ve to dan pho minh phu trach - dung
-    // HET dieu kien voi listNeighborhoods (xem comment o do). Cac vai tro khac
-    // co neighborhoods.read (secretary, PCO, house_owner...) khong co khai
-    // niem "to dan pho cua minh" nen duoc xem chi tiet bat ky to dan pho nao,
-    // giong nhu ho da thay ca danh sach khong loc gi.
+    if (isWardScoped(user)) {
+        if (!user.wardCode || neighborhood.wardCode !== user.wardCode) {
+            throw new HttpError("Ban khong co quyen xem to dan pho nay", 403);
+        }
+        return;
+    }
+    // To truong/To pho bi gioi han ve to dan pho minh phu trach - dung HET
+    // dieu kien voi listNeighborhoods (xem comment o do).
     if (
         !user.roles.includes("neighborhood_leader") &&
         !user.roles.includes("neighborhood_coleader")

@@ -81,6 +81,16 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "wards",
+        label: "Phường / xã",
+        permissions: [
+            {
+                key: "wards.manage",
+                label: "Phân công người quản lý phường/xã",
+            },
+        ],
+    },
+    {
         key: "streets",
         label: "Đường / phố",
         permissions: [

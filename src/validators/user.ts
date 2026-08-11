@@ -29,7 +29,7 @@ export const updateUserSchema = z
         // Vai tro la du lieu dong - tinh hop le (ton tai, active) duoc kiem tra
         // trong updateUserByAdmin, khong con the kiem bang z.enum tinh.
         primaryRole: z.string().min(1).optional(),
-        // Pham vi phuong/xa cho people_committee_official - xem ghi chu o
+        // Pham vi phuong/xa cho people_committee_official va secretary - xem
         // User.ts. Gui ca 4 truong cung luc (tu WardPicker), null de xoa gan.
         provinceCode: z.number().nullable().optional(),
         provinceName: z.string().nullable().optional(),

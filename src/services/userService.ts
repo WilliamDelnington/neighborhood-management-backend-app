@@ -278,6 +278,17 @@ export async function updateUserByAdmin(
     const user = await User.findById(targetId);
     if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
 
+    if (
+        patch.wardCode != null &&
+        !user.roles.includes("secretary") &&
+        !user.roles.includes("people_committee_official")
+    ) {
+        throw new HttpError(
+            "Chi co the gan phuong/xa cho Bi thu hoac Can bo UBND",
+            422,
+        );
+    }
+
     const statusChanged =
         patch.status !== undefined && patch.status !== user.status;
 
