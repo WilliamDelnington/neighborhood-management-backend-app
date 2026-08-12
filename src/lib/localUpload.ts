@@ -52,6 +52,31 @@ export function toAbsoluteUploadUrl(url: string, origin: string): string {
     return new URL(url, origin).toString();
 }
 
+/**
+ * Xac dinh origin cong khai de ghep vao url tuong doi cua file tai len (xem
+ * toAbsoluteUploadUrl). KHONG dung new URL(req.url).origin: server.ts dung
+ * custom server (khong truyen hostname/port vao next()), nen Next.js tu fallback
+ * ve "http://localhost:3000" cho moi request bat ke port thuc te dang lang nghe
+ * hay domain cong khai phia sau nginx - loi nay khien url file tai len tren moi
+ * moi truong (ke ca dev/prod that) deu bi ghi thanh localhost:3000.
+ * Thu tu uu tien: bien moi truong PUBLIC_API_ORIGIN (dat rieng cho tung moi
+ * truong, dang sau reverse proxy) > header X-Forwarded-Proto/Host (neu nginx co
+ * cau hinh forward) > origin cua chinh request (chi dung tam trong dev local
+ * chay truc tiep khong qua proxy).
+ */
+export function getPublicOrigin(req: Request): string {
+    const configured = process.env.PUBLIC_API_ORIGIN;
+    if (configured) return configured.replace(/\/+$/, "");
+
+    const forwardedProto = req.headers.get("x-forwarded-proto");
+    const forwardedHost = req.headers.get("x-forwarded-host");
+    if (forwardedProto && forwardedHost) {
+        return `${forwardedProto}://${forwardedHost}`;
+    }
+
+    return new URL(req.url).origin;
+}
+
 export async function deleteUploadedFile(url: string): Promise<void> {
     if (!url.startsWith("/uploads/")) return;
     const fullPath = path.join(UPLOADS_ROOT, url.slice("/uploads/".length));

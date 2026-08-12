@@ -8,7 +8,7 @@ import {
 import { Complaint } from "@/models";
 import { assertComplaintReadable } from "@/services/complaintService";
 import { listAttachments } from "@/services/attachmentService";
-import { toAbsoluteUploadUrl } from "@/lib/localUpload";
+import { toAbsoluteUploadUrl, getPublicOrigin } from "@/lib/localUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,7 @@ export async function GET(
         });
 
         const attachments = await listAttachments("Complaint", params.id);
-        const origin = new URL(req.url).origin;
+        const origin = getPublicOrigin(req);
         attachments.forEach(a => {
             a.url = toAbsoluteUploadUrl(a.url, origin);
         });

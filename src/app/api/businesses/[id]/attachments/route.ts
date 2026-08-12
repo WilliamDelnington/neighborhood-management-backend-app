@@ -4,7 +4,7 @@ import { requireUser, requirePermission } from "@/lib/rbac";
 import { Business, HouseRecord } from "@/models";
 import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import { listAttachments } from "@/services/attachmentService";
-import { toAbsoluteUploadUrl } from "@/lib/localUpload";
+import { toAbsoluteUploadUrl, getPublicOrigin } from "@/lib/localUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export async function GET(
         if (houseRecord) await assertHouseRecordInScope(user, houseRecord);
 
         const attachments = await listAttachments("Business", params.id);
-        const origin = new URL(req.url).origin;
+        const origin = getPublicOrigin(req);
         attachments.forEach(a => {
             a.url = toAbsoluteUploadUrl(a.url, origin);
         });

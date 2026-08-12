@@ -55,6 +55,29 @@ export function validateZaloWebhookConfig(): void {
 }
 
 /**
+ * Nem loi ngay luc khoi dong neu chay production ma thieu PUBLIC_API_ORIGIN -
+ * khi do getPublicOrigin (lib/localUpload.ts) se fallback ve origin cua chinh
+ * request phia sau nginx reverse proxy (thuong la "http://localhost:<port_noi_bo>"
+ * do server.ts khong biet domain cong khai), khien url file tai len tra ve
+ * cho client (FileAsset.url, attachment cua Complaint/Business/HouseRecord...)
+ * bi ghi sai host/port ma khong ai phat hien cho den luot nguoi dung dau tien
+ * mo file.
+ */
+export function validatePublicOriginConfig(): void {
+    if (
+        process.env.NODE_ENV === "production" &&
+        !process.env.PUBLIC_API_ORIGIN
+    ) {
+        throw new Error(
+            "Thieu PUBLIC_API_ORIGIN - can thiet de sinh dung url tuyet doi cho " +
+                "file tai len (xem lib/localUpload.ts getPublicOrigin) khi chay " +
+                "production sau reverse proxy. Dat vd " +
+                '"https://api.dev.quanlytodanpho.com" (dev) hoac domain that (prod).',
+        );
+    }
+}
+
+/**
  * Ten database duoc coi la du lieu that (production) - cac script ghi/xoa
  * hang loat (seed*, create-proposal-accounts...) tu choi chay neu MONGODB_URI
  * dang tro vao day, BAT KE NODE_ENV dat gi. Bo sung doc lap voi kiem tra
