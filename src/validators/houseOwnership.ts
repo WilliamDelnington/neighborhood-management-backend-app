@@ -5,10 +5,10 @@ import { isValidVnPhone } from "@/lib/phone";
 // ownerId (id User/Organization co san, chon qua picker o admin-web-app) hoac
 // phone (so dien thoai, dung o mini app khi house_owner tu moi mot tai khoan
 // da ton tai lam dong so huu/nguoi quan ly - xem
-// houseOwnershipService.resolveExistingOwnerId). phone CHI resolve tai khoan
-// da ton tai, KHONG tao moi (tao tai khoan thay nguoi khac can quyen
-// "users.create" rieng, xem houseRecordService.resolveOrCreateHouseOwner) -
-// nen chi ap dung cho ownerType="user".
+// houseOwnershipService.resolveExistingOwnerId). phone mac dinh CHI resolve
+// tai khoan da ton tai; neu kem password + displayName VA actor co quyen
+// "users.create", se tao tai khoan moi luon (TAM THOI dung phone+password
+// thay OTP - xem LoginPage.tsx) - nen chi ap dung cho ownerType="user".
 export const addHouseOwnershipSchema = z
     .object({
         ownerType: z.enum(OWNER_TYPE),
@@ -17,12 +17,23 @@ export const addHouseOwnershipSchema = z
             .string()
             .refine(isValidVnPhone, "So dien thoai khong hop le")
             .optional(),
+        // Chi dung khi tao tai khoan moi (phone chua co tai khoan) - bo qua
+        // neu phone da co tai khoan san.
+        displayName: z.string().min(1).optional(),
+        password: z
+            .string()
+            .min(6, "Mat khau phai co it nhat 6 ky tu")
+            .optional(),
         relationshipType: z.enum(HOUSE_OWNERSHIP_RELATIONSHIP_TYPES),
         reason: z.string().optional(),
     })
     .refine(data => !!data.ownerId || (data.ownerType === "user" && !!data.phone), {
         message: "Thieu id chu so huu/to chuc (hoac so dien thoai voi ca nhan)",
         path: ["ownerId"],
+    })
+    .refine(data => !data.password || !!data.displayName?.trim(), {
+        message: "Vui long nhap ten khi tao tai khoan moi",
+        path: ["displayName"],
     });
 export type AddHouseOwnershipInput = z.infer<typeof addHouseOwnershipSchema>;
 

@@ -3,12 +3,21 @@ import {
     apiSuccess,
     apiErrorFromException,
     paginationParams,
+    HttpError,
 } from "@/lib/response";
 import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
-import { createFileAssetSchema } from "@/validators/fileAsset";
+import { toAbsoluteUploadUrl } from "@/lib/localUpload";
+import {
+    createFileAssetSchema,
+    createFileAssetUploadMetaSchema,
+} from "@/validators/fileAsset";
 
 export const dynamic = "force-dynamic";
-import { createFileAsset, listFileAssets } from "@/services/fileAssetService";
+import {
+    createFileAsset,
+    createFileAssetFromUpload,
+    listFileAssets,
+} from "@/services/fileAssetService";
 
 // GET la endpoint cong khai (nguoi dan xem "Bieu mau" khong can dang nhap).
 // Neu co session hop le voi quyen files.read va truyen ?admin=1, tra ve toan
@@ -43,6 +52,13 @@ export async function GET(req: Request) {
             publicOnly,
             viewerRoles,
         });
+        // File tai len truc tiep co url tuong doi ("/uploads/..."); can chuyen
+        // ve tuyet doi vi endpoint nay duoc goi ca tu Mini App (khong co helper
+        // resolveAssetUrl phia client nhu admin web).
+        const origin = new URL(req.url).origin;
+        result.items.forEach(item => {
+            item.url = toAbsoluteUploadUrl(item.url, origin);
+        });
         return apiSuccess(result);
     } catch (err) {
         return apiErrorFromException(err);
@@ -54,6 +70,31 @@ export async function POST(req: Request) {
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "files.create");
+
+        // Client gui multipart/form-data khi tai file nhi phan len truc tiep
+        // (xem uploadFileAsset o frontend); nguoc lai la JSON voi url co san.
+        const contentType = req.headers.get("content-type") || "";
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await req.formData();
+            const file = formData.get("file");
+            if (!(file instanceof File)) {
+                throw new HttpError("Thieu file can tai len", 400);
+            }
+            const meta = createFileAssetUploadMetaSchema.parse({
+                name: formData.get("name") || undefined,
+                description: formData.get("description") || undefined,
+                category: formData.get("category") || undefined,
+                isPublic: formData.get("isPublic") === "true",
+                audienceAll: formData.get("audienceAll") !== "false",
+                targetRoles: formData.getAll("targetRoles").map(String),
+            });
+            const fileAsset = await createFileAssetFromUpload(
+                String(actorUser._id),
+                file,
+                meta,
+            );
+            return apiSuccess(fileAsset, "Them file thanh cong", 201);
+        }
 
         const body = createFileAssetSchema.parse(await req.json());
         const fileAsset = await createFileAsset(String(actorUser._id), body);

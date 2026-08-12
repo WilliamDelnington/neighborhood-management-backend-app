@@ -7,6 +7,7 @@ import {
 } from "@/models";
 import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
+import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
@@ -149,15 +150,35 @@ export async function searchResidentUsers(
  * mat khau ban dau - cung logic tao User voi authService.registerWithPhone
  * (tu dang ky), chi khac actor va co ghi nhan createdBy. Chu ho dang nhap
  * bang chinh so dien thoai/mat khau nay (xem authService.loginWithPhone).
+ *
+ * input.role khac "house_owner" (to truong/to pho/cong tac vien To dan pho)
+ * CHI admin moi duoc tao - day la cac vai tro pham vi rong hoac can gan vao
+ * mot To dan pho cu the, khong the giao pho khong kiem soat cho bat ky ai co
+ * "users.create" (vd chinh to truong) nhu voi house_owner (xem
+ * validators/user.ts CREATABLE_STAFF_ROLES). Tai khoan tao ra o day CHUA duoc
+ * gan vao To dan pho nao - phai lien ket rieng qua man "Gan to truong/to pho/
+ * cong tac vien" tren trang Tổ dân phố sau khi tao (xem neighborhoodService.ts).
  */
 export async function createHouseOwnerByStaff(
     actorUser: IUser,
     input: CreateHouseOwnerInput,
 ) {
+    const role = input.role || "house_owner";
+    if (role !== "house_owner" && !actorUser.roles.includes("admin")) {
+        throw new HttpError(
+            "Chi quan tri vien moi duoc tao tai khoan voi vai tro nay",
+            403,
+        );
+    }
+
     const existing = await User.findOne({ phone: input.phone });
     if (existing) {
         throw new HttpError("So dien thoai da duoc su dung", 409);
     }
+
+    const passwordHash = input.password
+        ? await hashPassword(input.password)
+        : undefined;
 
     let user: IUser;
     try {
@@ -165,8 +186,9 @@ export async function createHouseOwnerByStaff(
             phone: input.phone,
             displayName: input.displayName,
             address: input.address,
-            roles: ["house_owner"],
-            primaryRole: "house_owner",
+            passwordHash,
+            roles: [role],
+            primaryRole: role,
             status: "active",
             createdBy: actorUser._id,
         });
@@ -182,6 +204,7 @@ export async function createHouseOwnerByStaff(
         action: "user.create_house_owner",
         targetModel: "User",
         targetId: user._id,
+        metadata: { role },
     });
 
     return sanitizeUser(user);

@@ -17,7 +17,7 @@ describe("OTP: cong tac AUTH_OTP_ENABLED", () => {
         const reqRes = await otpRequestRoute(
             makeRequest("/api/auth/otp/request", {
                 method: "POST",
-                body: { phone: "0912340001", purpose: "register" },
+                body: { phone: "0912340001" },
             }),
         );
         expect(reqRes.status).toBe(404);
@@ -25,11 +25,7 @@ describe("OTP: cong tac AUTH_OTP_ENABLED", () => {
         const verifyRes = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: {
-                    phone: "0912340001",
-                    purpose: "register",
-                    code: "123456",
-                },
+                body: { phone: "0912340001", code: "123456" },
             }),
         );
         expect(verifyRes.status).toBe(404);
@@ -49,22 +45,17 @@ describe("OTP: cong tac AUTH_OTP_ENABLED", () => {
     });
 });
 
-describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
-    it("dang ky bang OTP: xac thuc dung ma tao tai khoan moi va tra ve token, khong lo passwordHash/ma OTP", async () => {
+describe("OTP: luong thong nhat khi AUTH_OTP_ENABLED=true (server tu quyet dinh dang nhap/dang ky, client khong gui purpose)", () => {
+    it("so chua co tai khoan: requestOtp LUON tao challenge + tra ve ma thuc (khong con im lang nhu truoc), verify tao tai khoan moi", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340011";
-        const { code } = await requestOtp(phone, "register");
+        const { code } = await requestOtp(phone);
         expect(code).toMatch(/^\d{6}$/);
 
         const res = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: {
-                    phone,
-                    purpose: "register",
-                    code,
-                    displayName: "Người dùng OTP",
-                },
+                body: { phone, code, displayName: "Người dùng OTP" },
             }),
         );
         const json = await readJson(res);
@@ -77,53 +68,57 @@ describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
         expect(json.data.user.codeHash).toBeUndefined();
     });
 
-    it("dang ky lai bang OTP cho so da co tai khoan bi tu choi (409), va requestOtp khong tao challenge moi (chong do tim tai khoan)", async () => {
+    it("sau khi da co tai khoan, requestOtp cho cung so tu dong chuyen sang dang nhap (khong the dang ky trung)", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340012";
-        const first = await requestOtp(phone, "register");
+        const first = await requestOtp(phone);
         await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "register", code: first.code },
+                body: { phone, code: first.code },
             }),
         );
 
-        const second = await requestOtp(phone, "register");
-        expect(second.code).toBe("");
+        const second = await requestOtp(phone);
+        expect(second.code).toMatch(/^\d{6}$/);
+        const challenge = await OtpChallenge.findOne({}).sort({
+            createdAt: -1,
+        });
+        expect(challenge!.purpose).toBe("login");
     });
 
-    it("dang nhap bang OTP cho so chua co tai khoan: requestOtp khong tao challenge (chong do tim tai khoan), verify bao loi chung", async () => {
+    it("so chua co tai khoan nhung nguoi dung bam 'dang nhap': van tu dong dang ky thanh cong (khong con bi im lang tu choi)", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340013";
-        const { code } = await requestOtp(phone, "login");
-        expect(code).toBe("");
+        const { code } = await requestOtp(phone);
+        expect(code).toMatch(/^\d{6}$/);
 
         const res = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "login", code: "000000" },
+                body: { phone, code },
             }),
         );
-        expect(res.status).toBe(401);
+        expect(res.status).toBe(200);
     });
 
     it("dang nhap bang OTP cho tai khoan da co: xac thuc dung ma thanh cong", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340014";
-        const registerCode = (await requestOtp(phone, "register")).code;
+        const registerCode = (await requestOtp(phone)).code;
         await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "register", code: registerCode },
+                body: { phone, code: registerCode },
             }),
         );
 
-        const loginCode = (await requestOtp(phone, "login")).code;
+        const loginCode = (await requestOtp(phone)).code;
         expect(loginCode).toMatch(/^\d{6}$/);
         const res = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "login", code: loginCode },
+                body: { phone, code: loginCode },
             }),
         );
         const json = await readJson(res);
@@ -134,17 +129,17 @@ describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
     it("ma OTP sai bi tu choi (401) va tang dan attempts tren chinh ban ghi challenge", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340015";
-        await requestOtp(phone, "register");
+        await requestOtp(phone);
 
         const res = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "register", code: "000000" },
+                body: { phone, code: "000000" },
             }),
         );
         expect(res.status).toBe(401);
 
-        const challenge = await OtpChallenge.findOne({ purpose: "register" }).sort({
+        const challenge = await OtpChallenge.findOne({}).sort({
             createdAt: -1,
         });
         expect(challenge!.attempts).toBe(1);
@@ -153,13 +148,13 @@ describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
     it("vuot qua so lan thu toi da tren mot challenge -> 429 ke ca lan sau nhap dung ma", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340016";
-        const { code } = await requestOtp(phone, "register");
+        const { code } = await requestOtp(phone);
 
         for (let i = 0; i < 5; i += 1) {
             const res = await otpVerifyRoute(
                 makeRequest("/api/auth/otp/verify", {
                     method: "POST",
-                    body: { phone, purpose: "register", code: "000000" },
+                    body: { phone, code: "000000" },
                 }),
             );
             expect(res.status).toBe(401);
@@ -168,7 +163,7 @@ describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
         const blockedRes = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "register", code },
+                body: { phone, code },
             }),
         );
         expect(blockedRes.status).toBe(429);
@@ -177,16 +172,16 @@ describe("OTP: luong dang ky/dang nhap khi AUTH_OTP_ENABLED=true", () => {
     it("ma OTP het han bi tu choi", async () => {
         process.env.AUTH_OTP_ENABLED = "true";
         const phone = "0912340017";
-        const { code } = await requestOtp(phone, "register");
+        const { code } = await requestOtp(phone);
         await OtpChallenge.updateMany(
-            { purpose: "register" },
+            {},
             { $set: { expiresAt: new Date(Date.now() - 1000) } },
         );
 
         const res = await otpVerifyRoute(
             makeRequest("/api/auth/otp/verify", {
                 method: "POST",
-                body: { phone, purpose: "register", code },
+                body: { phone, code },
             }),
         );
         expect(res.status).toBe(401);

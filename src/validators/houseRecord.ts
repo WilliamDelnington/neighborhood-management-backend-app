@@ -11,9 +11,11 @@ import { isValidVnPhone } from "@/lib/phone";
 // Thong tin mot ca nhan (chu nha hoac nguoi dai dien to chuc) duoc nhan vien
 // (to truong) nhap kem luc tao nha so - dung lam input tao tai khoan User
 // (resolveOrCreateHouseOwner) HOAC ban ghi Person khai bao khong tai khoan
-// (resolveOrCreatePersonOwner), tuy co/khong tick "Tao tai khoan". Khong co
-// password: tai khoan tao ra (neu co) chua co mat khau, tu dat/dang nhap sau
-// (OTP/Zalo).
+// (resolveOrCreatePersonOwner), tuy co/khong tick "Tao tai khoan".
+// password: TAM THOI cho phep nhan vien dat mat khau luc tao (thay vi bat
+// buoc OTP/Zalo, hien chua san sang do can duyet mau tin truoc - xem
+// LoginPage.tsx) - chi dung khi tao tai khoan MOI (khong ghi de mat khau tai
+// khoan da ton tai, xem houseRecordService.resolveOrCreateHouseOwner).
 const personInfoSchema = z.object({
     displayName: z.string().min(1, "Ten khong duoc de trong"),
     phone: z
@@ -25,6 +27,10 @@ const personInfoSchema = z.object({
         .email("Email khong hop le")
         .optional()
         .or(z.literal("")),
+    password: z
+        .string()
+        .min(6, "Mat khau phai co it nhat 6 ky tu")
+        .optional(),
 });
 export type CreateHouseRecordOwnerInput = z.infer<typeof personInfoSchema>;
 

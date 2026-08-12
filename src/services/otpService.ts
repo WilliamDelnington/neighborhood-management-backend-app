@@ -10,6 +10,8 @@ import {
 import { otpRequestRateLimiter, otpVerifyRateLimiter } from "@/lib/rateLimit";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUserWithPermissions } from "@/services/authService";
+import { sendEsmsSms } from "@/lib/esms";
+import { sendEsmsZns } from "@/lib/esmsZns";
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_CODE_LENGTH = 6;
@@ -26,17 +28,50 @@ export type OtpDeliveryAdapter = {
 };
 
 /**
- * Stub: chua co nha cung cap SMS/Zalo ZNS that duoc tich hop (can dang ky va
- * duoc duyet). Khi co day du:
- * 1. Doi cac bien env cua nha cung cap da chon vao .env.
- * 2. Goi API gui SMS/ZNS that voi phone + code.
- * 3. Tra ve { ok:false } thay vi throw neu gui that bai, de requestOtp co the
- *    quyet dinh co bao loi cho nguoi dung hay khong ma khong lam lo thong tin.
- * Ngoai production, log ma ra console de tien test local (khong bao gio log
- * o production, va khong bao gio log so dien thoai o dang chua che).
+ * Gui OTP qua Zalo ZNS neu da cau hinh du ESMS_ZALO_OA_ID/ESMS_ZALO_TEMPLATE_ID
+ * (xem lib/esmsZns.ts) - uu tien hon SMS thuong vi khong bi nha mang loc nhu
+ * SMS dau so co dinh (SmsType=8). Neu chua co ZNS, roi ve eSMS SMS thuong neu
+ * da cau hinh ESMS_API_KEY/ESMS_SECRET_KEY (xem lib/esms.ts); neu chua co ca
+ * hai, roi lai stub cu: log ma ra console ngoai production de tien test
+ * local, tra ve { ok:false } o production (khong bao gio log o production, va
+ * khong bao gio log so dien thoai o dang chua che).
  */
 export const otpDeliveryAdapter: OtpDeliveryAdapter = {
     async send(phone, code) {
+        if (
+            process.env.ESMS_API_KEY &&
+            process.env.ESMS_SECRET_KEY &&
+            process.env.ESMS_ZALO_OA_ID &&
+            process.env.ESMS_ZALO_TEMPLATE_ID
+        ) {
+            const result = await sendEsmsZns(phone, code);
+            if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.log(
+                    `[otp-zns] Gui OTP toi ${maskPhone(phone)}: ${
+                        result.ok
+                            ? "OK"
+                            : `LOI (CodeResult=${result.codeResult ?? "?"})`
+                    } - ma: ${code}`,
+                );
+            }
+            return result;
+        }
+        if (process.env.ESMS_API_KEY && process.env.ESMS_SECRET_KEY) {
+            const content = `Ma xac thuc cua ban la: ${code}. Khong chia se ma nay cho bat ky ai.`;
+            const result = await sendEsmsSms(phone, content);
+            if (process.env.NODE_ENV !== "production") {
+                // eslint-disable-next-line no-console
+                console.log(
+                    `[otp-esms] Gui OTP toi ${maskPhone(phone)}: ${
+                        result.ok
+                            ? "OK"
+                            : `LOI (CodeResult=${result.codeResult ?? "?"})`
+                    } - ma: ${code}`,
+                );
+            }
+            return result;
+        }
         if (process.env.NODE_ENV !== "production") {
             // eslint-disable-next-line no-console
             console.log(`[otp-stub] Ma OTP cho ${maskPhone(phone)}: ${code}`);
@@ -51,35 +86,31 @@ export const otpDeliveryAdapter: OtpDeliveryAdapter = {
 };
 
 /**
- * Tao va "gui" mot ma OTP moi cho (phone, purpose). Khong tiet lo qua ket qua
- * tra ve viec so dien thoai da dang ky hay chua: neu trang thai khong phu hop
- * (purpose=register nhung so da dang ky, hoac purpose=login nhung chua co tai
- * khoan), vAn tra ve nhu thanh cong nhung KHONG tao challenge / KHONG gui OTP -
- * tranh do tim so dien thoai da dang ky. `code` trong gia tri tra ve CHI danh
- * cho test goi truc tiep ham service (khong qua HTTP) - route KHONG BAO GIO
- * duoc dua truong nay vao response.
+ * Tao va gui mot ma OTP moi cho so dien thoai - KHONG nhan purpose tu client
+ * nua (truoc day co the bi dung de do tim so da dang ky hay chua, xem lich su
+ * git). Server tu quyet dinh purpose dua vao viec tai khoan da ton tai hay
+ * chua (login neu co, register neu chua) va LUON tao challenge + gui OTP thuc
+ * trong ca hai truong hop - client khong the phan biet duoc hai truong hop nay
+ * qua response, nen khong con do tim duoc so dien thoai da dang ky. `code`
+ * trong gia tri tra ve CHI danh cho test goi truc tiep ham service (khong qua
+ * HTTP) - route KHONG BAO GIO duoc dua truong nay vao response.
  */
-export async function requestOtp(
-    phone: string,
-    purpose: OtpPurpose,
-): Promise<{ code: string }> {
+export async function requestOtp(phone: string): Promise<{ code: string }> {
     const normalized = normalizePhone(phone);
-    otpRequestRateLimiter.check(`${purpose}:${normalized}`);
+    otpRequestRateLimiter.check(normalized);
 
     const existing = await User.findOne({ phone: normalized }).select("_id");
-    if (purpose === "register" && existing) return { code: "" };
-    if (purpose === "login" && !existing) return { code: "" };
+    const purpose: OtpPurpose = existing ? "login" : "register";
 
     const phoneHash = hashForLookup(normalized);
     const code = generateOtpCode();
     const codeHash = await hashPassword(code);
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
-    // Huy cac challenge dang cho cua cung (phone, purpose) - chi cho phep mot
-    // ma hieu luc tai mot thoi diem, tranh nham lan ma cu/ma moi.
+    // Huy cac challenge dang cho cua cung so dien thoai (bat ke purpose cu) -
+    // chi cho phep mot ma hieu luc tai mot thoi diem, tranh nham lan ma cu/moi.
     await OtpChallenge.deleteMany({
         phoneHash,
-        purpose,
         consumedAt: { $exists: false },
     });
     await OtpChallenge.create({ phoneHash, codeHash, purpose, expiresAt });
@@ -90,23 +121,22 @@ export async function requestOtp(
 }
 
 /**
- * Xac thuc ma OTP roi dang nhap (purpose=login, tai khoan phai da ton tai)
- * hoac dang ky (purpose=register, tao tai khoan moi neu so dien thoai chua
- * duoc dung) - gop xac thuc + phat phien trong mot buoc, giong loginWithZalo.
+ * Xac thuc ma OTP roi dang nhap hoac dang ky - KHONG nhan purpose tu client,
+ * doc lai tu chinh challenge da tao luc requestOtp (server tu quyet dinh, xem
+ * docstring requestOtp) de dam bao hanh vi khop voi luc gui ma, du tai khoan
+ * co the da duoc tao/xoa giua luc gui ma va luc xac thuc.
  */
 export async function verifyOtpAndAuthenticate(
     phone: string,
-    purpose: OtpPurpose,
     code: string,
     displayName?: string,
 ) {
     const normalized = normalizePhone(phone);
-    otpVerifyRateLimiter.check(`${purpose}:${normalized}`);
+    otpVerifyRateLimiter.check(normalized);
 
     const phoneHash = hashForLookup(normalized);
     const challenge = await OtpChallenge.findOne({
         phoneHash,
-        purpose,
         consumedAt: { $exists: false },
         expiresAt: { $gt: new Date() },
     }).sort({ createdAt: -1 });
@@ -130,6 +160,7 @@ export async function verifyOtpAndAuthenticate(
 
     challenge.consumedAt = new Date();
     await challenge.save();
+    const purpose = challenge.purpose;
 
     let user: IUser | null;
     if (purpose === "login") {

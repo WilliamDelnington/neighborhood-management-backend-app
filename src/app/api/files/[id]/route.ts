@@ -1,6 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
+import { toAbsoluteUploadUrl } from "@/lib/localUpload";
 import { updateFileAssetSchema } from "@/validators/fileAsset";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,10 @@ export async function GET(
             params.id,
             !isStaff,
             viewerRoles,
+        );
+        fileAsset.url = toAbsoluteUploadUrl(
+            fileAsset.url,
+            new URL(req.url).origin,
         );
         return apiSuccess(fileAsset);
     } catch (err) {
