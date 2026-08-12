@@ -30,3 +30,22 @@ export type CreateFileAssetInput = z.infer<typeof createFileAssetSchema>;
 
 export const updateFileAssetSchema = createFileAssetSchema.partial();
 export type UpdateFileAssetInput = z.infer<typeof updateFileAssetSchema>;
+
+// Danh cho nhanh POST /api/files dang multipart/form-data (tai file nhi phan
+// truc tiep). url/mimeType/sizeBytes duoc suy ra tu file da luu (xem
+// fileAssetService.createFileAssetFromUpload) nen khong xuat hien o day; cac
+// truong con lai den tu formData nen deu la string/boolean da duoc route parse
+// truoc khi goi schema nay.
+export const createFileAssetUploadMetaSchema = z.object({
+    name: z.string().optional(),
+    description: z.string().optional(),
+    category: z.enum(FILE_ASSET_CATEGORIES).default("other"),
+    isPublic: z.boolean().default(false),
+    targetRoles: z.array(z.string()).default([]),
+    audienceAll: z.boolean().default(true),
+    relatedModel: z.string().optional(),
+    relatedId: z.string().optional(),
+});
+export type CreateFileAssetUploadMetaInput = z.infer<
+    typeof createFileAssetUploadMetaSchema
+>;

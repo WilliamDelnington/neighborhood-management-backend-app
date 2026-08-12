@@ -590,7 +590,7 @@ async function seedComplaints(houseOwnerId: string, leaderId: string) {
             category: "an_ninh_trat_tu",
             title: "Tụ tập gây ồn ào ban đêm",
             content: "Có nhóm thanh niên tụ tập uống rượu gây ồn ào sau 23h.",
-            status: "da_tiep_nhan",
+            status: "dang_xu_ly",
             area: "Cụm 1",
         },
         {
@@ -999,7 +999,9 @@ async function main() {
     const { admin, leader, police, houseOwner, householdHead } =
         await seedUsers();
 
-    console.log("Đang tạo 7 vai trò hệ thống...");
+    console.log(
+        `Đang tạo ${Object.keys(SYSTEM_ROLE_PERMISSIONS).length} vai trò hệ thống...`,
+    );
     await seedRoles(String(admin._id));
 
     console.log("Đang tạo hộ dân mẫu...");

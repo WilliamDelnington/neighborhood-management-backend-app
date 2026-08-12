@@ -94,6 +94,88 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "change_requests.create",
         "change_requests.decide",
     ],
+    // To pho duoc rbac.ts (areaScopeFilter/requireUser) coi NHU HET voi to
+    // truong ve pham vi (ca hai deu duoc gan vao assignedNeighborhoodIds va
+    // loc theo Neighborhood duoc gan - xem
+    // neighborhoodService.assignNeighborhoodColeader) nen dung chung nguyen
+    // danh sach permission voi neighborhood_leader ben tren, tranh drift giua
+    // hai vai tro le ra phai giong nhau.
+    neighborhood_coleader: [
+        "dashboard.read",
+        "users.create",
+        "users.read",
+        "users.lock",
+        "neighborhoods.read",
+        "streets.read",
+        "infrastructure.read",
+        "infrastructure.manage",
+        "houses.read",
+        "houses.create",
+        "houses.update_gis",
+        "houses.verify",
+        "households.read",
+        "households.verify",
+        "citizens.read",
+        "business_types.read",
+        "businesses.read",
+        "companies.read",
+        "usage_units.read",
+        "complaints.read",
+        "complaints.assign",
+        "complaints.update_status",
+        "pccc.read",
+        "security.read",
+        "residents.read",
+        "requests.read",
+        "requests.create",
+        "request_types.read",
+        "inspections.read",
+        "inspections.execute",
+        "inspections.assign",
+        "inspections.verify",
+        "inspections.submit_to_ward",
+        "other.assign",
+        "meetings.read",
+        "meetings.register",
+        "announcements.read",
+        "surveys.read",
+        "surveys.respond",
+        "reports.read",
+        "reports.export",
+        "reports.author",
+        "reports.kpi_read",
+        "exports.export",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "files.read",
+        "notifications.read",
+        "correspondences.read",
+        "correspondences.create",
+        "correspondences.update",
+        "correspondences.send",
+        "correspondences.reply",
+        "change_requests.read",
+        "change_requests.create",
+        "change_requests.decide",
+    ],
+    // Cong tac vien: pham vi HEP theo thiet ke (BR-NB-003, xem
+    // rbac.ts:areaScopeFilter) - CHI thay du lieu duoc phan cong rieng (vd
+    // InspectionTarget.userId, RequestRecipient.userId), khong duoc suy rong
+    // thanh toan bo To nhu to truong/to pho. Vi vay KHONG cap houses.read/
+    // complaints.read/... o day - permission chi la "duoc phep goi API", con
+    // scope filter moi la lop chan thuc su quyet dinh thay duoc gi.
+    neighborhood_collaborator: [
+        "dashboard.read",
+        "requests.read",
+        "inspections.read",
+        "inspections.execute",
+        "meetings.register",
+        "surveys.respond",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "files.read",
+        "notifications.read",
+    ],
     secretary: [
         "dashboard.read",
         // Can de chon "Tổ dân phố" khi nham doi tuong gui Thong bao (xem

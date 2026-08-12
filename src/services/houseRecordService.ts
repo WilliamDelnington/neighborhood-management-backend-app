@@ -14,6 +14,7 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
+import { hashPassword } from "@/lib/auth";
 
 // Danh sach truong duoc coi la "dinh danh/dia chi" cua nha so - mot khi ho so
 // da "verified", nhung truong nay khong con sua truc tiep duoc nua (phai gui
@@ -429,10 +430,11 @@ export async function checkOwnerPhoneExists(
 /**
  * Tim User theo so dien thoai chu nha duoc nhan vien nhap luc tao nha so - neu
  * da ton tai thi gan them role house_owner (neu chua co) va dung tai khoan do
- * lam chu nha; neu chua ton tai thi tao moi (khong co password - chu nha tu
- * dat mat khau/dang nhap sau qua OTP hoac Zalo, xem authService.ts/otpService.ts).
- * Day la nhanh duy nhat ma ownerId co the KHAC actorUser._id ma khong phai
- * organization (staff tao ho thay cho nguoi dan chua co tai khoan).
+ * lam chu nha; neu chua ton tai thi tao moi. Neu ownerInput.password co, dat
+ * luon mat khau (TAM THOI dang dung phone+password thay OTP - xem
+ * LoginPage.tsx); neu khong, tai khoan tao ra chua co mat khau, tu dat/dang
+ * nhap sau. Day la nhanh duy nhat ma ownerId co the KHAC actorUser._id ma
+ * khong phai organization (staff tao ho thay cho nguoi dan chua co tai khoan).
  */
 async function resolveOrCreateHouseOwner(
     actorUser: IUser,
@@ -453,12 +455,17 @@ async function resolveOrCreateHouseOwner(
         return existing._id as Types.ObjectId;
     }
 
+    const passwordHash = ownerInput.password
+        ? await hashPassword(ownerInput.password)
+        : undefined;
+
     let user: IUser;
     try {
         user = await User.create({
             phone: ownerInput.phone,
             displayName: ownerInput.displayName,
             email: ownerInput.email || undefined,
+            passwordHash,
             roles: ["house_owner"],
             primaryRole: "house_owner",
             status: "active",

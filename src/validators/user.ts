@@ -2,9 +2,25 @@ import { z } from "zod";
 import { USER_STATUS } from "@/types";
 import { isValidVnPhone } from "@/lib/phone";
 
-// Nhan vien (to truong/admin) tao tai khoan chu ho thay - cung dinh dang voi
-// registerWithPhone (phone+password tu dang ky), chi khac o cho ai la actor
-// va co them dia chi tuy chon (xem userService.createHouseOwnerByStaff).
+// Vai tro duoc phep tao qua man hinh nay - house_owner mo cho bat ky ai co
+// quyen "users.create" (hanh vi cu, vd to truong tao chu ho); ba vai tro con
+// lai (to truong/to pho/cong tac vien To dan pho) CHI admin moi duoc chon,
+// kiem tra rieng trong userService.createHouseOwnerByStaff (khong the bieu
+// dat "admin-only" bang zod don thuan) vi day la cac vai tro co pham vi rong
+// (to truong/to pho) hoac can gan vao mot To dan pho cu the sau khi tao.
+export const CREATABLE_STAFF_ROLES = [
+    "house_owner",
+    "neighborhood_leader",
+    "neighborhood_coleader",
+    "neighborhood_collaborator",
+] as const;
+
+// Nhan vien (to truong/admin) tao tai khoan chu ho (hoac to truong/to pho/
+// cong tac vien, admin-only) thay - cung dinh dang voi registerWithPhone
+// (phone+password tu dang ky), chi khac o cho ai la actor va co them dia chi
+// tuy chon (xem userService.createHouseOwnerByStaff).
+// password: TAM THOI cho phep dat mat khau luc tao (thay OTP/Zalo, hien chua
+// san sang do can duyet mau tin truoc - xem LoginPage.tsx o mini app).
 export const createHouseOwnerSchema = z.object({
     phone: z
         .string()
@@ -12,6 +28,11 @@ export const createHouseOwnerSchema = z.object({
         .refine(isValidVnPhone, "So dien thoai khong hop le"),
     displayName: z.string().min(1, "Thieu ho ten"),
     address: z.string().optional(),
+    role: z.enum(CREATABLE_STAFF_ROLES).default("house_owner"),
+    password: z
+        .string()
+        .min(6, "Mat khau phai co it nhat 6 ky tu")
+        .optional(),
 });
 export type CreateHouseOwnerInput = z.infer<typeof createHouseOwnerSchema>;
 

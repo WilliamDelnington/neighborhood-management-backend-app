@@ -10,6 +10,8 @@ import {
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
+import { hashPassword } from "@/lib/auth";
+import { requirePermission } from "@/lib/rbac";
 import { writeAuditLog } from "@/services/auditService";
 import {
     ACTING_HOUSE_OWNERSHIP_RELATIONSHIP_TYPES,
@@ -164,14 +166,26 @@ export async function getHouseIdsForActingOwner(
  * neu khong (ownerType="user" va co phone - nhap tay o mini app, vi
  * house_owner khong co quyen "users.read" de tim theo ObjectId) thi tim tai
  * khoan CO SAN theo so dien thoai va gan them role house_owner neu chua co
- * (nguoi nay se thao tac thay chu nha tren nha nay). KHONG tu tao tai khoan
- * moi qua nhanh phone - tao tai khoan thay nguoi khac can quyen "users.create"
- * rieng (xem houseRecordService.resolveOrCreateHouseOwner, chi danh cho
- * nhan vien duoc cap quyen do).
+ * (nguoi nay se thao tac thay chu nha tren nha nay).
+ *
+ * Neu khong tim thay VA input co password + displayName: tao tai khoan moi
+ * luon (TAM THOI dung phone+password thay OTP - xem LoginPage.tsx), nhung chi
+ * khi actorUser co quyen "users.create" (house_owner tu them dong so huu
+ * KHONG duoc tao tai khoan thay nguoi khac qua nhanh nay - phai la nguoi da
+ * co quyen tao tai khoan rieng, vd neighborhood_leader/admin). Khong co
+ * password/displayName (hoac khong co quyen) -> giu hanh vi cu, bao 404 yeu
+ * cau nguoi do tu dang ky truoc (xem houseRecordService.resolveOrCreateHouseOwner
+ * cho nhanh tuong tu luc tao nha so).
  */
 async function resolveExistingOwnerId(
     actorUser: IUser,
-    input: { ownerType: OwnerType; ownerId?: string; phone?: string },
+    input: {
+        ownerType: OwnerType;
+        ownerId?: string;
+        phone?: string;
+        displayName?: string;
+        password?: string;
+    },
 ): Promise<Types.ObjectId | string> {
     if (input.ownerId) {
         const exists =
@@ -192,6 +206,34 @@ async function resolveExistingOwnerId(
     // Da duoc validator dam bao: ownerType="user" va co phone o nhanh nay.
     const user = await User.findOne({ phone: input.phone });
     if (!user) {
+        if (input.password && input.displayName) {
+            await requirePermission(actorUser, "users.create");
+            const passwordHash = await hashPassword(input.password);
+            let created;
+            try {
+                created = await User.create({
+                    phone: input.phone,
+                    displayName: input.displayName,
+                    passwordHash,
+                    roles: ["house_owner"],
+                    primaryRole: "house_owner",
+                    status: "active",
+                    createdBy: actorUser._id,
+                });
+            } catch (err: any) {
+                if (err?.code === 11000) {
+                    throw new HttpError("So dien thoai da duoc su dung", 409);
+                }
+                throw err;
+            }
+            await writeAuditLog({
+                actorId: String(actorUser._id),
+                action: "user.create_house_owner",
+                targetModel: "User",
+                targetId: created._id,
+            });
+            return created._id as Types.ObjectId;
+        }
         throw new HttpError(
             "Khong tim thay tai khoan voi so dien thoai nay - nguoi nay can dang ky tai khoan truoc",
             404,
@@ -432,6 +474,8 @@ export async function transferPrimaryOwnership(
         ownerType: OwnerType;
         ownerId?: string;
         phone?: string;
+        displayName?: string;
+        password?: string;
         reason?: string;
     },
 ): Promise<IHouseOwnership> {

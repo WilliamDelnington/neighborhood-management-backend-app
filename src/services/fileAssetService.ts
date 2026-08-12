@@ -1,14 +1,16 @@
 import { FileAsset, type IFileAsset } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
+import { saveUploadedFile, deleteUploadedFile } from "@/lib/localUpload";
 import type {
     CreateFileAssetInput,
+    CreateFileAssetUploadMetaInput,
     UpdateFileAssetInput,
 } from "@/validators/fileAsset";
 
-// Giai doan dau chi ho tro file dang lien ket (admin dan URL cua file da duoc
-// luu tru san, vd Google Drive). TODO: bo sung storage adapter (S3/GCS...) de
-// ho tro upload nhi phan truc tiep trong tuong lai.
+// Ho tro 2 cach tao FileAsset: dan URL co san (vd Google Drive - xem
+// createFileAsset) hoac tai thang file nhi phan len server (xem
+// createFileAssetFromUpload, luu vao public/uploads qua localUpload.ts).
 
 export async function createFileAsset(
     actorId: string,
@@ -26,6 +28,66 @@ export async function createFileAsset(
         isPublic: input.isPublic,
         targetRoles: input.targetRoles,
         audienceAll: input.audienceAll,
+        uploadedBy: actorId,
+    });
+
+    await writeAuditLog({
+        actorId,
+        action: "file_asset.create",
+        targetModel: "FileAsset",
+        targetId: fileAsset._id,
+        metadata: { name: fileAsset.name, category: fileAsset.category },
+    });
+
+    return fileAsset;
+}
+
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_UPLOAD_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+];
+
+export async function createFileAssetFromUpload(
+    actorId: string,
+    file: File,
+    meta: CreateFileAssetUploadMetaInput,
+) {
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+        throw new HttpError(
+            "File vuot qua dung luong cho phep (toi da 10MB)",
+            400,
+        );
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_UPLOAD_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(buffer, file.name, "file-assets");
+
+    const fileAsset = await FileAsset.create({
+        name: meta.name?.trim() || file.name,
+        description: meta.description,
+        url,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        category: meta.category,
+        relatedModel: meta.relatedModel,
+        relatedId: meta.relatedId,
+        isPublic: meta.isPublic,
+        targetRoles: meta.targetRoles,
+        audienceAll: meta.audienceAll,
         uploadedBy: actorId,
     });
 
@@ -129,6 +191,9 @@ export async function deleteFileAsset(
     const fileAsset = await FileAsset.findById(id);
     if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
     await fileAsset.deleteOne();
+    // Chi xoa file vat ly neu la file da tai len (url dang "/uploads/...");
+    // deleteUploadedFile tu bo qua cac url ben ngoai (vd Google Drive).
+    await deleteUploadedFile(fileAsset.url);
 
     await writeAuditLog({
         actorId,

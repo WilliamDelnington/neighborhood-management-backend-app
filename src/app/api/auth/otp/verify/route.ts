@@ -15,7 +15,6 @@ export async function POST(req: Request) {
         const body = otpVerifySchema.parse(await req.json());
         const result = await verifyOtpAndAuthenticate(
             body.phone,
-            body.purpose,
             body.code,
             body.displayName,
         );

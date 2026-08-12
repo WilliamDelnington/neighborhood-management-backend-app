@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { isValidVnPhone } from "@/lib/phone";
 
-// Trung voi models/OtpChallenge.ts OTP_PURPOSES - khong import truc tiep tu
-// @/models o day de tranh keo theo toan bo Mongoose model index (vd
-// lib/encryption.ts nem loi ngay luc import neu thieu ENCRYPTION_KEY) vao
-// module validator, giong ly do cac script backfill phai import model dong.
-const OTP_PURPOSES = ["register", "login"] as const;
-
 const phoneField = z
     .string()
     .min(1, "Thieu so dien thoai")
@@ -76,15 +70,17 @@ export const setPasswordSchema = z.object({
 });
 export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
 
+// purpose (login/register) KHONG con nam trong 2 schema duoi - truoc day
+// nhan tu client co the bi dung de do tim so dien thoai da dang ky hay chua
+// (xem docstring requestOtp/verifyOtpAndAuthenticate); server tu quyet dinh
+// dua vao viec tai khoan da ton tai hay chua.
 export const otpRequestSchema = z.object({
     phone: phoneField,
-    purpose: z.enum(OTP_PURPOSES),
 });
 export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
 
 export const otpVerifySchema = z.object({
     phone: phoneField,
-    purpose: z.enum(OTP_PURPOSES),
     code: z
         .string()
         .length(6, "Ma OTP phai gom 6 chu so")
