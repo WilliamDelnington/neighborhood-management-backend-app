@@ -6,7 +6,7 @@ import { HouseRecord, Business, Complaint, FileAsset, User } from "@/models";
 import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
-import { saveUploadedFile } from "@/lib/localUpload";
+import { saveUploadedFile, getPublicOrigin } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
 export const dynamic = "force-dynamic";
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
         const { url } = await saveUploadedFile(buffer, file.name, subDir);
-        const absoluteUrl = new URL(url, new URL(req.url).origin).toString();
+        const absoluteUrl = new URL(url, getPublicOrigin(req)).toString();
 
         const fileAsset = await FileAsset.create({
             name: file.name,

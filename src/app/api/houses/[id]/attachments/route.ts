@@ -6,7 +6,7 @@ import {
     assertHouseRecordInScope,
 } from "@/services/houseRecordService";
 import { listAttachments } from "@/services/attachmentService";
-import { toAbsoluteUploadUrl } from "@/lib/localUpload";
+import { toAbsoluteUploadUrl, getPublicOrigin } from "@/lib/localUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export async function GET(
         await assertHouseRecordInScope(user, houseRecord);
 
         const attachments = await listAttachments("HouseRecord", params.id);
-        const origin = new URL(req.url).origin;
+        const origin = getPublicOrigin(req);
         attachments.forEach(a => {
             a.url = toAbsoluteUploadUrl(a.url, origin);
         });

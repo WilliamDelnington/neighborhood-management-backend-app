@@ -6,7 +6,7 @@ import {
     HttpError,
 } from "@/lib/response";
 import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
-import { toAbsoluteUploadUrl } from "@/lib/localUpload";
+import { toAbsoluteUploadUrl, getPublicOrigin } from "@/lib/localUpload";
 import {
     createFileAssetSchema,
     createFileAssetUploadMetaSchema,
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
         // File tai len truc tiep co url tuong doi ("/uploads/..."); can chuyen
         // ve tuyet doi vi endpoint nay duoc goi ca tu Mini App (khong co helper
         // resolveAssetUrl phia client nhu admin web).
-        const origin = new URL(req.url).origin;
+        const origin = getPublicOrigin(req);
         result.items.forEach(item => {
             item.url = toAbsoluteUploadUrl(item.url, origin);
         });

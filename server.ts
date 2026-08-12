@@ -14,9 +14,16 @@ async function main() {
     const { initSocketServer } = await import("@/lib/socket");
 
     const dev = process.env.NODE_ENV !== "production";
+    const hostname = process.env.HOST || "localhost";
     const port = Number(process.env.PORT) || 4000;
 
-    const app = next({ dev });
+    // Next.js falls back to hostname "localhost" / port 3000 for ANYTHING built
+    // on top of req.url (eg. NextRequest.url in route handlers) if these are
+    // omitted here - regardless of the port the server actually binds to below.
+    // Passing them explicitly keeps req.url-derived origins correct for local
+    // dev (see lib/localUpload.ts getPublicOrigin, which needs a real fallback
+    // when PUBLIC_API_ORIGIN isn't configured, ie. no reverse proxy in front).
+    const app = next({ dev, hostname, port });
     const handle = app.getRequestHandler();
 
     await app.prepare();
