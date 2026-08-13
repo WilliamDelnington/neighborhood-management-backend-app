@@ -188,3 +188,4 @@ export {
     CHANGE_REQUEST_TYPES,
     CHANGE_REQUEST_STATUS,
 } from "./ChangeRequest";
+export { default as UtilityApp, type IUtilityApp } from "./UtilityApp";

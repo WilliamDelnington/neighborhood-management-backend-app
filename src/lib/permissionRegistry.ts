@@ -451,6 +451,13 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         label: "Nhật ký hệ thống",
         permissions: [{ key: "audit.read", label: "Xem nhật ký hệ thống" }],
     },
+    {
+        key: "utility_apps",
+        label: "Nhóm tiện ích",
+        permissions: [
+            { key: "utility_apps.manage", label: "Quản trị Nhóm tiện ích" },
+        ],
+    },
 ];
 
 export const ALL_PERMISSION_KEYS: string[] = MODULE_PERMISSION_REGISTRY.flatMap(

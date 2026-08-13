@@ -1,6 +1,12 @@
-import { InfrastructureAsset, type IInfrastructureAsset, type IUser } from "@/models";
+import {
+    FileAsset,
+    InfrastructureAsset,
+    type IInfrastructureAsset,
+    type IUser,
+} from "@/models";
 import { HttpError } from "@/lib/response";
 import { neighborhoodScopeFilter } from "@/lib/rbac";
+import { saveUploadedFile, deleteUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import type {
     CreateInfrastructureAssetInput,
@@ -175,5 +181,108 @@ export async function deleteInfrastructureAsset(
         targetModel: "InfrastructureAsset",
         targetId: asset._id,
         metadata: { name: asset.name },
+    });
+}
+
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".doc",
+    ".docx",
+];
+
+export async function listInfrastructureAssetAttachments(
+    actorUser: IUser,
+    assetId: string,
+) {
+    await findInScope(actorUser, assetId);
+
+    return FileAsset.find({
+        relatedModel: "InfrastructureAsset",
+        relatedId: assetId,
+    })
+        .sort({ createdAt: -1 })
+        .populate("uploadedBy", "displayName");
+}
+
+export async function uploadInfrastructureAssetAttachment(
+    actorUser: IUser,
+    assetId: string,
+    file: File,
+) {
+    await findInScope(actorUser, assetId);
+
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        throw new HttpError(
+            "File vuot qua dung luong cho phep (toi da 10MB)",
+            400,
+        );
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(
+        buffer,
+        file.name,
+        `infrastructure-assets/${assetId}`,
+    );
+
+    const fileAsset = await FileAsset.create({
+        name: file.name,
+        url,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        category: "attachment",
+        relatedModel: "InfrastructureAsset",
+        relatedId: assetId,
+        isPublic: false,
+        audienceAll: false,
+        targetRoles: [],
+        uploadedBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "infrastructure_asset.attachment.upload",
+        targetModel: "InfrastructureAsset",
+        targetId: assetId,
+        metadata: { fileAssetId: fileAsset._id, name: file.name },
+    });
+
+    return fileAsset;
+}
+
+export async function deleteInfrastructureAssetAttachment(
+    actorUser: IUser,
+    assetId: string,
+    fileAssetId: string,
+): Promise<void> {
+    await findInScope(actorUser, assetId);
+
+    const fileAsset = await FileAsset.findOne({
+        _id: fileAssetId,
+        relatedModel: "InfrastructureAsset",
+        relatedId: assetId,
+    });
+    if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
+
+    await deleteUploadedFile(fileAsset.url);
+    await fileAsset.deleteOne();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "infrastructure_asset.attachment.delete",
+        targetModel: "InfrastructureAsset",
+        targetId: assetId,
+        metadata: { fileAssetId, name: fileAsset.name },
     });
 }

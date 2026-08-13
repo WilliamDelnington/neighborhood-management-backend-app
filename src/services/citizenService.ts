@@ -78,6 +78,9 @@ export async function createCitizen(
         relationToHead: input.relationToHead,
         householdId: input.householdId,
         residenceType: input.residenceType ?? "thuong_tru",
+        temporaryResidenceExpiresAt: input.temporaryResidenceExpiresAt
+            ? new Date(input.temporaryResidenceExpiresAt)
+            : undefined,
         isElderly: input.isElderly ?? false,
         isChild: input.isChild ?? false,
         isDisabledOrSupportNeeded: input.isDisabledOrSupportNeeded ?? false,
@@ -201,7 +204,7 @@ export async function updateCitizen(
 
     // Chi gan cac truong thuc su co mat trong patch (partial schema van tra ve
     // day du key voi gia tri undefined cho truong khong duoc gui len).
-    const { birthDate, ...rest } = patch;
+    const { birthDate, temporaryResidenceExpiresAt, ...rest } = patch;
     for (const [key, value] of Object.entries(rest)) {
         if (value !== undefined) {
             (citizen as unknown as Record<string, unknown>)[key] = value;
@@ -209,6 +212,11 @@ export async function updateCitizen(
     }
     if (birthDate !== undefined) {
         citizen.birthDate = birthDate ? new Date(birthDate) : undefined;
+    }
+    if (temporaryResidenceExpiresAt !== undefined) {
+        citizen.temporaryResidenceExpiresAt = temporaryResidenceExpiresAt
+            ? new Date(temporaryResidenceExpiresAt)
+            : undefined;
     }
     const actorId = String(actorUser._id);
     citizen.updatedBy = actorId as any;

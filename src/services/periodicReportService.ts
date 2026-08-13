@@ -538,6 +538,12 @@ export async function submitPeriodicReport(actorUser: IUser, id: string) {
         relatedModel: "PeriodicReport",
         relatedId: report._id,
     });
+    if (attachments.length === 0) {
+        throw new HttpError(
+            "Bao cao dinh ky phai co it nhat mot tep dinh kem truoc khi nop",
+            422,
+        );
+    }
     const version = report.currentVersion + 1;
     const submittedAt = new Date();
     await PeriodicReportVersion.create({

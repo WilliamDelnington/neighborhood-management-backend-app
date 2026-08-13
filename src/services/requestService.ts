@@ -534,12 +534,38 @@ export async function listRequests(params: {
     relatedModel?: string;
     relatedId?: string;
     houseId?: string;
+    // "sent" = chi yeu cau do CHINH actor nay tao (tab "Da gui" tren admin web
+    // app, gop chung voi "Yeu cau cua toi" - xem RequestListPage.tsx) - khac
+    // voi mac dinh (khong truyen view), noi admin/quan ly (canManageAll) van
+    // thay TOAN BO yeu cau nhu truoc.
+    view?: "sent";
 }) {
     const filter: Record<string, unknown> = {};
     if (params.type) filter.type = params.type;
     if (params.relatedModel) filter.relatedModel = params.relatedModel;
     if (params.relatedId) filter.relatedId = params.relatedId;
     if (params.houseId) filter.houseId = params.houseId;
+
+    if (params.view === "sent") {
+        filter.createdBy = params.actorUser._id;
+        const [items, total] = await Promise.all([
+            RequestModel.find(filter)
+                .select("+formDataEncrypted")
+                .sort({ createdAt: -1 })
+                .skip((params.page - 1) * params.limit)
+                .limit(params.limit)
+                .populate("createdBy", "displayName"),
+            RequestModel.countDocuments(filter),
+        ]);
+        const withRecipients = await Promise.all(items.map(attachRecipients));
+        return {
+            items: withRecipients,
+            total,
+            page: params.page,
+            limit: params.limit,
+            totalPages: Math.max(1, Math.ceil(total / params.limit)),
+        };
+    }
 
     const isAdmin = params.actorUser.roles.includes("admin");
     const canManageAll =

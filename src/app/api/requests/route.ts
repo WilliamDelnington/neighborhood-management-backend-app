@@ -31,6 +31,7 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
+        const view = searchParams.get("view");
         const result = await listRequests({
             actorUser,
             page,
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
             relatedModel: searchParams.get("relatedModel") || undefined,
             relatedId: searchParams.get("relatedId") || undefined,
             houseId: searchParams.get("houseId") || undefined,
+            view: view === "sent" ? "sent" : undefined,
         });
         return apiSuccess(result);
     } catch (err) {
