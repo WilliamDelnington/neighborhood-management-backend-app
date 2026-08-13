@@ -100,6 +100,7 @@ export async function listBusinesses(params: {
     limit?: number;
     search?: string;
     status?: VerificationStatus;
+    businessType?: string;
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
@@ -108,6 +109,10 @@ export async function listBusinesses(params: {
 
     if (params.status) {
         filter.status = params.status;
+    }
+
+    if (params.businessType) {
+        filter.businessType = params.businessType;
     }
 
     if (params.houseId) {
