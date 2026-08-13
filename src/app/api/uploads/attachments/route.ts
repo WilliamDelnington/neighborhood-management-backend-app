@@ -3,7 +3,10 @@ import { connectDB } from "@/lib/mongodb";
 import { HttpError } from "@/lib/response";
 import { getBearerToken, verifyUploadToken } from "@/lib/auth";
 import { HouseRecord, Business, Complaint, FileAsset, User } from "@/models";
-import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import {
+    assertHouseRecordInScope,
+    assertHouseOwnerAttachmentUploadAllowed,
+} from "@/services/houseRecordService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
 import { saveUploadedFile, getPublicOrigin } from "@/lib/localUpload";
@@ -65,6 +68,7 @@ export async function POST(req: Request) {
             const houseRecord = await HouseRecord.findById(payload.relatedId);
             if (!houseRecord) return zaloError("Khong tim thay nha so");
             await assertHouseRecordInScope(actorUser, houseRecord);
+            await assertHouseOwnerAttachmentUploadAllowed(actorUser, houseRecord);
             subDir = `houses/${payload.relatedId}`;
         } else if (payload.relatedModel === "Business") {
             const business = await Business.findById(payload.relatedId);

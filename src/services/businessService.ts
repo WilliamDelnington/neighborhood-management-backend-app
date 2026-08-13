@@ -60,6 +60,7 @@ export async function createBusiness(
         neighborhoodId: houseRecord.neighborhoodId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
+        taxCode: input.taxCode,
         representativeUserId: input.representativeUserId || undefined,
         phone: input.phone,
         active: input.active ?? true,

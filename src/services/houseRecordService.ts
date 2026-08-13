@@ -321,6 +321,28 @@ export function assertVerificationEditable(
 }
 
 /**
+ * Nem HttpError(403) neu nha so da "verified" VA actor dang thao tac thay chu
+ * nha (xem isHouseOwnerActor o houseOwnershipService.ts) - dung truoc khi cap
+ * token/luu tep dinh kem moi cho HouseRecord, de chu nha khong the tu y them
+ * tep sau khi ho so da duoc xac thuc (phai lien he nhan vien/gui yeu cau thay
+ * doi thong tin thay vi tu them). Nhan vien giu quyen "houses.update"/
+ * "houses.verify" (khong phai chu nha) KHONG bi anh huong boi kiem tra nay -
+ * ho van duoc them tep dinh kem sau khi xac thuc nhu binh thuong.
+ */
+export async function assertHouseOwnerAttachmentUploadAllowed(
+    actorUser: IUser,
+    houseRecord: IHouseRecord,
+): Promise<void> {
+    if (houseRecord.status !== "verified") return;
+    if (await isHouseOwnerActor(houseRecord._id, actorUser._id)) {
+        throw new HttpError(
+            "Nhà đã được xác thực, chủ nhà không thể thêm tệp đính kèm",
+            403,
+        );
+    }
+}
+
+/**
  * Dieu kien loc danh sach nha so theo pham vi cua actor:
  * - admin: xem tat ca.
  * - house_owner: chi xem nha so ma minh dang thao tac thay chu nha - truc

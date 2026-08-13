@@ -7,6 +7,7 @@ import { recomputeHouseholdMemberCount } from "@/services/citizenService";
 import { loginRateLimiter } from "@/lib/rateLimit";
 import { getUserPermissionSet, getUserAllowedComplaintCategories } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/types";
+import { maskIdNumber } from "@/lib/encryption";
 import type {
     ZaloLoginInput,
     UpdateProfileInput,
@@ -353,6 +354,11 @@ export function sanitizeUser(user: IUser) {
         phone: user.phone,
         email: user.email,
         address: user.address,
+        // Che so CMND/CCCD, chi giu lai 4 so cuoi - cung mot quy tac voi
+        // Citizen.cccd (xem Citizen.ts toJSON transform), nhung sanitizeUser
+        // tu chon truong thu cong (khong dung Document.toJSON) nen phai che
+        // tay o day.
+        idNumber: user.idNumber ? maskIdNumber(user.idNumber) : undefined,
         roles: user.roles,
         primaryRole: user.primaryRole,
         status: user.status,

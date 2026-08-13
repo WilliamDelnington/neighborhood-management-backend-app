@@ -9,6 +9,9 @@ export interface IBusiness extends Document {
     neighborhoodId?: mongoose.Types.ObjectId;
     businessType?: mongoose.Types.ObjectId;
     ownerName?: string;
+    // Khong bat buoc - khong phai ho kinh doanh nao cung da dang ky ma so
+    // thue. Khi co, phai la duy nhat (giong Organization.taxCode).
+    taxCode?: string;
     // Lien ket toi tai khoan thuc su cua nguoi dai dien ho kinh doanh (phai
     // tu nhap/lien ket, khong suy tu ownerName text) - dung de gui Request
     // (nhiem vu) den dung nguoi tai nha nay, xem requestService.ts.
@@ -53,6 +56,9 @@ const BusinessSchema = new Schema<IBusiness>(
         },
         businessType: { type: Schema.Types.ObjectId, ref: "BusinessType" },
         ownerName: { type: String, trim: true },
+        // sparse: cho phep nhieu ho kinh doanh cung khong co taxCode ma
+        // khong vi pham unique index (xem ghi chu Organization.taxCode).
+        taxCode: { type: String, unique: true, trim: true, sparse: true },
         representativeUserId: { type: Schema.Types.ObjectId, ref: "User" },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },

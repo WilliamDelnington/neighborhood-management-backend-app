@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { isValidPermissionKey } from "@/lib/permissionRegistry";
-import { NHOM_PHAN_ANH } from "@/types";
 
 const permissionsField = z
     .array(z.string())
@@ -10,7 +9,13 @@ const permissionsField = z
         "Danh sach permission chua key khong hop le",
     );
 
-const complaintCategoriesField = z.array(z.enum(NHOM_PHAN_ANH));
+// Truoc la z.array(z.enum(NHOM_PHAN_ANH)) (danh sach tinh) - nay category la
+// key cua ComplaintTypeDefinition (danh muc quan tri duoc, co the la danh
+// muc tuy chinh do admin tao sau nay), nen chuyen sang permissive regex-string
+// cung quy uoc voi requestTypesField ben duoi.
+const complaintCategoriesField = z.array(
+    z.string().regex(/^[a-z][a-z0-9_]*$/, "Nhom phan anh khong hop le"),
+);
 const requestTypesField = z.array(
     z.string().regex(/^[a-z][a-z0-9_]*$/, "Loai yeu cau khong hop le"),
 );

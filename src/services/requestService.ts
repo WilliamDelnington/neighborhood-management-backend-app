@@ -15,6 +15,7 @@ import {
     SecurityRecord,
     User,
     type IRequest,
+    type IRequestRecipient,
     type IRequestTypeDefinition,
 } from "@/models";
 import type { IUser } from "@/models/User";
@@ -41,6 +42,7 @@ import {
 } from "@/types";
 import type {
     CreateRequestInput,
+    InitiateRequestTransferInput,
     UpdateMyRequestStatusInput,
     UpdateRequestInput,
 } from "@/validators/request";
@@ -241,7 +243,9 @@ export async function assertCanManageRequest(
 async function attachRecipients(request: IRequest) {
     const recipients = await RequestRecipient.find({
         requestId: request._id,
-    }).populate("userId", "displayName phone");
+    })
+        .populate("userId", "displayName phone")
+        .populate("transferToUserId", "displayName phone");
 
     const requestObject = request.toObject() as Record<string, unknown>;
     const encrypted = request.formDataEncrypted;
@@ -260,6 +264,17 @@ async function attachRecipients(request: IRequest) {
             respondedAt: r.respondedAt,
             resolvedAt: r.resolvedAt,
             isOverdue: withOverdue(r, request.dueDate),
+            transferStatus: r.transferStatus,
+            transferToUserId: r.transferToUserId
+                ? (r.transferToUserId as unknown as { _id: Types.ObjectId })
+                      ._id
+                : undefined,
+            transferToDisplayName: r.transferToUserId
+                ? (r.transferToUserId as unknown as { displayName?: string })
+                      ?.displayName || ""
+                : undefined,
+            transferReason: r.transferReason,
+            transferInitiatedAt: r.transferInitiatedAt,
         })),
     };
 }
@@ -1108,6 +1123,22 @@ export async function updateMyRequestStatus(
         "relatedModel relatedId",
     );
     await syncDomainRecordStatus(request?.relatedModel, request?.relatedId);
+    if (request?.relatedModel === "Complaint" && request.relatedId) {
+        // Import dong de tranh phu thuoc vong: complaintService (luong Tiep
+        // nhan/Chon nguoi phu trach) tao Request lien ket "task" TRUC TIEP qua
+        // model (khong qua createRequest o day - xem ghi chu tai
+        // createLinkedTaskRequest trong complaintService.ts), nen ve mat ky
+        // thuat requestService KHONG bi complaintService import nguoc lai -
+        // van dung import dong o day de an toan/ro rang chu dinh (giu bat bien
+        // du sau nay complaintService co import them tu requestService).
+        const { syncComplaintStatusFromRequest } = await import(
+            "@/services/complaintService"
+        );
+        await syncComplaintStatusFromRequest(
+            String(request.relatedId),
+            input.status,
+        );
+    }
 
     return recipient;
 }
@@ -1160,6 +1191,199 @@ export async function confirmRequestRecipient(
     });
 
     await syncDomainRecordStatus(request.relatedModel, request.relatedId);
+    if (request.relatedModel === "Complaint" && request.relatedId) {
+        // Xem ghi chu import dong tuong tu trong updateMyRequestStatus o tren.
+        const { syncComplaintStatusFromRequest } = await import(
+            "@/services/complaintService"
+        );
+        await syncComplaintStatusFromRequest(
+            String(request.relatedId),
+            decision,
+        );
+    }
+
+    return recipient;
+}
+
+/**
+ * Nguoi nhan HIEN TAI (chinh actorUser, chua "resolved") de nghi chuyen yeu
+ * cau cho mot nguoi khac kem ly do bat buoc. Chi mot de nghi chuyen dang dien
+ * ra tren MOT ban ghi RequestRecipient tai mot thoi diem (transferStatus
+ * "pending"); de nghi duoc chot khi nguoi duoc chuyen HOAC nguoi gui goc
+ * (request.createdBy) phan hoi - xem respondToRequestTransfer.
+ */
+export async function initiateRequestTransfer(
+    actorUser: IUser,
+    requestId: string,
+    input: InitiateRequestTransferInput,
+): Promise<IRequestRecipient> {
+    const request = await RequestModel.findById(requestId);
+    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+
+    const recipient = await RequestRecipient.findOne({
+        requestId,
+        userId: actorUser._id,
+    });
+    if (!recipient) {
+        throw new HttpError(
+            "Ban khong phai la nguoi nhan cua yeu cau nay",
+            404,
+        );
+    }
+    if (recipient.status === "resolved") {
+        throw new HttpError(
+            "Yeu cau da hoan thanh, khong the chuyen tiep",
+            409,
+        );
+    }
+    if (recipient.transferStatus === "pending") {
+        throw new HttpError(
+            "Yeu cau nay dang co de nghi chuyen tiep chua duoc xu ly",
+            409,
+        );
+    }
+
+    if (String(input.toUserId) === String(actorUser._id)) {
+        throw new HttpError(
+            "Khong the chuyen tiep yeu cau cho chinh minh",
+            422,
+        );
+    }
+    const toUser = await User.findById(input.toUserId).select("_id");
+    if (!toUser) {
+        throw new HttpError("Khong tim thay nguoi duoc chuyen", 404);
+    }
+
+    recipient.transferStatus = "pending";
+    recipient.transferToUserId = toUser._id;
+    recipient.transferReason = input.reason.trim();
+    recipient.transferInitiatedAt = new Date();
+    recipient.transferInitiatedBy = actorUser._id as any;
+    await recipient.save();
+
+    await createNotification({
+        title: request.title,
+        body: `${actorUser.displayName || "Mot nguoi nhan"} de nghi chuyen yeu cau cho ban`,
+        type: `request.transfer_initiated`,
+        targetUserIds: [
+            ...new Set(
+                [String(toUser._id), request.createdBy && String(request.createdBy)].filter(
+                    (id): id is string => Boolean(id),
+                ),
+            ),
+        ],
+        relatedModel: "Request",
+        relatedId: request._id,
+        createdBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "request_transfer_initiated",
+        targetModel: "Request",
+        targetId: requestId,
+        metadata: {
+            toUserId: input.toUserId,
+            reason: input.reason,
+            fromUserId: actorUser._id,
+        },
+    });
+
+    return recipient;
+}
+
+/**
+ * Nguoi duoc de nghi chuyen (transferToUserId) HOAC nguoi gui goc
+ * (request.createdBy) chap nhan/tu choi de nghi chuyen tiep. Chap nhan: tao
+ * MOT ban ghi RequestRecipient MOI cho nguoi duoc chuyen (vong doi trang thai
+ * moi tinh tu "pending"), giu nguyen status cua ban ghi cu (chuyen trach nhiem
+ * khong dong nghia da hoan thanh cong viec) va chi xoa cac truong transfer*
+ * tren ban ghi cu - gia dinh MOI thoi diem chi co MOT de nghi chuyen dang
+ * dien ra cho mot Request (khong ho tro nhieu nguoi nhan cung de nghi chuyen
+ * dong thoi trong lan trien khai dau tien nay).
+ */
+export async function respondToRequestTransfer(
+    actorUser: IUser,
+    requestId: string,
+    decision: "accept" | "reject",
+): Promise<IRequestRecipient> {
+    const request = await RequestModel.findById(requestId);
+    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+
+    const recipient = await RequestRecipient.findOne({
+        requestId,
+        transferStatus: "pending",
+    });
+    if (!recipient) {
+        throw new HttpError(
+            "Khong co de nghi chuyen tiep nao dang cho xu ly",
+            404,
+        );
+    }
+
+    const isProposedAssignee =
+        String(recipient.transferToUserId) === String(actorUser._id);
+    const isOriginalSender =
+        String(request.createdBy) === String(actorUser._id);
+    if (!isProposedAssignee && !isOriginalSender) {
+        throw new HttpError(
+            "Ban khong co quyen phan hoi de nghi chuyen tiep nay",
+            403,
+        );
+    }
+
+    const toUserId = recipient.transferToUserId;
+    const fromUserId = recipient.userId;
+
+    if (decision === "accept") {
+        await RequestRecipient.updateOne(
+            { requestId, userId: toUserId },
+            {
+                $setOnInsert: {
+                    requestId,
+                    userId: toUserId,
+                    status: "pending",
+                },
+            },
+            { upsert: true },
+        );
+    }
+
+    recipient.transferStatus = undefined;
+    recipient.transferToUserId = undefined;
+    recipient.transferReason = undefined;
+    recipient.transferInitiatedAt = undefined;
+    recipient.transferInitiatedBy = undefined;
+    await recipient.save();
+
+    if (decision === "accept") {
+        await createNotification({
+            title: request.title,
+            body: "Ban da duoc chuyen tiep mot yeu cau",
+            type: "request.transfer_accepted",
+            targetUserIds: [
+                ...new Set(
+                    [toUserId && String(toUserId), String(fromUserId)].filter(
+                        (id): id is string => Boolean(id),
+                    ),
+                ),
+            ],
+            relatedModel: "Request",
+            relatedId: request._id,
+            createdBy: actorUser._id,
+        });
+    }
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action:
+            decision === "accept"
+                ? "request_transfer_accepted"
+                : "request_transfer_rejected",
+        targetModel: "Request",
+        targetId: requestId,
+        metadata: { fromUserId, toUserId, decision },
+    });
 
     return recipient;
 }

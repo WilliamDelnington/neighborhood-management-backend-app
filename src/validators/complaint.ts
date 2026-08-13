@@ -1,8 +1,19 @@
 import { z } from "zod";
-import { NHOM_PHAN_ANH, TRANG_THAI_PHAN_ANH } from "@/types";
+import { TRANG_THAI_PHAN_ANH } from "@/types";
+
+// Permissive - chi kiem tra HINH THUC cua key (cung quy uoc voi
+// requestTypeKeySchema trong validators/request.ts). Gia tri THUC te (co
+// ton tai mot ComplaintTypeDefinition active tuong ung, hoac thuoc danh sach
+// NHOM_PHAN_ANH cu trong giai doan migrate) duoc kiem tra o service layer -
+// xem assertValidComplaintCategory trong complaintService.ts.
+const complaintCategoryKeySchema = z
+    .string()
+    .min(1, "Thieu nhom phan anh")
+    .max(50)
+    .regex(/^[a-z][a-z0-9_]*$/, "Nhom phan anh khong hop le");
 
 export const createComplaintSchema = z.object({
-    category: z.enum(NHOM_PHAN_ANH),
+    category: complaintCategoryKeySchema,
     title: z.string().min(3, "Tieu de qua ngan"),
     content: z.string().min(10, "Noi dung qua ngan"),
     area: z.string().optional(),
@@ -30,7 +41,7 @@ export type UpdateComplaintStatusInput = z.infer<
 
 export const updateComplaintSchema = z
     .object({
-        category: z.enum(NHOM_PHAN_ANH).optional(),
+        category: complaintCategoryKeySchema.optional(),
         title: z.string().min(3, "Tieu de qua ngan").optional(),
         content: z.string().min(10, "Noi dung qua ngan").optional(),
     })
@@ -61,3 +72,8 @@ export type AssignComplaintInput = z.infer<typeof assignComplaintSchema>;
 export const escalateComplaintSchema = z.object({
     note: z.string().optional(),
 });
+
+export const chooseAssigneeSchema = z.object({
+    userId: z.string().min(1, "Thieu nguoi phu trach"),
+});
+export type ChooseAssigneeInput = z.infer<typeof chooseAssigneeSchema>;

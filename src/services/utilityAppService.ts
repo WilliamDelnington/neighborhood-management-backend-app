@@ -1,10 +1,43 @@
 import { UtilityApp, type IUtilityApp } from "@/models";
 import { HttpError } from "@/lib/response";
+import { getPublicOrigin, saveUploadedFile, toAbsoluteUploadUrl } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import type {
     CreateUtilityAppInput,
     UpdateUtilityAppInput,
 } from "@/validators/utilityApp";
+
+const MAX_ICON_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_ICON_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".svg"];
+
+export async function uploadUtilityAppIcon(
+    actorId: string,
+    file: File,
+    req: Request,
+): Promise<{ url: string }> {
+    if (file.size > MAX_ICON_SIZE_BYTES) {
+        throw new HttpError("Anh vuot qua dung luong cho phep (toi da 5MB)", 400);
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_ICON_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Dinh dang anh khong duoc ho tro (chi chap nhan ${ALLOWED_ICON_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(buffer, file.name, "utility-apps/icons");
+
+    await writeAuditLog({
+        actorId,
+        action: "utility_app.icon.upload",
+        targetModel: "UtilityApp",
+        metadata: { name: file.name },
+    });
+
+    return { url: toAbsoluteUploadUrl(url, getPublicOrigin(req)) };
+}
 
 export async function listUtilityApps(
     params: {

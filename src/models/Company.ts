@@ -8,6 +8,9 @@ export interface ICompany extends Document {
     streetId?: mongoose.Types.ObjectId;
     neighborhoodId?: mongoose.Types.ObjectId;
     ownerName?: string;
+    // Bat buoc - cong ty phai da dang ky ma so thue (khac Business, khong
+    // bat buoc). Phai la duy nhat (giong Organization.taxCode).
+    taxCode: string;
     // Lien ket toi tai khoan thuc su cua nguoi dai dien cong ty (cung ly do
     // voi Business.representativeUserId - xem ghi chu o do).
     representativeUserId?: mongoose.Types.ObjectId;
@@ -55,6 +58,10 @@ const CompanySchema = new Schema<ICompany>(
             index: true,
         },
         ownerName: { type: String, trim: true },
+        // sparse: ky thuat can thiet de unique index hoat dong dung (xem
+        // ghi chu Organization.taxCode) - ve mat nghiep vu truong nay bat
+        // buoc, duoc ep boi createCompanySchema (validators/company.ts).
+        taxCode: { type: String, unique: true, trim: true, sparse: true },
         representativeUserId: { type: Schema.Types.ObjectId, ref: "User" },
         organizationId: {
             type: Schema.Types.ObjectId,

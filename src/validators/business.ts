@@ -7,6 +7,9 @@ export const createBusinessSchema = z.object({
     // null = khong gan loai hinh kinh doanh, undefined = khong doi.
     businessType: z.string().nullable().optional(),
     ownerName: z.string().optional(),
+    // Khong bat buoc - khong phai ho kinh doanh nao cung da dang ky ma so
+    // thue (xem models/Business.ts).
+    taxCode: z.string().trim().min(1).optional(),
     representativeUserId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),

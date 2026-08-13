@@ -44,6 +44,10 @@ export {
     COMPLAINT_TIMELINE_ACTIONS,
 } from "./ComplaintTimeline";
 export {
+    default as ComplaintTypeDefinition,
+    type IComplaintTypeDefinition,
+} from "./ComplaintTypeDefinition";
+export {
     default as SupportTicket,
     type ISupportTicket,
 } from "./SupportTicket";

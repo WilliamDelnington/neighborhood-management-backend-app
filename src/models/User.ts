@@ -8,6 +8,14 @@ import {
     type Role,
     type UserStatus,
 } from "@/types";
+import {
+    encryptSensitive,
+    decryptSensitive,
+    isEncryptedSensitive,
+    hashForLookup,
+    normalizeIdNumber,
+    maskIdNumber,
+} from "@/lib/encryption";
 
 export interface IUser extends Document {
     zaloUserId?: string;
@@ -17,6 +25,12 @@ export interface IUser extends Document {
     phone?: string;
     email?: string;
     address?: string;
+    // idNumber luu du lieu da ma hoa AES-256-GCM (xem hook pre("save") ben
+    // duoi, cung mot pattern voi Citizen.cccd) - idNumberHash la bam HMAC de
+    // tim kiem exact-match. Chi ap dung cho tai khoan do nhan vien tao (xem
+    // userService.createHouseOwnerByStaff) - khong dung cho tu dang ky.
+    idNumber?: string;
+    idNumberHash?: string;
     passwordHash?: string;
     roles: Role[];
     primaryRole: Role;
@@ -57,6 +71,8 @@ const UserSchema = new Schema<IUser>(
         phone: { type: String, trim: true, unique: true, sparse: true },
         email: { type: String, trim: true },
         address: { type: String, trim: true },
+        idNumber: { type: String, trim: true },
+        idNumberHash: { type: String, index: true },
         passwordHash: { type: String, select: false },
         // Vai tro la du lieu dong (bang Role), khong con enum tinh - tinh hop le
         // (ton tai, active) duoc kiem tra o service layer (assignRole).
@@ -107,10 +123,43 @@ const UserSchema = new Schema<IUser>(
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },
-    { timestamps: true },
+    {
+        timestamps: true,
+        toJSON: {
+            transform(_doc, ret) {
+                if (ret.idNumber) ret.idNumber = maskIdNumber(ret.idNumber);
+                delete ret.idNumberHash;
+                return ret;
+            },
+        },
+    },
 );
 
 UserSchema.index({ displayName: "text", phone: "text" });
+
+UserSchema.pre("save", function (next) {
+    if (this.isModified("idNumber")) {
+        this.idNumberHash = this.idNumber
+            ? hashForLookup(normalizeIdNumber(this.idNumber))
+            : undefined;
+        if (this.idNumber) this.idNumber = encryptSensitive(this.idNumber);
+    }
+    next();
+});
+
+UserSchema.post("init", function (doc) {
+    if (doc.idNumber) doc.idNumber = decryptSensitive(doc.idNumber);
+});
+
+// pre("save") ma hoa idNumber ngay tren `this` truoc khi ghi xuong DB - can
+// giai ma lai vao bo nho sau khi save() xong, neu khong doc vua tao/cap nhat
+// se giu ciphertext o field idNumber (khac voi doc doc tu find(), da duoc
+// post("init") giai ma), khien response tra ve ngay sau create bi sai.
+UserSchema.post("save", function (doc) {
+    if (doc.idNumber && isEncryptedSensitive(doc.idNumber)) {
+        doc.idNumber = decryptSensitive(doc.idNumber);
+    }
+});
 
 export default (mongoose.models.User as Model<IUser>) ||
     mongoose.model<IUser>("User", UserSchema);

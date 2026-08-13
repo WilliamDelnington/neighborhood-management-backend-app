@@ -81,3 +81,18 @@ export const confirmRequestRecipientSchema = z.object({
 export type ConfirmRequestRecipientInput = z.infer<
     typeof confirmRequestRecipientSchema
 >;
+
+export const initiateRequestTransferSchema = z.object({
+    toUserId: z.string().min(1, "Thieu nguoi duoc chuyen"),
+    reason: z.string().trim().min(1, "Vui long nhap ly do chuyen tiep"),
+});
+export type InitiateRequestTransferInput = z.infer<
+    typeof initiateRequestTransferSchema
+>;
+
+export const respondToRequestTransferSchema = z.object({
+    decision: z.enum(["accept", "reject"]),
+});
+export type RespondToRequestTransferInput = z.infer<
+    typeof respondToRequestTransferSchema
+>;

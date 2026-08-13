@@ -45,6 +45,7 @@ export async function createCompany(
         streetId: houseRecord.streetId,
         neighborhoodId: houseRecord.neighborhoodId,
         ownerName: input.ownerName,
+        taxCode: input.taxCode,
         representativeUserId: input.representativeUserId || undefined,
         organizationId: input.organizationId || undefined,
         phone: input.phone,

@@ -7,8 +7,11 @@ import {
     HouseRecord,
     Neighborhood,
     NeighborhoodColeaderAssignment,
+    Request as RequestModel,
+    RequestRecipient,
     User,
     type IComplaint,
+    type IComplaintTypeDefinition,
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
@@ -18,7 +21,13 @@ import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter } from "@/lib/rbac";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
 import { getSetting } from "@/services/settingsService";
-import { TRANG_THAI_PHAN_ANH_LABEL } from "@/types";
+import { getComplaintTypeByKey } from "@/services/complaintTypeDefinitionService";
+import {
+    NHOM_PHAN_ANH,
+    TRANG_THAI_PHAN_ANH_LABEL,
+    type RequestStatus,
+    type TrangThaiPhanAnh,
+} from "@/types";
 import type {
     AssignComplaintInput,
     CreateComplaintInput,
@@ -253,6 +262,143 @@ export function assertComplaintInScope(
     }
 }
 
+// Danh sach NHOM_PHAN_ANH cu (hardcode) - chi con dung lam fallback trong
+// assertValidComplaintCategory ben duoi, cho giai doan migrate TRUOC khi chay
+// scripts/seed-complaint-types.ts (luc do MOI category deu chua co
+// ComplaintTypeDefinition tuong ung).
+const LEGACY_COMPLAINT_CATEGORIES = new Set<string>(NHOM_PHAN_ANH);
+
+/**
+ * Xac thuc `category` hop le va tra ve ComplaintTypeDefinition tuong ung (neu
+ * co). Zod schema (validators/complaint.ts) chi kiem tra HINH THUC cua
+ * category (permissive string) - kiem tra GIA TRI THUC te (co ton tai/active
+ * hay khong) dat o day, cung quy uoc voi RequestTypeDefinition/Request.type
+ * (xem findRequestTypeForActor trong requestTypeDefinitionService.ts). Cho
+ * phep fallback ve LEGACY_COMPLAINT_CATEGORIES khi CHUA co danh muc tuong
+ * ung trong DB, tranh chan phan anh trong giai doan migrate.
+ */
+async function assertValidComplaintCategory(
+    category: string,
+): Promise<IComplaintTypeDefinition | null> {
+    const definition = await getComplaintTypeByKey(category);
+    if (definition) {
+        if (!definition.active) {
+            throw new HttpError("Loai phan anh nay da ngung su dung", 422);
+        }
+        return definition;
+    }
+    if (LEGACY_COMPLAINT_CATEGORIES.has(category)) return null;
+    throw new HttpError("Nhom phan anh khong hop le", 422);
+}
+
+// Trong 3 vai tro nay, chi vai tro nao XUAT HIEN trong
+// ComplaintTypeDefinition.allowedReceiverRoles moi duoc thu resolve nguoi
+// dung THEO NHA SO (vi tri trong mang quyet dinh thu tu uu tien) - cac vai
+// tro khac trong danh sach (vd secretary, people_committee_official) luon roi
+// ve nhanh broadcast theo vai tro ben duoi.
+const HOUSE_SCOPED_COMPLAINT_ROLES = new Set([
+    "neighborhood_leader",
+    "neighborhood_coleader",
+    "cooperator",
+]);
+
+/**
+ * Dieu huong nguoi nhan/nguoi phu trach chinh cho mot phan anh, dua tren
+ * ComplaintTypeDefinition.allowedReceiverRoles (thu tu trong mang la thu tu
+ * uu tien) va Nha so nguoi gui CHU DONG chon (neu co). Thay the logic suy
+ * to truong/to pho INLINE cu trong createComplaint bang mot dinh tuyen theo
+ * DU LIEU, mo rong them "cooperator" (cong tac vien duoc gan theo cum).
+ *
+ * Uu tien 1 - theo Nha so (chi khi targetHouseId co gia tri): duyet
+ * allowedReceiverRoles THEO DUNG THU TU trong mang, voi moi vai tro thuoc
+ * HOUSE_SCOPED_COMPLAINT_ROLES thu resolve nguoi dung dang quan ly nha do
+ * (to truong/to pho cua to dan pho chua nha, hoac cong tac vien duoc gan
+ * dung cum cua nha). Vai tro DAU TIEN (theo thu tu mang) resolve duoc >=1
+ * nguoi se DUNG NGAY (khong xet tiep cac vai tro con lai) - nguoi dau tien
+ * trong tap ket qua (sap xep theo _id de dam bao xac dinh) duoc chon lam
+ * autoAssigneeId.
+ *
+ * Uu tien 2 - broadcast theo vai tro (fallback): ap dung khi khong co
+ * targetHouseId, KHONG co vai tro nao thuoc HOUSE_SCOPED_COMPLAINT_ROLES
+ * trong allowedReceiverRoles, hoac co nhung khong resolve duoc nguoi dung
+ * nao (vd to dan pho chua co to truong/to pho, chua co cong tac vien nao
+ * dung cum). Cac vai tro CON LAI trong allowedReceiverRoles duoc broadcast
+ * toi TOAN BO User dang active co vai tro do, gioi han theo wardCode cua
+ * Nha so (neu xac dinh duoc) - cung quy uoc voi nhanh "wardRecipients" cu
+ * trong createComplaint (truoc khi co ham nay), khong co autoAssigneeId.
+ */
+export async function resolveComplaintTypeRecipientIds(
+    complaintType: IComplaintTypeDefinition,
+    targetHouseId: string | undefined,
+): Promise<{ recipientIds: Set<string>; autoAssigneeId?: string }> {
+    let houseNeighborhoodId: mongoose.Types.ObjectId | undefined;
+    let houseCluster: string | undefined;
+    let houseWardCode: number | undefined;
+    if (targetHouseId) {
+        const house = await HouseRecord.findById(targetHouseId).select(
+            "neighborhoodId cluster wardCode",
+        );
+        houseNeighborhoodId = house?.neighborhoodId;
+        houseCluster = house?.cluster;
+        houseWardCode = house?.wardCode;
+    }
+
+    if (targetHouseId) {
+        for (const role of complaintType.allowedReceiverRoles) {
+            if (!HOUSE_SCOPED_COMPLAINT_ROLES.has(role)) continue;
+
+            const roleUserIds: string[] = [];
+            if (role === "neighborhood_leader" && houseNeighborhoodId) {
+                const neighborhood = await Neighborhood.findById(
+                    houseNeighborhoodId,
+                ).select("leaderUserId");
+                if (neighborhood?.leaderUserId) {
+                    roleUserIds.push(String(neighborhood.leaderUserId));
+                }
+            } else if (role === "neighborhood_coleader" && houseNeighborhoodId) {
+                const coleaders = await NeighborhoodColeaderAssignment.find({
+                    neighborhoodId: houseNeighborhoodId,
+                    unassignedAt: { $exists: false },
+                })
+                    .select("coleaderUserId")
+                    .sort({ coleaderUserId: 1 });
+                coleaders.forEach(c => roleUserIds.push(String(c.coleaderUserId)));
+            } else if (role === "cooperator" && houseCluster) {
+                const cooperators = await User.find({
+                    status: "active",
+                    roles: "cooperator",
+                    assignedClusters: houseCluster,
+                })
+                    .select("_id")
+                    .sort({ _id: 1 });
+                cooperators.forEach(u => roleUserIds.push(String(u._id)));
+            }
+
+            if (roleUserIds.length > 0) {
+                return {
+                    recipientIds: new Set(roleUserIds),
+                    autoAssigneeId: roleUserIds[0],
+                };
+            }
+        }
+    }
+
+    const broadcastRoles = complaintType.allowedReceiverRoles.filter(
+        role => !HOUSE_SCOPED_COMPLAINT_ROLES.has(role),
+    );
+    const recipientIds = new Set<string>();
+    if (broadcastRoles.length > 0) {
+        const filter: Record<string, unknown> = {
+            status: "active",
+            roles: { $in: broadcastRoles },
+        };
+        if (houseWardCode) filter.wardCode = houseWardCode;
+        const users = await User.find(filter).select("_id");
+        users.forEach(u => recipientIds.add(String(u._id)));
+    }
+    return { recipientIds };
+}
+
 export async function createComplaint(
     actorUser: IUser,
     input: CreateComplaintInput,
@@ -284,13 +430,37 @@ export async function createComplaint(
         neighborhoodId = await resolveComplaintNeighborhoodId(actorUser);
     }
     const wardCode = await resolveComplaintWardCode(actorUser, neighborhoodId);
-    // Chi khi nguoi gui CHU DONG chon nha so, tu dong giao To truong cua to
-    // dan pho chua nha do lam nguoi phu trach chinh. Neu khong chon nha, cap
-    // phuong nhan thong bao nhung phan anh van chua co nguoi phu trach.
-    const targetNeighborhood = input.houseId && neighborhoodId
-        ? await Neighborhood.findById(neighborhoodId).select("leaderUserId")
-        : null;
-    const primaryAssigneeId = targetNeighborhood?.leaderUserId;
+
+    // Dinh tuyen theo ComplaintTypeDefinition (danh muc quan tri duoc, seed tu
+    // NHOM_PHAN_ANH cu - xem scripts/seed-complaint-types.ts) khi da co danh
+    // muc cho category nay. Neu CHUA co (vd giai doan migrate truoc khi chay
+    // seed script), roi ve dung logic INLINE cu (to truong cua nha duoc chon,
+    // hoac thong bao rong cap to/phuong) de khong lam gian doan phan anh dang
+    // gui - khong duoc throw o day.
+    const complaintTypeDefinition = await assertValidComplaintCategory(
+        input.category,
+    );
+
+    let primaryAssigneeId: string | undefined;
+    let recipientIds = new Set<string>();
+    if (complaintTypeDefinition) {
+        const routed = await resolveComplaintTypeRecipientIds(
+            complaintTypeDefinition,
+            targetHouseId ? String(targetHouseId) : undefined,
+        );
+        recipientIds = routed.recipientIds;
+        primaryAssigneeId = routed.autoAssigneeId;
+    } else if (input.houseId && neighborhoodId) {
+        // Hanh vi CU: chi khi nguoi gui CHU DONG chon nha so, tu dong giao To
+        // truong cua to dan pho chua nha do lam nguoi phu trach chinh.
+        const targetNeighborhood = await Neighborhood.findById(
+            neighborhoodId,
+        ).select("leaderUserId");
+        if (targetNeighborhood?.leaderUserId) {
+            primaryAssigneeId = String(targetNeighborhood.leaderUserId);
+        }
+    }
+
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
         // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
@@ -325,18 +495,40 @@ export async function createComplaint(
             complaintId: complaint._id,
             status: complaint.status,
             action: "assignment",
-            note: "Tự động giao Tổ trưởng của nhà số được chọn làm người phụ trách chính",
+            note: complaintTypeDefinition
+                ? "Tự động giao người phụ trách chính theo cấu hình loại phản ánh"
+                : "Tự động giao Tổ trưởng của nhà số được chọn làm người phụ trách chính",
             patch: { primaryAssigneeId: String(primaryAssigneeId), secondaryAssigneeIds: [] },
             isPublic: true,
             actorId: userId,
         });
     }
 
-    // Neu xac dinh duoc to dan pho, chi bao To truong/To pho CUA TO DO (khong
-    // blast toi moi neighborhood_leader trong he thong nhu truoc). Neu khong
-    // xac dinh duoc, day chinh la truong hop can chuyen tiep len cap Phuong -
-    // bao bi thu/can bo UBND thay vi de phan anh "mat tich".
-    if (neighborhoodId) {
+    if (complaintTypeDefinition) {
+        if (recipientIds.size > 0) {
+            await createNotification({
+                title: "Phản ánh mới cần xử lý",
+                body: `Mã ${code}: ${input.title}`,
+                type: "complaint.created",
+                targetUserIds: [...recipientIds],
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+                createdBy: userId,
+            });
+        }
+        await createNotification({
+            title: "Phản ánh mới cần xử lý",
+            body: `Mã ${code}: ${input.title}`,
+            type: "complaint.created",
+            targetRoles: ["admin"],
+            relatedModel: "Complaint",
+            relatedId: complaint._id,
+            createdBy: userId,
+        });
+    } else if (neighborhoodId) {
+        // Neu xac dinh duoc to dan pho, chi bao To truong/To pho CUA TO DO
+        // (khong blast toi moi neighborhood_leader trong he thong). Nhanh nay
+        // chi con dung khi CHUA co ComplaintTypeDefinition cho category.
         const neighborhood = await Neighborhood.findById(
             neighborhoodId,
         ).select("leaderUserId");
@@ -369,6 +561,9 @@ export async function createComplaint(
             createdBy: userId,
         });
     } else {
+        // Day chinh la truong hop can chuyen tiep len cap Phuong - bao bi
+        // thu/can bo UBND thay vi de phan anh "mat tich". Nhanh nay chi con
+        // dung khi CHUA co ComplaintTypeDefinition cho category.
         const wardRecipients = wardCode
             ? await User.find({
                   status: "active",
@@ -672,6 +867,13 @@ export async function updateComplaint(
         );
     }
 
+    if (patch.category !== undefined) {
+        // Chi kiem tra gia tri hop le (co ton tai/active hay khong) - khong
+        // can dung ket qua dinh tuyen o day, sua category KHONG lam lai dinh
+        // tuyen nguoi phu trach da co (xem ghi chu EDITABLE_COMPLAINT_FIELDS).
+        await assertValidComplaintCategory(patch.category);
+    }
+
     const previousSnapshot: Record<string, unknown> = {};
     const appliedPatch: Record<string, unknown> = {};
     for (const field of EDITABLE_COMPLAINT_FIELDS) {
@@ -900,4 +1102,254 @@ export async function assignComplaint(
     });
 
     return complaint;
+}
+
+/**
+ * Tao mot Request noi bo (type "task" - RequestType xay dung san, xem
+ * REQUEST_TYPES trong @/types) lien ket toi phan anh nay (relatedModel=
+ * "Complaint", relatedId=complaint._id) de nguoi phu trach theo doi/bao cao
+ * tien do qua kenh Yeu cau cong viec chung, dung cho luong "Tiep nhan"/"Chon
+ * nguoi phu trach" (xem receiveComplaint/choosePersonInCharge ben duoi).
+ *
+ * KHONG goi requestService.createRequest: ham do xac thuc nguoi nhan qua
+ * resolveRecipientIds, doi hoi user thuoc mot Role dang duoc cap permission
+ * "{type}.assign" (eligiblePermissionForType) - loai "task" hien CHUA co
+ * permission rieng nao duoc dang ky (xem ghi chu tai REQUEST_TYPES trong
+ * types/index.ts: "task" chi duoc dinh tuyen qua houseRole/
+ * targetHouseNeighborhoodLeader, chua co "task.assign"), nen bat ky
+ * targetUserIds nao truyen thang vao createRequest cho type "task" se LUON bi
+ * tu choi (khong co role nao khop dieu kien). Nguoi nhan o day da duoc xac
+ * thuc rieng boi actor (chinh actorUser, hoac assigneeUserId da qua
+ * User.findById trong choosePersonInCharge) nen tao thang Request/
+ * RequestRecipient, bo qua lop xac thuc do thay vi lam createRequest that bai.
+ */
+async function createLinkedTaskRequest(
+    actorUser: IUser,
+    complaint: IComplaint,
+    assigneeUserId: string,
+): Promise<void> {
+    const request = await RequestModel.create({
+        type: "task",
+        title: `Xử lý phản ánh: ${complaint.title}`,
+        description: `Yêu cầu xử lý phản ánh ${complaint.code}`,
+        priority: "normal",
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+        houseId: complaint.targetHouseId,
+        targetRoles: [],
+        createdBy: actorUser._id,
+    });
+
+    await RequestRecipient.create({
+        requestId: request._id,
+        userId: assigneeUserId,
+        status: "pending",
+    });
+
+    await createNotification({
+        title: request.title,
+        body: `Mã ${complaint.code}: ${complaint.title}`,
+        type: "request.task",
+        targetUserIds: [assigneeUserId],
+        relatedModel: "Request",
+        relatedId: request._id,
+        createdBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "request.create",
+        targetModel: "Request",
+        targetId: request._id,
+        metadata: {
+            type: "task",
+            recipientCount: 1,
+            relatedModel: "Complaint",
+            relatedId: complaint._id,
+        },
+    });
+}
+
+/**
+ * Nhan vien co quyen complaints.assign (kiem tra o route, giong assignComplaint)
+ * TU tiep nhan mot phan anh dang "moi_tiep_nhan" - tro thanh nguoi phu trach
+ * chinh CUA CHINH MINH, khac voi choosePersonInCharge (chon MOT nguoi khac).
+ * Tao kem mot Request noi bo (type "task") ma nguoi gui = nguoi nhan = chinh
+ * actorUser, dung de actor bao cao tien do xu ly qua kenh Yeu cau cong viec
+ * chung - trang thai Request nay se duoc dong bo nguoc lai Complaint.status
+ * qua syncComplaintStatusFromRequest (xem requestService.updateMyRequestStatus/
+ * confirmRequestRecipient).
+ */
+export async function receiveComplaint(
+    actorUser: IUser,
+    complaintId: string,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    assertComplaintInScope(actorUser, complaint, false);
+    if (complaint.status !== "moi_tiep_nhan") {
+        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+    }
+
+    complaint.assigneeId = actorUser._id as any;
+    complaint.status = "dang_xu_ly";
+    await complaint.save();
+
+    await createLinkedTaskRequest(actorUser, complaint, String(actorUser._id));
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: complaint.status,
+        action: "assignment",
+        note: "Đã tiếp nhận và trực tiếp xử lý phản ánh",
+        patch: {
+            primaryAssigneeId: String(actorUser._id),
+            secondaryAssigneeIds: [],
+        },
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "complaint.receive",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+    });
+
+    return complaint;
+}
+
+/**
+ * Nhan vien co quyen complaints.assign chon MOT nguoi khac lam nguoi phu
+ * trach chinh cho mot phan anh dang "moi_tiep_nhan" - khac receiveComplaint
+ * (tu tiep nhan) va assignComplaint (danh cho tai phan cong/chuyen trach
+ * nhiem SAU khi da qua buoc tiep nhan dau tien, van giu nguyen khong doi).
+ * Cung tao kem mot Request noi bo (type "task") nhung nguoi nhan la
+ * assigneeUserId, nguoi tao (createdBy) van la actorUser (nguoi thuc hien
+ * chon, khong phai nguoi duoc chon).
+ */
+export async function choosePersonInCharge(
+    actorUser: IUser,
+    complaintId: string,
+    assigneeUserId: string,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    assertComplaintInScope(actorUser, complaint, false);
+    if (complaint.status !== "moi_tiep_nhan") {
+        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+    }
+
+    // Cung quy uoc xac thuc voi assignComplaint: nguoi duoc chon phai la mot
+    // User dang active.
+    const assignee = await User.findById(assigneeUserId).select("status");
+    if (!assignee || assignee.status !== "active") {
+        throw new HttpError("Nguoi phu trach chinh khong hop le", 422);
+    }
+
+    complaint.assigneeId = assigneeUserId as any;
+    complaint.status = "dang_xu_ly";
+    await complaint.save();
+
+    await createLinkedTaskRequest(actorUser, complaint, assigneeUserId);
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: complaint.status,
+        action: "assignment",
+        note: "Đã chọn người phụ trách chính",
+        patch: { primaryAssigneeId: assigneeUserId, secondaryAssigneeIds: [] },
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+
+    await createNotification({
+        title: "Bạn được giao xử lý một phản ánh",
+        body: `Phản ánh ${complaint.code}: ${complaint.title}`,
+        type: "complaint.assigned",
+        targetUserIds: [assigneeUserId],
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+        createdBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "complaint.choose_assignee",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+        metadata: { assigneeUserId },
+    });
+
+    return complaint;
+}
+
+// Anh xa trang thai RequestRecipient -> Complaint.status, dung boi
+// syncComplaintStatusFromRequest. KHONG BAO GIO anh xa toi "hoan_thanh" - do
+// la bat bien cung, trang thai do CHI nguoi gui phan anh tu xac nhan qua
+// confirmComplaintResolution. "pending" khong co mat (khong lam gi - phan
+// anh da chuyen dang_xu_ly ngay tu luc tao Request trong receiveComplaint/
+// choosePersonInCharge, khong co ly do lui ve trang thai cho xu ly).
+const COMPLAINT_STATUS_SYNC_MAP: Partial<Record<RequestStatus, TrangThaiPhanAnh>> = {
+    acknowledged: "dang_xu_ly",
+    in_progress: "dang_xu_ly",
+    needs_info: "can_bo_sung",
+    awaiting_confirmation: "da_xu_ly",
+    resolved: "da_xu_ly",
+};
+
+// Thu tu "tien" cua cac trang thai ma dong bo co the dat - dung de dam bao
+// dong bo chi di TOI, khong lui (vd Request tu "resolved" -> "in_progress" do
+// nguoi quan ly tu choi xac nhan, khong duoc keo Complaint tu da_xu_ly lui ve
+// dang_xu_ly). "moi_tiep_nhan"/"hoan_thanh"/"dong" khong co mat: hai trang
+// thai sau la ket thuc (chan rieng ben duoi, khong bao gio toi day), con
+// moi_tiep_nhan la trang thai truoc khi co Request lien ket nen coi nhu hang 0.
+const SYNC_STATUS_RANK: Partial<Record<TrangThaiPhanAnh, number>> = {
+    can_bo_sung: 1,
+    dang_xu_ly: 1,
+    da_xu_ly: 2,
+};
+
+/**
+ * Dong bo MOT CHIEU: trang thai cua RequestRecipient (thuoc mot Request lien
+ * ket toi Complaint qua relatedModel/relatedId) -> Complaint.status. Goi sau
+ * khi requestService.updateMyRequestStatus/confirmRequestRecipient luu trang
+ * thai moi cho mot recipient cua Request do.
+ *
+ * Bat bien cung: KHONG BAO GIO dat "hoan_thanh" (chi dat duoc qua
+ * confirmComplaintResolution, do chinh nguoi gui phan anh tu xac nhan) va
+ * khong dong khi phan anh da "hoan_thanh"/"dong" (trang thai ket thuc, do
+ * nguoi gui/nhan vien chu dong dieu khien rieng - dong bo tu dong tuyet doi
+ * khong duoc ghi de). Cung khong lui trang thai (xem SYNC_STATUS_RANK).
+ */
+export async function syncComplaintStatusFromRequest(
+    complaintId: string,
+    recipientStatus: RequestStatus,
+): Promise<void> {
+    const mapped = COMPLAINT_STATUS_SYNC_MAP[recipientStatus];
+    if (!mapped) return;
+
+    const complaint = await Complaint.findById(complaintId).select(
+        "status assigneeId createdByUserId code",
+    );
+    if (!complaint) return;
+    if (complaint.status === "hoan_thanh" || complaint.status === "dong") return;
+    if (complaint.status === mapped) return;
+
+    const currentRank = SYNC_STATUS_RANK[complaint.status] ?? 0;
+    const nextRank = SYNC_STATUS_RANK[mapped] ?? 0;
+    if (nextRank < currentRank) return;
+
+    complaint.status = mapped;
+    await complaint.save();
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: mapped,
+        action: "status_update",
+        note: "Tự động cập nhật theo tiến độ xử lý của yêu cầu liên kết (đồng bộ hệ thống)",
+        isPublic: true,
+        actorId: complaint.assigneeId || complaint.createdByUserId,
+    });
 }

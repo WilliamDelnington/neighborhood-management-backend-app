@@ -186,6 +186,7 @@ export async function createHouseOwnerByStaff(
             phone: input.phone,
             displayName: input.displayName,
             address: input.address,
+            idNumber: input.idNumber,
             passwordHash,
             roles: [role],
             primaryRole: role,

@@ -227,6 +227,14 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "complaints.assign", label: "Gán người xử lý" },
             { key: "complaints.update_status", label: "Cập nhật trạng thái" },
             { key: "complaints.delete", label: "Xóa phản ánh" },
+            {
+                key: "complaint_types.read",
+                label: "Xem cấu hình loại phản ánh",
+            },
+            {
+                key: "complaint_types.manage",
+                label: "Tạo/sửa loại phản ánh và định tuyến người nhận",
+            },
         ],
     },
     {

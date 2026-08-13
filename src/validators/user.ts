@@ -28,6 +28,7 @@ export const createHouseOwnerSchema = z.object({
         .refine(isValidVnPhone, "So dien thoai khong hop le"),
     displayName: z.string().min(1, "Thieu ho ten"),
     address: z.string().optional(),
+    idNumber: z.string().min(1, "Thieu so CMND/CCCD"),
     role: z.enum(CREATABLE_STAFF_ROLES).default("house_owner"),
     password: z
         .string()
