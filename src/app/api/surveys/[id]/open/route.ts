@@ -13,7 +13,7 @@ export async function POST(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "surveys.publish");
-        const survey = await openSurvey(String(actorUser._id), params.id);
+        const survey = await openSurvey(actorUser, params.id);
         return apiSuccess(survey, "Mo khao sat thanh cong");
     } catch (err) {
         return apiErrorFromException(err);

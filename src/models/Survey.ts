@@ -32,6 +32,12 @@ export interface ISurvey extends Document {
     // thi canh ket qua tho, KHONG thay doi cau tra loi cua nguoi dan.
     resultSummary?: string;
     createdBy: mongoose.Types.ObjectId;
+    // Nguoi duoc chu khao sat (createdBy) uy quyen cung chinh sua/mo/dong/xoa -
+    // xem surveyService.assertSurveyEditable. Phai la tai khoan dang co quyen
+    // "surveys.update" tai thoi diem duoc them (assertUsersCanCoEdit), nhung
+    // KHONG tu dong bi go neu quyen do bi thu hoi sau nay (giu nguyen cho toi
+    // khi chu khao sat/admin chu dong sua lai danh sach).
+    coEditorUserIds: mongoose.Types.ObjectId[];
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -82,6 +88,11 @@ const SurveySchema = new Schema<ISurvey>(
         eligibleAll: { type: Boolean, default: true },
         resultSummary: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        coEditorUserIds: {
+            type: [Schema.Types.ObjectId],
+            ref: "User",
+            default: [],
+        },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },
     { timestamps: true },

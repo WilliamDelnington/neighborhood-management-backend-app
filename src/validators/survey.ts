@@ -22,6 +22,10 @@ export const createSurveySchema = z.object({
     // Nhan xet/tong hop cua nguoi phu trach khao sat sau khi co ket qua (B08.06)
     // - khong bat buoc luc tao, chi dung khi cap nhat.
     resultSummary: z.string().optional(),
+    // Nguoi duoc chu khao sat (nguoi tao) uy quyen cung chinh sua/mo/dong/xoa -
+    // xem surveyService.assertSurveyEditable/assertUsersCanCoEdit. Moi id phai
+    // la tai khoan dang co quyen "surveys.update".
+    coEditorUserIds: z.array(z.string()).optional(),
 });
 export type CreateSurveyInput = z.infer<typeof createSurveySchema>;
 

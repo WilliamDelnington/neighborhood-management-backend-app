@@ -32,11 +32,7 @@ export async function PATCH(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "surveys.update");
         const body = updateSurveySchema.parse(await req.json());
-        const survey = await updateSurvey(
-            String(actorUser._id),
-            params.id,
-            body,
-        );
+        const survey = await updateSurvey(actorUser, params.id, body);
         return apiSuccess(survey, "Cap nhat khao sat thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
@@ -51,7 +47,7 @@ export async function DELETE(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "surveys.update");
-        await deleteSurvey(String(actorUser._id), params.id);
+        await deleteSurvey(actorUser, params.id);
         return apiSuccess(null, "Xoa khao sat thanh cong");
     } catch (err) {
         return apiErrorFromException(err);
