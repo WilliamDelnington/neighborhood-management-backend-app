@@ -441,7 +441,11 @@ export async function createComplaint(
         input.category,
     );
 
-    let primaryAssigneeId: string | undefined;
+    // Khong tu dong gan nguoi phu trach chinh (assigneeId) khi tao phan anh -
+    // recipientIds/routed.autoAssigneeId chi dung de XAC DINH nguoi/vai tro
+    // se nhan THONG BAO (de ho biet ma vao tiep nhan), KHONG dung de gan san
+    // nguoi phu trach. Nguoi phu trach chi duoc gan khi can bo bam "Tiep
+    // nhan" (receiveComplaint) hoac "Chon nguoi phu trach" (choosePersonInCharge).
     let recipientIds = new Set<string>();
     if (complaintTypeDefinition) {
         const routed = await resolveComplaintTypeRecipientIds(
@@ -449,16 +453,6 @@ export async function createComplaint(
             targetHouseId ? String(targetHouseId) : undefined,
         );
         recipientIds = routed.recipientIds;
-        primaryAssigneeId = routed.autoAssigneeId;
-    } else if (input.houseId && neighborhoodId) {
-        // Hanh vi CU: chi khi nguoi gui CHU DONG chon nha so, tu dong giao To
-        // truong cua to dan pho chua nha do lam nguoi phu trach chinh.
-        const targetNeighborhood = await Neighborhood.findById(
-            neighborhoodId,
-        ).select("leaderUserId");
-        if (targetNeighborhood?.leaderUserId) {
-            primaryAssigneeId = String(targetNeighborhood.leaderUserId);
-        }
     }
 
     const complaint = await Complaint.create({
@@ -479,7 +473,6 @@ export async function createComplaint(
         targetHouseId,
         relatedAssetId: input.relatedAssetId,
         createdByUserId: userId,
-        assigneeId: primaryAssigneeId,
     });
 
     await ComplaintTimeline.create({
@@ -489,20 +482,6 @@ export async function createComplaint(
         isPublic: true,
         actorId: userId,
     });
-
-    if (primaryAssigneeId) {
-        await ComplaintTimeline.create({
-            complaintId: complaint._id,
-            status: complaint.status,
-            action: "assignment",
-            note: complaintTypeDefinition
-                ? "Tự động giao người phụ trách chính theo cấu hình loại phản ánh"
-                : "Tự động giao Tổ trưởng của nhà số được chọn làm người phụ trách chính",
-            patch: { primaryAssigneeId: String(primaryAssigneeId), secondaryAssigneeIds: [] },
-            isPublic: true,
-            actorId: userId,
-        });
-    }
 
     if (complaintTypeDefinition) {
         if (recipientIds.size > 0) {
