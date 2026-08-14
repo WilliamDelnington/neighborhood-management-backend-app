@@ -193,3 +193,20 @@ export {
     CHANGE_REQUEST_STATUS,
 } from "./ChangeRequest";
 export { default as UtilityApp, type IUtilityApp } from "./UtilityApp";
+export {
+    default as AppointmentService,
+    type IAppointmentService,
+    type IAppointmentTimeSlot,
+    type AppointmentServiceScope,
+    APPOINTMENT_SERVICE_SCOPES,
+} from "./AppointmentService";
+export {
+    default as Appointment,
+    type IAppointment,
+    type AppointmentStatus,
+    APPOINTMENT_STATUSES,
+} from "./Appointment";
+export {
+    default as AppointmentSlotCounter,
+    type IAppointmentSlotCounter,
+} from "./AppointmentSlotCounter";

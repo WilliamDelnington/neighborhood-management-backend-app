@@ -7,7 +7,15 @@ import {
     requirePermission,
 } from "@/lib/rbac";
 import { signUploadToken } from "@/lib/auth";
-import { HouseRecord, Business, Complaint, Citizen, Household, Company } from "@/models";
+import {
+    HouseRecord,
+    Business,
+    Complaint,
+    Citizen,
+    Household,
+    Company,
+    Appointment,
+} from "@/models";
 import {
     assertHouseRecordInScope,
     assertHouseOwnerAttachmentUploadAllowed,
@@ -15,6 +23,7 @@ import {
 import { assertHouseholdInScope } from "@/services/householdService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
+import { assertAppointmentAttachmentAccess } from "@/services/appointmentService";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +39,7 @@ const createUploadTokenSchema = z.object({
         "Citizen",
         "Household",
         "Company",
+        "Appointment",
     ]),
     relatedId: z.string().min(1),
 });
@@ -131,6 +141,19 @@ export async function POST(req: Request) {
                 );
             }
             await assertHouseRecordInScope(user, houseRecord);
+        } else if (body.relatedModel === "Appointment") {
+            // relatedId co the la mot lich hen da ton tai (dinh kem them tu
+            // trang chi tiet - chu lich hen, can bo duoc phan cong dich vu,
+            // hoac admin, xem assertAppointmentAttachmentAccess) hoac mot
+            // draftId chua ung voi ban ghi nao (dinh kem ngay tren form dat
+            // lich, truoc khi gui) - voi draft, khong co gi de kiem tra chu so
+            // huu nen chi yeu cau actor co quyen dat lich hen.
+            const appointment = await Appointment.findById(body.relatedId);
+            if (appointment) {
+                await assertAppointmentAttachmentAccess(user, appointment);
+            } else {
+                await requirePermission(user, "appointments.create");
+            }
         } else {
             // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
             // len giay to - khac voi nhanh "Business" o tren (nhan vien co

@@ -466,6 +466,23 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "utility_apps.manage", label: "Quản trị Nhóm tiện ích" },
         ],
     },
+    {
+        key: "appointments",
+        label: "Đặt lịch hẹn",
+        permissions: [
+            { key: "appointments.read", label: "Xem lịch hẹn" },
+            { key: "appointments.create", label: "Đặt lịch hẹn" },
+            {
+                key: "appointments.checkin",
+                label:
+                    "Check-in / hoàn thành lịch hẹn (chỉ với dịch vụ được phân công phụ trách)",
+            },
+            {
+                key: "appointments.manage",
+                label: "Quản trị dịch vụ đặt lịch hẹn (tạo/sửa dịch vụ, khung giờ, phân công cán bộ)",
+            },
+        ],
+    },
 ];
 
 export const ALL_PERMISSION_KEYS: string[] = MODULE_PERMISSION_REGISTRY.flatMap(

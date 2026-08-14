@@ -56,6 +56,12 @@ export interface IUser extends Document {
     lastLoginAt?: Date;
     notificationPermission: boolean;
     sessionVersion: number;
+    // Khoa dat lich hen hep, RIENG cho module Dat lich hen (khac co che khoa
+    // toan tai khoan users.lock) - do checkAppointmentRemindersAndNoShow tu
+    // dong dat khi tai khoan vang mat >=3 lan trong 30 ngay gan nhat (BR-04),
+    // kiem tra tai thoi diem dat lich (createAppointment). Tu het hieu luc khi
+    // qua ngay nay, khong can hanh dong "mo khoa" rieng.
+    appointmentBookingLockedUntil?: Date;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -120,6 +126,7 @@ const UserSchema = new Schema<IUser>(
         lastLoginAt: { type: Date },
         notificationPermission: { type: Boolean, default: false },
         sessionVersion: { type: Number, default: 0 },
+        appointmentBookingLockedUntil: { type: Date },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

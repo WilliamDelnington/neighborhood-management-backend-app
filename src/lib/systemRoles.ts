@@ -94,6 +94,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "change_requests.read",
         "change_requests.create",
         "change_requests.decide",
+        // To truong/To pho dat lich hen ho cu dan (proxy booking) va xem lich
+        // hen trong pham vi to dan pho phu trach - xem appointmentService.ts.
+        "appointments.create",
+        "appointments.read",
     ],
     // To pho duoc rbac.ts (areaScopeFilter/requireUser) coi NHU HET voi to
     // truong ve pham vi (ca hai deu duoc gan vao assignedNeighborhoodIds va
@@ -159,6 +163,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "change_requests.read",
         "change_requests.create",
         "change_requests.decide",
+        "appointments.create",
+        "appointments.read",
     ],
     // Cong tac vien: pham vi HEP theo thiet ke (BR-NB-003, xem
     // rbac.ts:areaScopeFilter) - CHI thay du lieu duoc phan cong rieng (vd
@@ -249,6 +255,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "change_requests.read",
         "change_requests.create",
         "change_requests.decide",
+        // Bi thu quan tri dich vu dat lich hen (tao/sua dich vu, khung gio,
+        // phan cong can bo) va co the tu check-in/hoan thanh neu duoc phan
+        // cong - xem appointmentService.ts.
+        "appointments.read",
+        "appointments.manage",
+        "appointments.checkin",
     ],
     regional_police: [
         "dashboard.read",
@@ -290,6 +302,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.read",
         "notifications.read",
         "change_requests.create",
+        // Cong an khu vuc co the duoc phan cong check-in/hoan thanh lich hen
+        // cho mot so dich vu (vd tiep dan lien quan an ninh trat tu) - xem
+        // appointmentService.ts.
+        "appointments.read",
+        "appointments.checkin",
     ],
     people_committee_official: [
         "dashboard.read",
@@ -348,6 +365,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "change_requests.read",
         "change_requests.create",
         "change_requests.decide",
+        // Can bo UBND quan tri dich vu dat lich hen cap phuong/xa - xem
+        // appointmentService.ts.
+        "appointments.read",
+        "appointments.manage",
+        "appointments.checkin",
     ],
     house_owner: [
         "organizations.read",
@@ -401,6 +423,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // Gui de nghi thay doi thong tin nha/ho khau da xac minh, hoac de nghi
         // huy lien ket voi mot nha - xem changeRequestService.ts.
         "change_requests.create",
+        // Chu nha dat lich hen voi ward/to dan pho cho chinh nha cua minh - xem
+        // appointmentService.ts.
+        "appointments.create",
     ],
     // Chu ho (dung dau hop khau) khac house_owner (chu nha/nguoi dang ky nha):
     // mot nha co the co nhieu ho dan (vd. chinh chu + nguoi thue), moi ho co
@@ -424,5 +449,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "files.read",
         "notifications.read",
         "change_requests.create",
+        // Chu ho dat lich hen cho nha minh dang o - xem appointmentService.ts.
+        "appointments.create",
     ],
 };

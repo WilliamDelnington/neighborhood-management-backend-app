@@ -11,6 +11,7 @@ import {
     Citizen,
     Household,
     Company,
+    Appointment,
 } from "@/models";
 import {
     assertHouseRecordInScope,
@@ -19,6 +20,7 @@ import {
 import { assertHouseholdInScope } from "@/services/householdService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
+import { assertAppointmentAttachmentAccess } from "@/services/appointmentService";
 import { saveUploadedFile, getPublicOrigin } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 
@@ -120,6 +122,18 @@ export async function POST(req: Request) {
             }
             await assertHouseholdInScope(actorUser, household);
             subDir = `citizens/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Appointment") {
+            // Kiem tra lai giong het luc cap token (xem
+            // /api/uploads/token/route.ts): relatedId co the la lich hen da
+            // ton tai (chu lich hen/can bo phu trach dich vu/admin, xem
+            // assertAppointmentAttachmentAccess) hoac mot draftId chua ung voi
+            // ban ghi nao (dinh kem ngay tren form dat lich, truoc khi lich
+            // hen duoc tao) - voi draft, khong co gi de kiem tra them.
+            const appointment = await Appointment.findById(payload.relatedId);
+            if (appointment) {
+                await assertAppointmentAttachmentAccess(actorUser, appointment);
+            }
+            subDir = `appointments/${payload.relatedId}`;
         } else if (payload.relatedModel === "Company") {
             const company = await Company.findById(payload.relatedId);
             if (!company) return zaloError("Khong tim thay cong ty");
