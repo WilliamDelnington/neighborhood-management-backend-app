@@ -739,6 +739,11 @@ export async function getComplaintDetailForOwnerOrStaff(
     const timeline = await getTimelineFor(complaintId, !requester.isStaff);
     const plain = complaint.toObject();
     if (!requester.isStaff) delete (plain as any).internalNotes;
+    // Chi tinh cho staff - resident khong dung toi flag nay (khong thay nut
+    // Tiep nhan/Chon nguoi phu trach), tranh 1 query thua cho request cua ho.
+    (plain as any).canReceiveOrChooseAssignee = requester.isStaff
+        ? await canReceiveOrChooseAssignee(complaint)
+        : false;
 
     return { complaint: plain, timeline };
 }
@@ -1085,6 +1090,53 @@ export async function assignComplaint(
 }
 
 /**
+ * Mot Complaint co the co NHIEU Request lien ket qua lifetime cua no (vd:
+ * dot xu ly dau tien COMPLETED, roi nguoi gui de nghi xem xet lai, tao them
+ * mot dot xu ly moi) - relatedModel/relatedId tren Request von da cho phep
+ * nhieu ban ghi Request cung tro ve mot Complaint, khong can doi schema. Ham
+ * nay kiem tra CON Request nao lien ket toi complaintId dang "hoat dong"
+ * (RequestRecipient chua "resolved") hay khong - dung de quyet dinh co the
+ * tao THEM mot Request moi (qua receiveComplaint/choosePersonInCharge) hay
+ * khong: tai moi thoi diem chi cho phep TOI DA MOT Request dang hoat dong
+ * cho mot Complaint (tranh hai nguoi cung duoc giao xu ly cung luc), nhung
+ * sau khi Request do da resolved (hoac chua tung co Request nao), co the tao
+ * THEM mot Request moi - vd sau khi nguoi gui de nghi xem xet lai va phan
+ * anh quay lai "dang_xu_ly".
+ */
+async function hasActiveLinkedRequest(
+    complaintId: mongoose.Types.ObjectId | string,
+): Promise<boolean> {
+    const requestIds = await RequestModel.find({
+        relatedModel: "Complaint",
+        relatedId: complaintId,
+    }).distinct("_id");
+    if (requestIds.length === 0) return false;
+
+    const activeCount = await RequestRecipient.countDocuments({
+        requestId: { $in: requestIds },
+        status: { $ne: "resolved" },
+    });
+    return activeCount > 0;
+}
+
+/**
+ * Dung boi ca guard cua receiveComplaint/choosePersonInCharge LAN o
+ * getComplaintDetailForOwnerOrStaff (de FE biet luc nao hien nut Tiep
+ * nhan/Chon nguoi phu trach) - mot noi duy nhat dinh nghia dieu kien, tranh
+ * lech giua backend enforcement va UI hien thi. Khong cho tiep nhan/chon
+ * nguoi phu trach khi phan anh da ket thuc ("hoan_thanh"/"dong") hoac dang co
+ * mot Request lien ket con hoat dong (xem hasActiveLinkedRequest).
+ */
+export async function canReceiveOrChooseAssignee(
+    complaint: IComplaint,
+): Promise<boolean> {
+    if (complaint.status === "hoan_thanh" || complaint.status === "dong") {
+        return false;
+    }
+    return !(await hasActiveLinkedRequest(complaint._id));
+}
+
+/**
  * Tao mot Request noi bo (type "task" - RequestType xay dung san, xem
  * REQUEST_TYPES trong @/types) lien ket toi phan anh nay (relatedModel=
  * "Complaint", relatedId=complaint._id) de nguoi phu trach theo doi/bao cao
@@ -1160,13 +1212,17 @@ async function createLinkedTaskRequest(
 
 /**
  * Nhan vien co quyen complaints.assign (kiem tra o route, giong assignComplaint)
- * TU tiep nhan mot phan anh dang "moi_tiep_nhan" - tro thanh nguoi phu trach
- * chinh CUA CHINH MINH, khac voi choosePersonInCharge (chon MOT nguoi khac).
- * Tao kem mot Request noi bo (type "task") ma nguoi gui = nguoi nhan = chinh
- * actorUser, dung de actor bao cao tien do xu ly qua kenh Yeu cau cong viec
- * chung - trang thai Request nay se duoc dong bo nguoc lai Complaint.status
- * qua syncComplaintStatusFromRequest (xem requestService.updateMyRequestStatus/
+ * TU tiep nhan mot phan anh - tro thanh nguoi phu trach chinh CUA CHINH
+ * MINH, khac voi choosePersonInCharge (chon MOT nguoi khac). Tao kem mot
+ * Request noi bo (type "task") ma nguoi gui = nguoi nhan = chinh actorUser,
+ * dung de actor bao cao tien do xu ly qua kenh Yeu cau cong viec chung -
+ * trang thai Request nay se duoc dong bo nguoc lai Complaint.status qua
+ * syncComplaintStatusFromRequest (xem requestService.updateMyRequestStatus/
  * confirmRequestRecipient).
+ *
+ * KHONG con gioi han chi dung duoc khi status="moi_tiep_nhan" - mot Complaint
+ * co the tao NHIEU Request qua vong doi cua no (vd sau khi nguoi gui de nghi
+ * xem xet lai va phan anh quay ve "dang_xu_ly"), xem canReceiveOrChooseAssignee.
  */
 export async function receiveComplaint(
     actorUser: IUser,
@@ -1175,8 +1231,11 @@ export async function receiveComplaint(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
     assertComplaintInScope(actorUser, complaint, false);
-    if (complaint.status !== "moi_tiep_nhan") {
-        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+    if (!(await canReceiveOrChooseAssignee(complaint))) {
+        throw new HttpError(
+            "Phan anh da ket thuc hoac dang co yeu cau xu ly con hieu luc, khong the tiep nhan",
+            409,
+        );
     }
 
     complaint.assigneeId = actorUser._id as any;
@@ -1215,12 +1274,14 @@ export async function receiveComplaint(
 
 /**
  * Nhan vien co quyen complaints.assign chon MOT nguoi khac lam nguoi phu
- * trach chinh cho mot phan anh dang "moi_tiep_nhan" - khac receiveComplaint
- * (tu tiep nhan) va assignComplaint (danh cho tai phan cong/chuyen trach
- * nhiem SAU khi da qua buoc tiep nhan dau tien, van giu nguyen khong doi).
- * Cung tao kem mot Request noi bo (type "task") nhung nguoi nhan la
- * assigneeUserId, nguoi tao (createdBy) van la actorUser (nguoi thuc hien
- * chon, khong phai nguoi duoc chon).
+ * trach chinh cho mot phan anh - khac receiveComplaint (tu tiep nhan) va
+ * assignComplaint (tai phan cong/chuyen trach nhiem cho Request DANG hoat
+ * dong, van giu nguyen khong doi). Cung tao kem mot Request noi bo (type
+ * "task") nhung nguoi nhan la assigneeUserId, nguoi tao (createdBy) van la
+ * actorUser (nguoi thuc hien chon, khong phai nguoi duoc chon).
+ *
+ * KHONG con gioi han chi dung duoc khi status="moi_tiep_nhan" - xem ghi chu
+ * o receiveComplaint/canReceiveOrChooseAssignee.
  */
 export async function choosePersonInCharge(
     actorUser: IUser,
@@ -1230,8 +1291,11 @@ export async function choosePersonInCharge(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
     assertComplaintInScope(actorUser, complaint, false);
-    if (complaint.status !== "moi_tiep_nhan") {
-        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+    if (!(await canReceiveOrChooseAssignee(complaint))) {
+        throw new HttpError(
+            "Phan anh da ket thuc hoac dang co yeu cau xu ly con hieu luc, khong the chon nguoi phu trach",
+            409,
+        );
     }
 
     // Cung quy uoc xac thuc voi assignComplaint: nguoi duoc chon phai la mot
