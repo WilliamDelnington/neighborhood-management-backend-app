@@ -77,3 +77,10 @@ export const chooseAssigneeSchema = z.object({
     userId: z.string().min(1, "Thieu nguoi phu trach"),
 });
 export type ChooseAssigneeInput = z.infer<typeof chooseAssigneeSchema>;
+
+export const requestComplaintInfoSchema = z.object({
+    content: z.string().min(1, "Vui long nhap thong tin can bo sung"),
+});
+export type RequestComplaintInfoInput = z.infer<
+    typeof requestComplaintInfoSchema
+>;

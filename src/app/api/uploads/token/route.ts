@@ -7,11 +7,12 @@ import {
     requirePermission,
 } from "@/lib/rbac";
 import { signUploadToken } from "@/lib/auth";
-import { HouseRecord, Business, Complaint } from "@/models";
+import { HouseRecord, Business, Complaint, Citizen, Household, Company } from "@/models";
 import {
     assertHouseRecordInScope,
     assertHouseOwnerAttachmentUploadAllowed,
 } from "@/services/houseRecordService";
+import { assertHouseholdInScope } from "@/services/householdService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
 
@@ -26,6 +27,9 @@ const createUploadTokenSchema = z.object({
         "BusinessDocument",
         "Complaint",
         "Request",
+        "Citizen",
+        "Household",
+        "Company",
     ]),
     relatedId: z.string().min(1),
 });
@@ -92,6 +96,41 @@ export async function POST(req: Request) {
             // nhan (assertCanViewRequest) - dung lai dung y het dieu kien cua
             // GET/POST attachments hien co, khong viet lai logic rieng.
             await getRequestById(user, body.relatedId);
+        } else if (body.relatedModel === "Household") {
+            await requireAnyPermission(user, [
+                "households.update",
+                "households.verify",
+            ]);
+            const household = await Household.findById(body.relatedId);
+            if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+            await assertHouseholdInScope(user, household);
+        } else if (body.relatedModel === "Citizen") {
+            await requirePermission(user, "citizens.update");
+            const citizen = await Citizen.findById(body.relatedId);
+            if (!citizen) throw new HttpError("Khong tim thay nhan khau", 404);
+            const household = await Household.findById(citizen.householdId);
+            if (!household) {
+                throw new HttpError(
+                    "Khong tim thay ho dan cua nhan khau nay",
+                    404,
+                );
+            }
+            await assertHouseholdInScope(user, household);
+        } else if (body.relatedModel === "Company") {
+            await requireAnyPermission(user, [
+                "companies.update",
+                "companies.verify",
+            ]);
+            const company = await Company.findById(body.relatedId);
+            if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+            const houseRecord = await HouseRecord.findById(company.houseId);
+            if (!houseRecord) {
+                throw new HttpError(
+                    "Khong tim thay nha so cua cong ty nay",
+                    404,
+                );
+            }
+            await assertHouseRecordInScope(user, houseRecord);
         } else {
             // BusinessDocument: chi chu ho kinh doanh (hoac admin) duoc tai
             // len giay to - khac voi nhanh "Business" o tren (nhan vien co

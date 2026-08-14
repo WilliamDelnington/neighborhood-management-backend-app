@@ -31,6 +31,7 @@ import {
 import type {
     AssignComplaintInput,
     CreateComplaintInput,
+    RequestComplaintInfoInput,
     RequestReevaluationInput,
     UpdateComplaintInput,
     UpdateComplaintStatusInput,
@@ -1101,11 +1102,19 @@ export async function assignComplaint(
  * thuc rieng boi actor (chinh actorUser, hoac assigneeUserId da qua
  * User.findById trong choosePersonInCharge) nen tao thang Request/
  * RequestRecipient, bo qua lop xac thuc do thay vi lam createRequest that bai.
+ *
+ * initialStatus: receiveComplaint truyen "in_progress" (nguoi tiep nhan da tu
+ * nhan xu ly, khong ly do gi de Request o trang thai "moi" - dung quy uoc
+ * cua PDF quy trinh: "no reason to create the Request as NEW, because the
+ * creator has already accepted the work"). choosePersonInCharge truyen
+ * "pending" (nguoi duoc chon con phai tu xac nhan/tiep nhan Request rieng,
+ * giong luong "Assign to another person" trong PDF).
  */
 async function createLinkedTaskRequest(
     actorUser: IUser,
     complaint: IComplaint,
     assigneeUserId: string,
+    initialStatus: RequestStatus,
 ): Promise<void> {
     const request = await RequestModel.create({
         type: "task",
@@ -1122,7 +1131,7 @@ async function createLinkedTaskRequest(
     await RequestRecipient.create({
         requestId: request._id,
         userId: assigneeUserId,
-        status: "pending",
+        status: initialStatus,
     });
 
     await createNotification({
@@ -1174,7 +1183,12 @@ export async function receiveComplaint(
     complaint.status = "dang_xu_ly";
     await complaint.save();
 
-    await createLinkedTaskRequest(actorUser, complaint, String(actorUser._id));
+    await createLinkedTaskRequest(
+        actorUser,
+        complaint,
+        String(actorUser._id),
+        "in_progress",
+    );
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
@@ -1231,7 +1245,12 @@ export async function choosePersonInCharge(
     complaint.status = "dang_xu_ly";
     await complaint.save();
 
-    await createLinkedTaskRequest(actorUser, complaint, assigneeUserId);
+    await createLinkedTaskRequest(
+        actorUser,
+        complaint,
+        assigneeUserId,
+        "pending",
+    );
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
@@ -1264,13 +1283,77 @@ export async function choosePersonInCharge(
     return complaint;
 }
 
+/**
+ * Nhan vien co quyen complaints.assign yeu cau nguoi gui bo sung thong tin
+ * cho mot phan anh CON dang "moi_tiep_nhan" - dung TRUOC khi tiep nhan/chon
+ * nguoi phu trach (khac voi luong bo sung thong tin GIUA CHUNG xu ly, xem
+ * requestService.updateMyRequestStatus voi "needs_info" -> syncComplaintStatusFromRequest
+ * o duoi, danh cho nguoi phu trach CHINH da duoc giao). Bat buoc phai neu ro
+ * NOI DUNG can bo sung (content) de nguoi gui biet can cung cap gi - luu lam
+ * note cua ComplaintTimeline (cung la thong bao gui toi nguoi gui). Nguoi gui
+ * sau do tu sua phan anh (updateComplaint) de bo sung, tu dong dua phan anh
+ * ve "dang_xu_ly" (xem quy uoc can_bo_sung -> dang_xu_ly khi nguoi gui sua o
+ * updateComplaint).
+ */
+export async function requestComplaintInfo(
+    actorUser: IUser,
+    complaintId: string,
+    input: RequestComplaintInfoInput,
+): Promise<IComplaint> {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    assertComplaintInScope(actorUser, complaint, false);
+    if (complaint.status !== "moi_tiep_nhan") {
+        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+    }
+
+    const content = input.content.trim();
+    if (!content) {
+        throw new HttpError("Vui long nhap thong tin can bo sung", 422);
+    }
+
+    complaint.status = "can_bo_sung";
+    await complaint.save();
+
+    await ComplaintTimeline.create({
+        complaintId: complaint._id,
+        status: complaint.status,
+        note: content,
+        isPublic: true,
+        actorId: actorUser._id,
+    });
+
+    await createNotification({
+        title: "Yêu cầu bổ sung thông tin phản ánh",
+        body: `Phản ánh ${complaint.code}: ${content}`,
+        type: "complaint.status_changed",
+        targetUserIds: [complaint.createdByUserId],
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+        createdBy: actorUser._id,
+    });
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "complaint.request_info",
+        targetModel: "Complaint",
+        targetId: complaint._id,
+        metadata: { content },
+    });
+
+    return complaint;
+}
+
 // Anh xa trang thai RequestRecipient -> Complaint.status, dung boi
 // syncComplaintStatusFromRequest. KHONG BAO GIO anh xa toi "hoan_thanh" - do
 // la bat bien cung, trang thai do CHI nguoi gui phan anh tu xac nhan qua
-// confirmComplaintResolution. "pending" khong co mat (khong lam gi - phan
-// anh da chuyen dang_xu_ly ngay tu luc tao Request trong receiveComplaint/
-// choosePersonInCharge, khong co ly do lui ve trang thai cho xu ly).
+// confirmComplaintResolution. "pending" ("Moi tiep nhan" o Request) VAN anh xa
+// ve "dang_xu_ly": ke tu khi choosePersonInCharge tao Request voi
+// initialStatus="pending" (nguoi duoc chon chua tu xac nhan Request), phan
+// anh van duoc coi la dang duoc xu ly tu goc do nguoi gui (da co nguoi phu
+// trach chinh), du Request noi bo van cho nguoi do bam nhan.
 const COMPLAINT_STATUS_SYNC_MAP: Partial<Record<RequestStatus, TrangThaiPhanAnh>> = {
+    pending: "dang_xu_ly",
     acknowledged: "dang_xu_ly",
     in_progress: "dang_xu_ly",
     needs_info: "can_bo_sung",

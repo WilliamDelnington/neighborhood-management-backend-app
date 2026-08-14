@@ -793,7 +793,10 @@ export type UploadTokenPayload = {
         | "Business"
         | "BusinessDocument"
         | "Complaint"
-        | "Request";
+        | "Request"
+        | "Citizen"
+        | "Household"
+        | "Company";
     relatedId: string;
 };
 

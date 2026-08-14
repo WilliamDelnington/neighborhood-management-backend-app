@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { HttpError } from "@/lib/response";
 import { getBearerToken, verifyUploadToken } from "@/lib/auth";
-import { HouseRecord, Business, Complaint, FileAsset, User } from "@/models";
+import {
+    HouseRecord,
+    Business,
+    Complaint,
+    FileAsset,
+    User,
+    Citizen,
+    Household,
+    Company,
+} from "@/models";
 import {
     assertHouseRecordInScope,
     assertHouseOwnerAttachmentUploadAllowed,
 } from "@/services/houseRecordService";
+import { assertHouseholdInScope } from "@/services/householdService";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { getRequestById } from "@/services/requestService";
 import { saveUploadedFile, getPublicOrigin } from "@/lib/localUpload";
@@ -96,6 +106,29 @@ export async function POST(req: Request) {
         } else if (payload.relatedModel === "Request") {
             await getRequestById(actorUser, payload.relatedId);
             subDir = `requests/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Household") {
+            const household = await Household.findById(payload.relatedId);
+            if (!household) return zaloError("Khong tim thay ho dan");
+            await assertHouseholdInScope(actorUser, household);
+            subDir = `households/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Citizen") {
+            const citizen = await Citizen.findById(payload.relatedId);
+            if (!citizen) return zaloError("Khong tim thay nhan khau");
+            const household = await Household.findById(citizen.householdId);
+            if (!household) {
+                return zaloError("Khong tim thay ho dan cua nhan khau nay");
+            }
+            await assertHouseholdInScope(actorUser, household);
+            subDir = `citizens/${payload.relatedId}`;
+        } else if (payload.relatedModel === "Company") {
+            const company = await Company.findById(payload.relatedId);
+            if (!company) return zaloError("Khong tim thay cong ty");
+            const houseRecord = await HouseRecord.findById(company.houseId);
+            if (!houseRecord) {
+                return zaloError("Khong tim thay nha so cua cong ty nay");
+            }
+            await assertHouseRecordInScope(actorUser, houseRecord);
+            subDir = `companies/${payload.relatedId}`;
         } else {
             // BusinessDocument: chi chu ho (hoac admin) - kiem tra lai giong
             // het luc cap token (xem /api/uploads/token/route.ts) vi pham vi
