@@ -296,6 +296,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
             { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
             {
+                key: "requests.read_all",
+                label:
+                    "Xem TOÀN BỘ yêu cầu công việc (không chỉ yêu cầu đã gửi/được giao) - chỉ xem, không được sửa/hủy yêu cầu của người khác",
+            },
+            {
                 key: "request_types.read",
                 label: "Xem cấu hình loại nhiệm vụ",
             },

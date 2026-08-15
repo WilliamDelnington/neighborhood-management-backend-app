@@ -35,6 +35,22 @@ export {
     default as BusinessDocument,
     type IBusinessDocument,
 } from "./BusinessDocument";
+export {
+    type IRequiredDocumentRule,
+    RequiredDocumentRuleSchema,
+} from "./RequiredDocumentRule";
+export {
+    default as HouseDocument,
+    type IHouseDocument,
+} from "./HouseDocument";
+export {
+    default as HouseholdDocument,
+    type IHouseholdDocument,
+} from "./HouseholdDocument";
+export {
+    default as CompanyDocument,
+    type ICompanyDocument,
+} from "./CompanyDocument";
 export { default as Citizen, type ICitizen } from "./Citizen";
 export { default as Complaint, type IComplaint } from "./Complaint";
 export {

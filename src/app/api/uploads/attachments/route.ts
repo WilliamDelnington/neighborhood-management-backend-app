@@ -122,6 +122,41 @@ export async function POST(req: Request) {
             }
             await assertHouseholdInScope(actorUser, household);
             subDir = `citizens/${payload.relatedId}`;
+        } else if (payload.relatedModel === "HouseDocument") {
+            const houseRecord = await HouseRecord.findById(payload.relatedId);
+            if (!houseRecord) return zaloError("Khong tim thay nha so");
+            const isAdmin = actorUser.roles.includes("admin");
+            const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
+            if (!isAdmin && !isOwner) {
+                return zaloError("Chi chu nha moi duoc tai len giay to");
+            }
+            subDir = `house-documents/${payload.relatedId}`;
+        } else if (payload.relatedModel === "HouseholdDocument") {
+            const household = await Household.findById(payload.relatedId);
+            if (!household) return zaloError("Khong tim thay ho dan");
+            const isAdmin = actorUser.roles.includes("admin");
+            const isOwner =
+                (household.houseId &&
+                    (await isHouseOwnerActor(household.houseId, actorUser._id))) ||
+                (household.headOfHouseholdUserId &&
+                    String(household.headOfHouseholdUserId) === String(actorUser._id));
+            if (!isAdmin && !isOwner) {
+                return zaloError("Chi chu ho moi duoc tai len giay to");
+            }
+            subDir = `household-documents/${payload.relatedId}`;
+        } else if (payload.relatedModel === "CompanyDocument") {
+            const company = await Company.findById(payload.relatedId);
+            if (!company) return zaloError("Khong tim thay cong ty");
+            const houseRecord = await HouseRecord.findById(company.houseId);
+            if (!houseRecord) {
+                return zaloError("Khong tim thay nha so cua cong ty nay");
+            }
+            const isAdmin = actorUser.roles.includes("admin");
+            const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
+            if (!isAdmin && !isOwner) {
+                return zaloError("Chi chu cong ty moi duoc tai len giay to");
+            }
+            subDir = `company-documents/${payload.relatedId}`;
         } else if (payload.relatedModel === "Appointment") {
             // Kiem tra lai giong het luc cap token (xem
             // /api/uploads/token/route.ts): relatedId co the la lich hen da

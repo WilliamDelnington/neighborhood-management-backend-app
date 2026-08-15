@@ -583,8 +583,13 @@ export async function listRequests(params: {
     }
 
     const isAdmin = params.actorUser.roles.includes("admin");
+    // requests.read_all: xem TOAN BO nhung KHONG duoc sua/huy yeu cau cua
+    // nguoi khac (khac requests.update, gom ca quyen quan ly) - xem
+    // permissionRegistry.ts. Ca hai deu du dieu kien xem toan bo o day.
     const canManageAll =
-        isAdmin || (await userHasPermission(params.actorUser, "requests.update"));
+        isAdmin ||
+        (await userHasPermission(params.actorUser, "requests.update")) ||
+        (await userHasPermission(params.actorUser, "requests.read_all"));
 
     if (!canManageAll) {
         // Nguoi khong quan ly toan bo yeu cau (vd secretary chi gui yeu cau)

@@ -40,6 +40,9 @@ const createUploadTokenSchema = z.object({
         "Household",
         "Company",
         "Appointment",
+        "HouseDocument",
+        "HouseholdDocument",
+        "CompanyDocument",
     ]),
     relatedId: z.string().min(1),
 });
@@ -141,6 +144,58 @@ export async function POST(req: Request) {
                 );
             }
             await assertHouseRecordInScope(user, houseRecord);
+        } else if (body.relatedModel === "HouseDocument") {
+            // Giay to xac thuc rieng cua chinh nha so nay - chi chu nha (hoac
+            // admin) duoc tai len, khac nhanh "HouseRecord" o tren (nhan vien
+            // co houses.update/.verify van xin duoc token cho dinh kem
+            // thuong) - cung nguyen tac voi nhanh BusinessDocument o duoi.
+            const houseRecord = await HouseRecord.findById(body.relatedId);
+            if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+            const isAdmin = user.roles.includes("admin");
+            const isOwner = await isHouseOwnerActor(houseRecord._id, user._id);
+            if (!isAdmin && !isOwner) {
+                throw new HttpError(
+                    "Chỉ chủ nhà mới được tải lên giấy tờ",
+                    403,
+                );
+            }
+        } else if (body.relatedModel === "HouseholdDocument") {
+            // isOwner dung cung dieu kien voi
+            // householdService.transitionHouseholdStatus: chu nha CUA nha
+            // gan voi ho dan nay, HOAC nguoi dung chinh la headOfHouseholdUserId
+            // (ho dan co the "mo coi", khong houseId).
+            const household = await Household.findById(body.relatedId);
+            if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+            const isAdmin = user.roles.includes("admin");
+            const isOwner =
+                (household.houseId &&
+                    (await isHouseOwnerActor(household.houseId, user._id))) ||
+                (household.headOfHouseholdUserId &&
+                    String(household.headOfHouseholdUserId) === String(user._id));
+            if (!isAdmin && !isOwner) {
+                throw new HttpError(
+                    "Chỉ chủ hộ mới được tải lên giấy tờ",
+                    403,
+                );
+            }
+        } else if (body.relatedModel === "CompanyDocument") {
+            const company = await Company.findById(body.relatedId);
+            if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+            const houseRecord = await HouseRecord.findById(company.houseId);
+            if (!houseRecord) {
+                throw new HttpError(
+                    "Khong tim thay nha so cua cong ty nay",
+                    404,
+                );
+            }
+            const isAdmin = user.roles.includes("admin");
+            const isOwner = await isHouseOwnerActor(houseRecord._id, user._id);
+            if (!isAdmin && !isOwner) {
+                throw new HttpError(
+                    "Chỉ chủ công ty mới được tải lên giấy tờ",
+                    403,
+                );
+            }
         } else if (body.relatedModel === "Appointment") {
             // relatedId co the la mot lich hen da ton tai (dinh kem them tu
             // trang chi tiet - chu lich hen, can bo duoc phan cong dich vu,

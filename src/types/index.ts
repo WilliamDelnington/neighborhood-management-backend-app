@@ -797,7 +797,10 @@ export type UploadTokenPayload = {
         | "Citizen"
         | "Household"
         | "Company"
-        | "Appointment";
+        | "Appointment"
+        | "HouseDocument"
+        | "HouseholdDocument"
+        | "CompanyDocument";
     relatedId: string;
 };
 

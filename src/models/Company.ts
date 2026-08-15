@@ -1,5 +1,9 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
 import { VERIFICATION_STATUS, type VerificationStatus } from "@/types";
+import {
+    RequiredDocumentRuleSchema,
+    type IRequiredDocumentRule,
+} from "./RequiredDocumentRule";
 
 export interface ICompany extends Document {
     name: string;
@@ -33,6 +37,9 @@ export interface ICompany extends Document {
     approvalNote?: string;
     denialReason?: string;
     note?: string;
+    // Danh sach loai giay to bat buoc/tuy chon cho CHINH cong ty nay - xem ghi
+    // chu tuong tu tren HouseRecord.requiredDocuments. Khong anh huong `status`.
+    requiredDocuments: IRequiredDocumentRule[];
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -79,6 +86,10 @@ const CompanySchema = new Schema<ICompany>(
         approvalNote: { type: String },
         denialReason: { type: String },
         note: { type: String },
+        requiredDocuments: {
+            type: [RequiredDocumentRuleSchema],
+            default: [],
+        },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

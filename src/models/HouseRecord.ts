@@ -11,6 +11,10 @@ import {
     type HouseGisSource,
     type OwnerType,
 } from "@/types";
+import {
+    RequiredDocumentRuleSchema,
+    type IRequiredDocumentRule,
+} from "./RequiredDocumentRule";
 
 export interface IHouseRecord extends Document {
     code: string;
@@ -61,6 +65,12 @@ export interface IHouseRecord extends Document {
     // du lieu duy nhat, duoc man hinh An ninh & Quan ly cu tru hien thi lai
     // (khong luu ban sao tren SecurityRecord).
     residenceDeclarationNumber?: string;
+    // Danh sach loai giay to bat buoc/tuy chon ma chu nha phai nop cho CHINH
+    // nha so nay (khac Business - noi dong luat nam tren BusinessType dung
+    // chung). Admin/nhan vien co quyen "houses.update" thiet lap qua
+    // requiredDocumentService.putRequiredDocuments; khong anh huong `status`
+    // (status van chuyen thu cong qua transitionHouseRecordStatus).
+    requiredDocuments: IRequiredDocumentRule[];
     // Toa do GIS cua Nha so. Cac truong phang giup form/mobile cap nhat de
     // dang; `location` la GeoJSON suy dan de phuc vu truy van ban do sau nay.
     // Khi chua co du lieu (ke ca client gui 0/0), latitude/longitude la null
@@ -148,6 +158,10 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
         denialReason: { type: String },
         needsUpdateNote: { type: String },
         residenceDeclarationNumber: { type: String },
+        requiredDocuments: {
+            type: [RequiredDocumentRuleSchema],
+            default: [],
+        },
         gisLatitude: { type: Number, default: null },
         gisLongitude: { type: Number, default: null },
         gisAccuracyMeters: { type: Number, default: null, min: 0 },

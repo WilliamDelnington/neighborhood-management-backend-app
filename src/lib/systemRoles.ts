@@ -245,6 +245,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // ninh, ...) cho cac can bo lien quan.
         "requests.create",
         "requests.read",
+        // Bi thu can nam duoc toan bo yeu cau cong viec trong pham vi phuong
+        // (khong chi yeu cau tu gui/duoc giao) de dieu phoi - chi xem, KHONG
+        // dong nghia duoc sua/huy yeu cau cua nguoi khac (xem requests.update).
+        "requests.read_all",
         "request_types.read",
         "request_types.manage",
         "complaint_types.read",
@@ -334,6 +338,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "residents.read",
         "requests.create",
         "requests.read",
+        // Can bo UBND can nam duoc toan bo yeu cau cong viec trong pham vi
+        // phuong (khong chi yeu cau tu gui/duoc giao) de dieu phoi - chi xem,
+        // KHONG dong nghia duoc sua/huy yeu cau cua nguoi khac (xem requests.update).
+        "requests.read_all",
         "request_types.read",
         "request_types.manage",
         "complaint_types.read",
