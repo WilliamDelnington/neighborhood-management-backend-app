@@ -1,5 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
-import { requirePermission, requireUser } from "@/lib/rbac";
+import { requireAnyPermission, requirePermission, requireUser } from "@/lib/rbac";
 import {
     apiErrorFromException,
     apiSuccess,
@@ -17,7 +17,14 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        await requirePermission(actorUser, "complaint_types.read");
+        // "complaint_types.read" gates the standalone management screen. The
+        // resident complaint-create form (and its category picker) must also
+        // be able to read this list even without that browse permission -
+        // mirrors business-types/route.ts.
+        await requireAnyPermission(actorUser, [
+            "complaint_types.read",
+            "complaints.create",
+        ]);
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const activeParam = searchParams.get("active");

@@ -13,7 +13,10 @@ import { sanitizeUserWithPermissions } from "@/services/authService";
 import { sendEsmsSms } from "@/lib/esms";
 import { sendEsmsZns } from "@/lib/esmsZns";
 
-const OTP_TTL_MS = 5 * 60 * 1000;
+// 12 phut - du thoi gian cho nguoi dung nhan va nhap ma trong cac thao tac
+// mat nhieu thoi gian (vd doi tin nhan SMS/ZNS bi cham), truoc day 5 phut
+// qua ngan gay het han ma OTP khi nguoi dung con dang thao tac.
+const OTP_TTL_MS = 12 * 60 * 1000;
 const OTP_CODE_LENGTH = 6;
 
 function generateOtpCode(): string {
