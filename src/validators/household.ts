@@ -5,7 +5,7 @@ import { LOAI_SO_HUU, VERIFICATION_STATUS } from "@/types";
 // (dua tren so ban ghi Citizen thuc te thuoc ho dan), khong cho phep nhap tay
 // qua API (xem citizenService.ts - createCitizen/updateCitizen/deleteCitizen
 // tu dong +1/-1 vao Household.memberCount).
-export const createHouseholdSchema = z.object({
+const householdBaseSchema = z.object({
     cluster: z.string().min(1, "Cum dan cu khong duoc de trong"),
     // Street chuan hoa tuong ung voi cluster (chi dung khi ho dan "mo coi",
     // khong gan nha so - xem streetSync.ts). Client cu khong gui truong nay
@@ -16,16 +16,32 @@ export const createHouseholdSchema = z.object({
     // Lien ket toi tai khoan house_owner thuc su cua chu ho - null = go lien
     // ket, undefined = khong doi.
     headOfHouseholdUserId: z.string().nullable().optional(),
-    phone: z.string().optional(),
+    // So dien thoai cua nguoi lien he cho ho dan nay - bat buoc khi tao moi
+    // (xem refine ben duoi tren createHouseholdSchema), tuy chon khi cap nhat.
+    phone: z.string().min(1, "So dien thoai lien he khong duoc de trong"),
+    // true = nguoi lien he chinh la chu ho (contactName bo qua, Citizen "Chủ hộ"
+    // duoc tao voi phone o tren); false = nguoi lien he la mot nhan khau khac,
+    // bat buoc phai co contactName - xem refine ben duoi va
+    // householdService.createHousehold (tao them mot Citizen "Người liên hệ").
+    contactIsHead: z.boolean().default(true),
+    contactName: z.string().optional(),
     ownershipType: z.enum(LOAI_SO_HUU).default("chinh_chu"),
     needsSupport: z.boolean().default(false),
     // null = go lien ket voi nha so (chua gan), undefined = khong doi.
     houseId: z.string().nullable().optional(),
     note: z.string().optional(),
 });
+
+export const createHouseholdSchema = householdBaseSchema.refine(
+    data => data.contactIsHead || !!data.contactName?.trim(),
+    {
+        message: "Vui long nhap ten nguoi lien he",
+        path: ["contactName"],
+    },
+);
 export type CreateHouseholdInput = z.infer<typeof createHouseholdSchema>;
 
-export const updateHouseholdSchema = createHouseholdSchema.partial();
+export const updateHouseholdSchema = householdBaseSchema.partial();
 export type UpdateHouseholdInput = z.infer<typeof updateHouseholdSchema>;
 
 export const updateHouseholdStatusSchema = z

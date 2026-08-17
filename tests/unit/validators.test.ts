@@ -65,9 +65,11 @@ describe("createHouseholdSchema", () => {
             cluster: "Cụm 1",
             address: "Số 1, ngõ 12",
             headOfHousehold: "Nguyễn Văn An",
+            phone: "0912345678",
         });
         expect(result.ownershipType).toBe("chinh_chu");
         expect(result.needsSupport).toBe(false);
+        expect(result.contactIsHead).toBe(true);
     });
 
     it("bo qua memberCount neu client gui len - truong nay do he thong tu tinh", () => {
@@ -75,9 +77,45 @@ describe("createHouseholdSchema", () => {
             cluster: "Cụm 1",
             address: "Số 1, ngõ 12",
             headOfHousehold: "Nguyễn Văn An",
+            phone: "0912345678",
             memberCount: 999,
         } as any);
         expect((result as any).memberCount).toBeUndefined();
+    });
+
+    it("tu choi khi thieu so dien thoai lien he", () => {
+        expect(() =>
+            createHouseholdSchema.parse({
+                cluster: "Cụm 1",
+                address: "Số 1, ngõ 12",
+                headOfHousehold: "Nguyễn Văn An",
+            }),
+        ).toThrow();
+    });
+
+    it("tu choi khi nguoi lien he khac chu ho nhung khong co ten", () => {
+        expect(() =>
+            createHouseholdSchema.parse({
+                cluster: "Cụm 1",
+                address: "Số 1, ngõ 12",
+                headOfHousehold: "Nguyễn Văn An",
+                phone: "0912345678",
+                contactIsHead: false,
+            }),
+        ).toThrow();
+    });
+
+    it("chap nhan nguoi lien he khac chu ho khi co ten", () => {
+        const result = createHouseholdSchema.parse({
+            cluster: "Cụm 1",
+            address: "Số 1, ngõ 12",
+            headOfHousehold: "Nguyễn Văn An",
+            phone: "0912345678",
+            contactIsHead: false,
+            contactName: "Trần Thị Bé",
+        });
+        expect(result.contactIsHead).toBe(false);
+        expect(result.contactName).toBe("Trần Thị Bé");
     });
 
     it("tu choi khi thieu dia chi", () => {

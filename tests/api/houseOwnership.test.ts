@@ -32,6 +32,7 @@ async function setupOwnerWithHouseholdAndCitizen(clusterName: string) {
                 cluster: clusterName,
                 address: `Số 1, ${clusterName}`,
                 headOfHousehold: owner.displayName,
+                phone: "0912345678",
                 houseId: house._id,
             },
         }),

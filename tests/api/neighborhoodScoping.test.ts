@@ -60,6 +60,7 @@ async function createHouseholdInHouse(
                 cluster: "Cụm chung",
                 address: `Địa chỉ ${headOfHousehold}`,
                 headOfHousehold,
+                phone: "0912345678",
                 houseId,
             },
         }),

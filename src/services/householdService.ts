@@ -183,16 +183,36 @@ export async function createHousehold(
     // khau nao - neu khong tu dong them, chu ho se khong xuat hien trong danh
     // sach nhan khau cua ho dan (GET /households/:id/citizens chi doc tu
     // Citizen). Tao mot Citizen toi thieu ("Chủ hộ") ngay khi tao ho dan de
-    // dong bo hai danh sach nay.
+    // dong bo hai danh sach nay. Neu nguoi lien he (input.phone) khong phai
+    // chinh chu ho (contactIsHead=false), gan phone nay cho mot Citizen
+    // "Người liên hệ" rieng (input.contactName) thay vi gan nham cho chu ho.
+    const isContactHead = input.contactIsHead;
     const headCitizen = await Citizen.create({
         fullName: household.headOfHousehold,
+        phone: isContactHead ? input.phone : undefined,
         relationToHead: "Chủ hộ",
         householdId: household._id,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });
-    household.memberCount = 1;
-    await Household.updateOne({ _id: household._id }, { memberCount: 1 });
+    const contactCitizen = isContactHead
+        ? null
+        : await Citizen.create({
+              fullName: input.contactName!.trim(),
+              phone: input.phone,
+              relationToHead: "Người liên hệ",
+              householdId: household._id,
+              createdBy: actorUser._id,
+              updatedBy: actorUser._id,
+          });
+    const createdCitizens = [headCitizen, contactCitizen].filter(
+        (c): c is NonNullable<typeof c> => c !== null,
+    );
+    household.memberCount = createdCitizens.length;
+    await Household.updateOne(
+        { _id: household._id },
+        { memberCount: createdCitizens.length },
+    );
 
     await writeAuditLog({
         actorId: String(actorUser._id),
@@ -201,13 +221,17 @@ export async function createHousehold(
         targetId: household._id,
         metadata: { code: household.code },
     });
-    await writeAuditLog({
-        actorId: String(actorUser._id),
-        action: "citizen.create",
-        targetModel: "Citizen",
-        targetId: headCitizen._id,
-        metadata: { householdId: String(household._id) },
-    });
+    await Promise.all(
+        createdCitizens.map(citizen =>
+            writeAuditLog({
+                actorId: String(actorUser._id),
+                action: "citizen.create",
+                targetModel: "Citizen",
+                targetId: citizen._id,
+                metadata: { householdId: String(household._id) },
+            }),
+        ),
+    );
 
     return household;
 }

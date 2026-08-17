@@ -28,6 +28,7 @@ async function createHousehold(
                     cluster: "Cụm Test",
                     address: "Số 1, Cụm Test",
                     headOfHousehold,
+                    phone: "0912345678",
                     // Gui kem memberCount thu xem co bi bo qua khong.
                     memberCount: 999,
                 },
@@ -71,6 +72,52 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         expect(citizens.data.items).toHaveLength(1);
         expect(citizens.data.items[0].fullName).toBe("Nguyễn Văn Test");
         expect(citizens.data.items[0].relationToHead).toBe("Chủ hộ");
+        // contactIsHead mac dinh true (khong truyen len) - Citizen "Chủ hộ"
+        // duoc gan luon phone cua nguoi lien he.
+        expect(citizens.data.items[0].phone).toBe("*******678");
+    });
+
+    it("contactIsHead=false: tao them Citizen 'Người liên hệ' rieng mang phone, chu ho khong co phone", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const headers = await authHeaders(admin);
+        const created = await readJson(
+            await createHouseholdRoute(
+                makeRequest("/api/households", {
+                    method: "POST",
+                    headers,
+                    body: {
+                        cluster: "Cụm Test",
+                        address: "Số 1, Cụm Test",
+                        headOfHousehold: "Nguyễn Văn Test",
+                        phone: "0912345678",
+                        contactIsHead: false,
+                        contactName: "Trần Thị Liên Hệ",
+                    },
+                }),
+            ),
+        );
+        expect(created.data.memberCount).toBe(2);
+
+        const citizens = await readJson(
+            await listHouseholdCitizensRoute(
+                makeRequest(
+                    `/api/households/${created.data._id}/citizens`,
+                    { method: "GET", headers },
+                ),
+                { params: { id: created.data._id } },
+            ),
+        );
+        expect(citizens.data.items).toHaveLength(2);
+        const head = citizens.data.items.find(
+            (c: any) => c.relationToHead === "Chủ hộ",
+        );
+        const contact = citizens.data.items.find(
+            (c: any) => c.relationToHead === "Người liên hệ",
+        );
+        expect(head.fullName).toBe("Nguyễn Văn Test");
+        expect(head.phone).toBeUndefined();
+        expect(contact.fullName).toBe("Trần Thị Liên Hệ");
+        expect(contact.phone).toBe("*******678");
     });
 
     it("them nhan khau +1, xoa nhan khau -1 (chua tinh Citizen 'Chủ hộ' co san)", async () => {
