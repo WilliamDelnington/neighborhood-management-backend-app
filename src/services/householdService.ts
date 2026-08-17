@@ -156,8 +156,9 @@ export async function createHousehold(
             : input.headOfHousehold,
         headOfHouseholdUserId: headOfHouseholdUser?._id,
         phone: input.phone,
-        // memberCount KHONG duoc gan tu input - luon bat dau tu 0 (mac dinh
-        // schema) va chi duoc +1/-1 boi citizenService khi Citizen duoc them/
+        // memberCount KHONG duoc gan tu input - bat dau tu 0 (mac dinh schema),
+        // duoc dat lai thanh 1 ben duoi sau khi tu dong tao Citizen "Chủ hộ",
+        // va tu do chi duoc +1/-1 boi citizenService khi Citizen duoc them/
         // xoa/chuyen ho dan.
         ownershipType: input.ownershipType ?? "chinh_chu",
         needsSupport: input.needsSupport ?? false,
@@ -178,12 +179,34 @@ export async function createHousehold(
         await household.populate("headOfHouseholdUserId", "displayName phone");
     }
 
+    // headOfHousehold chi la text luu tren Household, tu no khong tao ra nhan
+    // khau nao - neu khong tu dong them, chu ho se khong xuat hien trong danh
+    // sach nhan khau cua ho dan (GET /households/:id/citizens chi doc tu
+    // Citizen). Tao mot Citizen toi thieu ("Chủ hộ") ngay khi tao ho dan de
+    // dong bo hai danh sach nay.
+    const headCitizen = await Citizen.create({
+        fullName: household.headOfHousehold,
+        relationToHead: "Chủ hộ",
+        householdId: household._id,
+        createdBy: actorUser._id,
+        updatedBy: actorUser._id,
+    });
+    household.memberCount = 1;
+    await Household.updateOne({ _id: household._id }, { memberCount: 1 });
+
     await writeAuditLog({
         actorId: String(actorUser._id),
         action: "household.create",
         targetModel: "Household",
         targetId: household._id,
         metadata: { code: household.code },
+    });
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "citizen.create",
+        targetModel: "Citizen",
+        targetId: headCitizen._id,
+        metadata: { householdId: String(household._id) },
     });
 
     return household;
@@ -402,6 +425,7 @@ export async function updateHousehold(
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
     if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    const previousHeadOfHousehold = household.headOfHousehold;
 
     assertVerificationEditable(actorUser, household.status, "Hộ dân");
 
@@ -483,6 +507,17 @@ export async function updateHousehold(
     await household.save();
     if (household.headOfHouseholdUserId) {
         await household.populate("headOfHouseholdUserId", "displayName phone");
+    }
+
+    // Giu Citizen "Chủ hộ" (tu dong tao luc createHousehold - xem o tren) dong
+    // bo ten voi headOfHousehold moi, neu ten nay thay doi. Bo qua neu khong
+    // tim thay (vd ho dan cu tu truoc khi co doan tu dong tao nay, hoac nhan
+    // vien da doi relationToHead cua nhan khau do sang gia tri khac).
+    if (household.headOfHousehold !== previousHeadOfHousehold) {
+        await Citizen.updateMany(
+            { householdId: household._id, relationToHead: "Chủ hộ" },
+            { fullName: household.headOfHousehold, updatedBy: actorUser._id },
+        );
     }
 
     await writeAuditLog({

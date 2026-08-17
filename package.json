@@ -23,6 +23,7 @@
         "complaints:backfill-clusters": "tsx scripts/backfill-complaint-clusters.ts",
         "citizens:backfill-encryption": "tsx scripts/backfill-encrypt-citizens.ts",
         "households:backfill-member-count": "tsx scripts/backfill-household-member-count.ts",
+        "households:backfill-leader-citizen": "tsx scripts/backfill-household-leader-citizen.ts",
         "pccc:backfill-house-id": "tsx scripts/backfill-pccc-house-id.ts",
         "security:backfill-house-id": "tsx scripts/backfill-security-house-id.ts",
         "security:backfill-handling-status": "tsx scripts/backfill-security-handling-status.ts",
