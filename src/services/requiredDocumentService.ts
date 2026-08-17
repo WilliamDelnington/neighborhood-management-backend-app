@@ -2,8 +2,10 @@ import type { Model, Types } from "mongoose";
 import {
     DocumentType,
     FileAsset,
+    RequiredDocumentSettings,
     type IRequiredDocumentRule,
     type IUser,
+    type RequiredDocumentSettingsCategory,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { userHasPermission } from "@/lib/rbac";
@@ -17,8 +19,12 @@ import type {
 /**
  * Mo ta cach lam viec voi MOT loai ban ghi cu the (House/Household/Company) de
  * requiredDocumentService co the dung chung logic ma khong phai viet lai 3
- * lan. Khac Business (dong luat nam tren BusinessType dung chung), o day dong
- * luat (`requiredDocuments`) nam TRUC TIEP tren chinh entity, va `status` cua
+ * lan. Khac Business (dong luat nam tren BusinessType dung chung cho nhieu
+ * Business), o day dong luat AP DUNG CHUNG cho CA MOT LOAI ban ghi (tat ca
+ * House, hoac tat ca Household, hoac tat ca Company - xem
+ * models/RequiredDocumentSettings.ts) - KHONG khai bao rieng tren tung ban
+ * ghi, vi luu tren tung ban ghi ton nhieu thoi gian/dung luong DB khong can
+ * thiet (quyet dinh doi lai tu thiet ke ban dau theo yeu cau). `status` cua
  * entity KHONG bi anh huong boi ket qua duyet giay to (khac
  * businessDocumentService.recomputeBusinessStatus) - status van chuyen thu
  * cong qua transitionHouseRecordStatus/transitionHouseholdStatus/
@@ -37,6 +43,8 @@ export interface RequiredDocumentAdapter<TEntity = any> {
     relatedModelName: string;
     // Fallback permission khi dong luat khong khai bao reviewerRoles.
     verifyPermission: string;
+    // Category trong RequiredDocumentSettings ma loai ban ghi nay dung chung.
+    category: RequiredDocumentSettingsCategory;
     EntityModel: Model<TEntity>;
     DocumentModel: Model<any>;
     entityIdField: string;
@@ -49,8 +57,6 @@ export interface RequiredDocumentAdapter<TEntity = any> {
     // Danh sach userId can thong bao khi mot giay to bi tu choi (rong neu
     // khong xac dinh duoc, vd ho dan mo coi).
     resolveNotifyUserIds(entity: TEntity): Promise<(string | Types.ObjectId)[]>;
-    getRequiredDocuments(entity: TEntity): IRequiredDocumentRule[];
-    setRequiredDocuments(entity: TEntity, rules: IRequiredDocumentRule[]): void;
     // Kieu string (khong ep VerificationStatus) vi HouseRecord.status dung
     // HOUSE_RECORD_STATUS - tap gia tri rong hon (co them "needs_update").
     getStatus(entity: TEntity): string;
@@ -63,6 +69,22 @@ async function findEntityOrThrow<TEntity>(
     const entity = await adapter.findEntity(entityId);
     if (!entity) throw new HttpError(adapter.notFoundMessage, 404);
     return entity;
+}
+
+/**
+ * Lay dong luat "giay to bat buoc/tuy chon" AP DUNG CHUNG cho mot category
+ * (house/household/company) - tra ve [] neu chua tung thiet lap.
+ */
+async function getRequiredDocumentRules(
+    category: RequiredDocumentSettingsCategory,
+    populateDocumentType = false,
+): Promise<IRequiredDocumentRule[]> {
+    let query = RequiredDocumentSettings.findOne({ category });
+    if (populateDocumentType) {
+        query = query.populate("requiredDocuments.documentTypeId");
+    }
+    const settings = await query;
+    return settings?.requiredDocuments ?? [];
 }
 
 /**
@@ -100,18 +122,16 @@ async function assertReviewerRoleForRule(
 }
 
 /**
- * Thay toan bo dong luat "giay to bat buoc/tuy chon" cua MOT ban ghi cu the.
- * Xac thuc moi documentTypeId ton tai va dang active truoc khi ghi de - giong
+ * Thay toan bo dong luat "giay to bat buoc/tuy chon" AP DUNG CHUNG cho ca mot
+ * category (khong phai mot ban ghi cu the). Xac thuc moi documentTypeId ton
+ * tai va dang active truoc khi ghi de - giong
  * businessTypeService.putDocumentRules.
  */
 export async function putRequiredDocuments(
     actorId: string,
-    entityId: string,
     input: PutRequiredDocumentsInput,
     adapter: RequiredDocumentAdapter,
 ) {
-    const entity = await findEntityOrThrow(adapter, entityId);
-
     const documentTypeIds = input.requiredDocuments.map(r => r.documentTypeId);
     if (documentTypeIds.length > 0) {
         const validCount = await DocumentType.countDocuments({
@@ -126,23 +146,43 @@ export async function putRequiredDocuments(
         }
     }
 
-    const previousRules = adapter.getRequiredDocuments(entity);
-    adapter.setRequiredDocuments(entity, input.requiredDocuments as any);
-    (entity as any).updatedBy = actorId;
-    await (entity as any).save();
+    const previousRules = await getRequiredDocumentRules(adapter.category);
+
+    const settings = await RequiredDocumentSettings.findOneAndUpdate(
+        { category: adapter.category },
+        {
+            $set: {
+                requiredDocuments: input.requiredDocuments,
+                updatedBy: actorId,
+            },
+        },
+        { new: true, upsert: true },
+    );
 
     await writeAuditLog({
         actorId,
         action: `${adapter.relatedModelName.toLowerCase()}.update_required_documents`,
-        targetModel: adapter.EntityModel.modelName,
-        targetId: (entity as any)._id,
+        targetModel: "RequiredDocumentSettings",
+        targetId: settings._id,
         metadata: {
+            category: adapter.category,
             before: previousRules,
-            after: adapter.getRequiredDocuments(entity),
+            after: settings.requiredDocuments,
         },
     });
 
-    return entity;
+    return settings;
+}
+
+/**
+ * Lay dong luat hien tai cua mot category, dung cho man cau hinh cua admin
+ * (khac getRequiredDocuments: khong gan voi mot ban ghi cu the, khong gop
+ * tinh trang nop/duyet).
+ */
+export async function getRequiredDocumentSettings(
+    adapter: RequiredDocumentAdapter,
+): Promise<IRequiredDocumentRule[]> {
+    return getRequiredDocumentRules(adapter.category, true);
 }
 
 export type RequiredDocumentItem = {
@@ -154,9 +194,10 @@ export type RequiredDocumentItem = {
 };
 
 /**
- * Tra ve ma tran yeu cau giay to da gop voi tinh trang nop/duyet hien tai -
- * dung cho ca man checklist cua chu ho lan man duyet cua nguoi phu trach.
- * Quyen xem duoc kiem tra qua adapter.assertScope.
+ * Tra ve ma tran yeu cau giay to (ap dung chung cho ca category) da gop voi
+ * tinh trang nop/duyet hien tai CUA MOT ban ghi cu the - dung cho ca man
+ * checklist cua chu ho lan man duyet cua nguoi phu trach. Quyen xem duoc kiem
+ * tra qua adapter.assertScope.
  */
 export async function getRequiredDocuments(
     actorUser: IUser,
@@ -166,12 +207,7 @@ export async function getRequiredDocuments(
     const entity = await findEntityOrThrow(adapter, entityId);
     await adapter.assertScope(actorUser, entity);
 
-    const populatedEntity = await adapter.EntityModel.findById(entityId).populate(
-        "requiredDocuments.documentTypeId",
-    );
-    const rules = populatedEntity
-        ? adapter.getRequiredDocuments(populatedEntity)
-        : [];
+    const rules = await getRequiredDocumentRules(adapter.category, true);
 
     const allDocs = await adapter.DocumentModel.find({
         [adapter.entityIdField]: entityId,
@@ -243,7 +279,7 @@ export async function createDocument(
         );
     }
 
-    const rules = adapter.getRequiredDocuments(entity);
+    const rules = await getRequiredDocumentRules(adapter.category);
     const rule = rules.find(
         r => String(r.documentTypeId) === String(input.documentTypeId),
     );
@@ -325,7 +361,7 @@ export async function reviewDocument(
         throw new HttpError("Không tìm thấy giấy tờ đang chờ duyệt", 404);
     }
 
-    const rules = adapter.getRequiredDocuments(entity);
+    const rules = await getRequiredDocumentRules(adapter.category);
     const rule = rules.find(
         r => String(r.documentTypeId) === String(document.documentTypeId),
     );

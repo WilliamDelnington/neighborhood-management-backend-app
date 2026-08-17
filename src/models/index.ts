@@ -40,6 +40,12 @@ export {
     RequiredDocumentRuleSchema,
 } from "./RequiredDocumentRule";
 export {
+    default as RequiredDocumentSettings,
+    type IRequiredDocumentSettings,
+    type RequiredDocumentSettingsCategory,
+    REQUIRED_DOCUMENT_SETTINGS_CATEGORIES,
+} from "./RequiredDocumentSettings";
+export {
     default as HouseDocument,
     type IHouseDocument,
 } from "./HouseDocument";

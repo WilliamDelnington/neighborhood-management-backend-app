@@ -5,10 +5,6 @@ import {
     type VerificationStatus,
     type LoaiSoHuu,
 } from "@/types";
-import {
-    RequiredDocumentRuleSchema,
-    type IRequiredDocumentRule,
-} from "./RequiredDocumentRule";
 
 export interface IHousehold extends Document {
     code: string;
@@ -33,9 +29,6 @@ export interface IHousehold extends Document {
     approvalNote?: string;
     denialReason?: string;
     note?: string;
-    // Danh sach loai giay to bat buoc/tuy chon cho CHINH ho dan nay - xem ghi
-    // chu tuong tu tren HouseRecord.requiredDocuments. Khong anh huong `status`.
-    requiredDocuments: IRequiredDocumentRule[];
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -80,10 +73,6 @@ const HouseholdSchema = new Schema<IHousehold>(
         approvalNote: { type: String },
         denialReason: { type: String },
         note: { type: String },
-        requiredDocuments: {
-            type: [RequiredDocumentRuleSchema],
-            default: [],
-        },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

@@ -26,6 +26,7 @@ export const houseDocumentAdapter: RequiredDocumentAdapter<IHouseRecord> = {
     notFoundMessage: "Khong tim thay nha so",
     relatedModelName: "HouseDocument",
     verifyPermission: "houses.verify",
+    category: "house",
     EntityModel: HouseRecord,
     DocumentModel: HouseDocument,
     entityIdField: "houseId",
@@ -36,10 +37,6 @@ export const houseDocumentAdapter: RequiredDocumentAdapter<IHouseRecord> = {
         isHouseOwnerActor(entity._id, actorUser._id),
     resolveNotifyUserIds: entity =>
         resolveActiveHouseOwnerActingUserIds(entity._id),
-    getRequiredDocuments: entity => entity.requiredDocuments,
-    setRequiredDocuments: (entity, rules) => {
-        entity.requiredDocuments = rules;
-    },
     getStatus: entity => entity.status,
 };
 
@@ -56,6 +53,7 @@ export const householdDocumentAdapter: RequiredDocumentAdapter<IHousehold> = {
     notFoundMessage: "Khong tim thay ho dan",
     relatedModelName: "HouseholdDocument",
     verifyPermission: "households.verify",
+    category: "household",
     EntityModel: Household,
     DocumentModel: HouseholdDocument,
     entityIdField: "householdId",
@@ -74,10 +72,6 @@ export const householdDocumentAdapter: RequiredDocumentAdapter<IHousehold> = {
         entity.houseId
             ? resolveActiveHouseOwnerActingUserIds(entity.houseId)
             : Promise.resolve([]),
-    getRequiredDocuments: entity => entity.requiredDocuments,
-    setRequiredDocuments: (entity, rules) => {
-        entity.requiredDocuments = rules;
-    },
     getStatus: entity => entity.status,
 };
 
@@ -91,6 +85,7 @@ export const companyDocumentAdapter: RequiredDocumentAdapter<ICompany> = {
     notFoundMessage: "Khong tim thay cong ty",
     relatedModelName: "CompanyDocument",
     verifyPermission: "companies.verify",
+    category: "company",
     EntityModel: Company,
     DocumentModel: CompanyDocument,
     entityIdField: "companyId",
@@ -103,9 +98,5 @@ export const companyDocumentAdapter: RequiredDocumentAdapter<ICompany> = {
         isHouseOwnerActor(entity.houseId, actorUser._id),
     resolveNotifyUserIds: entity =>
         resolveActiveHouseOwnerActingUserIds(entity.houseId),
-    getRequiredDocuments: entity => entity.requiredDocuments,
-    setRequiredDocuments: (entity, rules) => {
-        entity.requiredDocuments = rules;
-    },
     getStatus: entity => entity.status,
 };
