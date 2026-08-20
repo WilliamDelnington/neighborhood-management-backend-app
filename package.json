@@ -16,6 +16,7 @@
         "seed:neighborhood-leaders": "tsx scripts/seed-neighborhood-leaders.ts",
         "seed:duong-noi-demo": "tsx scripts/seed-duong-noi-demo.ts",
         "seed:complaint-types": "tsx scripts/seed-complaint-types.ts",
+        "seed:appointment-holidays": "tsx scripts/seed-appointment-holidays.ts",
         "roles:backfill": "tsx scripts/backfill-roles.ts",
         "inspections:backfill-roles": "tsx scripts/backfill-inspection-roles.ts",
         "roles:migrate-house-owner": "tsx scripts/backfill-resident-to-house-owner.ts",

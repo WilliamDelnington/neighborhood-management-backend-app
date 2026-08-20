@@ -298,8 +298,16 @@ export const HOUSE_GIS_SOURCES = [
     "device_gps",
     "manual",
     "external_gis",
+    "address_lookup",
 ] as const;
 export type HouseGisSource = typeof HOUSE_GIS_SOURCES[number];
+export const HOUSE_GIS_SOURCE_LABEL: Record<HouseGisSource, string> = {
+    unavailable: "chưa có tọa độ",
+    device_gps: "định vị GPS",
+    manual: "nhập thủ công",
+    external_gis: "hệ thống GIS khác",
+    address_lookup: "tra cứu địa chỉ",
+};
 
 // Trang thai xac thuc dung chung cho ca House/Household/Business - ba thuc
 // the nay co trang thai xac thuc DOC LAP voi nhau (khong con Household/Business
@@ -682,6 +690,30 @@ export const LOAI_THONG_BAO_LABEL: Record<LoaiThongBao, string> = {
 export const TRANG_THAI_THONG_BAO = ["nhap", "da_dang"] as const;
 export type TrangThaiThongBao = typeof TRANG_THAI_THONG_BAO[number];
 export const TRANG_THAI_THONG_BAO_LABEL: Record<TrangThaiThongBao, string> = {
+    nhap: "Nháp",
+    da_dang: "Đã đăng",
+};
+
+// ---------------------------------------------------------------------------
+// Tin tuc
+// ---------------------------------------------------------------------------
+export const LOAI_TIN_TUC = [
+    "chung",
+    "hoat_dong",
+    "an_ninh_trat_tu",
+    "khac",
+] as const;
+export type LoaiTinTuc = typeof LOAI_TIN_TUC[number];
+export const LOAI_TIN_TUC_LABEL: Record<LoaiTinTuc, string> = {
+    chung: "Tin chung",
+    hoat_dong: "Hoạt động cộng đồng",
+    an_ninh_trat_tu: "An ninh trật tự",
+    khac: "Khác",
+};
+
+export const TRANG_THAI_TIN_TUC = ["nhap", "da_dang"] as const;
+export type TrangThaiTinTuc = typeof TRANG_THAI_TIN_TUC[number];
+export const TRANG_THAI_TIN_TUC_LABEL: Record<TrangThaiTinTuc, string> = {
     nhap: "Nháp",
     da_dang: "Đã đăng",
 };

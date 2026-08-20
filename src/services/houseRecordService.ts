@@ -677,7 +677,11 @@ export async function createHouseRecord(
         action: "house.create",
         targetModel: "HouseRecord",
         targetId: houseRecord._id,
-        metadata: { code: houseRecord.code },
+        metadata: {
+            code: houseRecord.code,
+            gisSource: houseRecord.gisSource,
+            geoConsentAccepted: input.geoConsentAccepted ?? null,
+        },
     });
 
     // Doc lai tu DB (thay vi populate truc tiep tren doc trong bo nho) vi

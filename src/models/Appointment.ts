@@ -41,6 +41,16 @@ export interface IAppointment extends Document {
     checkinTime?: Date;
     completedTime?: Date;
     officerUserId?: mongoose.Types.ObjectId;
+    // Ghi lai lan doi lich GAN NHAT (chi cong dan/nguoi dat duoc doi, va chi
+    // khi dang "da_xac_nhan" - xem rescheduleAppointment). Chi giu ban ghi
+    // TRUOC DO gan nhat (khong phai mang lich su day du) - lich su day du,
+    // bat bien theo tung lan doi duoc AuditLog luu lai vinh vien qua action
+    // "appointment.reschedule".
+    rescheduledFromDate?: Date;
+    rescheduledFromStartTime?: string;
+    rescheduledFromEndTime?: string;
+    rescheduleReason?: string;
+    rescheduledAt?: Date;
     // Danh gia cua cong dan sau khi hoan thanh (1-5 sao), tuy chon, chi ghi
     // duoc MOT LAN - xem rateAppointment (cung quy uoc voi Complaint.rating/
     // confirmComplaintResolution).
@@ -49,6 +59,10 @@ export interface IAppointment extends Document {
     // Danh dau da gui nhac lich (~2 tieng truoc gio hen) - tranh scheduler gui
     // trung nhieu lan, xem checkAppointmentRemindersAndNoShow.
     reminderSentAt?: Date;
+    // Danh dau da gui nhac lich rieng cho tier "truoc 1 ngay" (~24 tieng truoc
+    // gio hen) - doc lap voi reminderSentAt (tier 2 tieng), ca hai co the cung
+    // ton tai tren mot lich hen (nhac 2 lan o hai moc thoi gian khac nhau).
+    dayBeforeReminderSentAt?: Date;
     // Denormalized tu AppointmentService tai thoi diem dat lich, dung cho loc
     // theo pham vi phu trach (giong Complaint.wardCode/neighborhoodId).
     wardCode?: number;
@@ -102,9 +116,15 @@ const AppointmentSchema = new Schema<IAppointment>(
         checkinTime: { type: Date },
         completedTime: { type: Date },
         officerUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        rescheduledFromDate: { type: Date },
+        rescheduledFromStartTime: { type: String },
+        rescheduledFromEndTime: { type: String },
+        rescheduleReason: { type: String, trim: true },
+        rescheduledAt: { type: Date },
         rating: { type: Number, min: 1, max: 5 },
         ratingNote: { type: String, trim: true },
         reminderSentAt: { type: Date },
+        dayBeforeReminderSentAt: { type: Date },
         wardCode: { type: Number, index: true },
         neighborhoodId: {
             type: Schema.Types.ObjectId,

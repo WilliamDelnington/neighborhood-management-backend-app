@@ -349,6 +349,16 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "news",
+        label: "Tin tức",
+        permissions: [
+            { key: "news.read", label: "Xem tin tức" },
+            { key: "news.create", label: "Tạo tin tức" },
+            { key: "news.update", label: "Cập nhật tin tức" },
+            { key: "news.publish", label: "Đăng tin tức" },
+        ],
+    },
+    {
         key: "correspondence_types",
         label: "Loại văn bản",
         permissions: [

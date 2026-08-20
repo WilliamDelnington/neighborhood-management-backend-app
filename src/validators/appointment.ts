@@ -33,9 +33,18 @@ export const createAppointmentSchema = z
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
 
 export const cancelAppointmentSchema = z.object({
-    reason: z.string().trim().max(500).optional(),
+    reason: z.string().trim().min(1, "Vui long nhap ly do huy").max(500),
 });
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
+
+export const rescheduleAppointmentSchema = z.object({
+    timeSlotId: z.string().min(1, "Thieu khung gio"),
+    appointedDate: dateOnlySchema,
+    reason: z.string().trim().min(1, "Vui long nhap ly do doi lich").max(500),
+});
+export type RescheduleAppointmentInput = z.infer<
+    typeof rescheduleAppointmentSchema
+>;
 
 export const rejectAppointmentSchema = z.object({
     reason: z.string().trim().min(1, "Vui long nhap ly do tu choi"),

@@ -36,6 +36,7 @@ import type {
     SaveInspectionResultInput,
     SubmitInspectionToWardInput,
     UpdateInspectionCampaignChecklistInput,
+    UpdateInspectionCampaignDetailsInput,
     UpdateInspectionResultInput,
 } from "@/validators/inspection";
 
@@ -288,6 +289,35 @@ export async function updateInspectionCampaignChecklist(
         targetModel: "InspectionCampaign",
         targetId: updated._id,
         metadata: { itemCount: input.checklistTemplate.length },
+    });
+    return getInspectionCampaignById(actorUser, campaignId);
+}
+
+export async function updateInspectionCampaignDetails(
+    actorUser: IUser,
+    campaignId: string,
+    input: UpdateInspectionCampaignDetailsInput,
+) {
+    await requirePermission(actorUser, "inspections.create");
+    const campaign = await assertCampaignVisible(actorUser, campaignId);
+    if (!actorUser.roles.includes("admin") && !isCampaignCreator(actorUser, campaign)) {
+        throw new HttpError("Chỉ người tạo chiến dịch hoặc quản trị viên được sửa thông tin", 403);
+    }
+    if (campaign.status !== "DRAFT") {
+        throw new HttpError("Chỉ có thể sửa tên và mục tiêu khi chiến dịch còn ở bản nháp", 409);
+    }
+    const updated = await InspectionCampaign.findOneAndUpdate(
+        { _id: campaignId, status: "DRAFT" },
+        { $set: { name: input.name, purpose: input.purpose } },
+        { new: true },
+    );
+    if (!updated) throw new HttpError("Chiến dịch vừa được người khác cập nhật", 409);
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "inspection.campaign.details.update",
+        targetModel: "InspectionCampaign",
+        targetId: updated._id,
+        metadata: { name: input.name },
     });
     return getInspectionCampaignById(actorUser, campaignId);
 }

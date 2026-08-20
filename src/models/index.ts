@@ -74,6 +74,7 @@ export {
     type ISupportTicket,
 } from "./SupportTicket";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
+export { default as News, type INews } from "./News";
 export {
     default as CorrespondenceType,
     type ICorrespondenceType,
@@ -232,3 +233,9 @@ export {
     default as AppointmentSlotCounter,
     type IAppointmentSlotCounter,
 } from "./AppointmentSlotCounter";
+export {
+    default as AppointmentHoliday,
+    type IAppointmentHoliday,
+    type AppointmentHolidayType,
+    APPOINTMENT_HOLIDAY_TYPES,
+} from "./AppointmentHoliday";

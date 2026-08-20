@@ -5,6 +5,7 @@ import {
     HOUSE_USAGE_TYPE,
     HOUSE_GIS_SOURCES,
     ORGANIZATION_TYPE,
+    type HouseGisSource,
 } from "@/types";
 import { isValidVnPhone } from "@/lib/phone";
 
@@ -83,6 +84,10 @@ const houseRecordBaseSchema = z.object({
     gisAccuracyMeters: z.number().min(0).nullable().optional(),
     gisSource: z.enum(HOUSE_GIS_SOURCES).optional(),
     gisCapturedAt: z.string().datetime().nullable().optional(),
+    // Bat buoc = true khi gisSource la "address_lookup"/"device_gps" (du lieu
+    // vi tri nhay cam theo Luat BVDLCN so 91/2025/QH15) - xem
+    // requiresGeoConsent ben duoi va houseRecordService (ghi vao audit log).
+    geoConsentAccepted: z.boolean().optional(),
     // Loai chu nha duoc khai bao luc tao nha so - "none" = chua biet/chua
     // khai bao (hanh vi cu khi khong nhap gi ca). Chi co y nghia luc tao moi -
     // xem houseRecordService.createHouseRecord.
@@ -103,16 +108,42 @@ const houseRecordBaseSchema = z.object({
     representative: personInfoSchema.optional(),
 });
 
-export const createHouseRecordSchema = houseRecordBaseSchema.refine(
-    data => !!data.cluster || !!data.streetId,
-    {
+// gisSource nhay cam ("address_lookup"/"device_gps" - vi tri xac dinh qua dich
+// vu dinh vi, thuoc du lieu ca nhan nhay cam theo Dieu 2 Luat BVDLCN so
+// 91/2025/QH15) bat buoc phai co geoConsentAccepted=true kem theo - day la lop
+// chan phia server, KHONG chi dua vao checkbox phia client (xem HouseLocationPicker
+// o frontend). CHI ap dung cho create/updateHouseRecordSchema (chu nha tu khai
+// bao qua Mini App/resident-web-app) - KHONG ap dung cho
+// updateHouseRecordGisSchema (endpoint /gis danh rieng cho nhan vien/can bo
+// thuc dia chinh sua tai cho qua HouseGisPanel.tsx o admin-web-app, khong phai
+// luong tu khai bao cua chu nha nen khong can xin dong y lai).
+function requiresGeoConsent(data: {
+    gisSource?: HouseGisSource;
+    geoConsentAccepted?: boolean;
+}): boolean {
+    return (
+        (data.gisSource !== "address_lookup" &&
+            data.gisSource !== "device_gps") ||
+        data.geoConsentAccepted === true
+    );
+}
+const GEO_CONSENT_ISSUE = {
+    message:
+        "Can xac nhan dong y thu thap vi tri (du lieu nhay cam) truoc khi luu toa do tu dia chi/GPS",
+    path: ["geoConsentAccepted"],
+};
+
+export const createHouseRecordSchema = houseRecordBaseSchema
+    .refine(data => !!data.cluster || !!data.streetId, {
         message: "Vui long chon duong/pho hoac nhap cum dan cu",
         path: ["cluster"],
-    },
-);
+    })
+    .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);
 export type CreateHouseRecordInput = z.infer<typeof createHouseRecordSchema>;
 
-export const updateHouseRecordSchema = houseRecordBaseSchema.partial();
+export const updateHouseRecordSchema = houseRecordBaseSchema
+    .partial()
+    .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);
 export type UpdateHouseRecordInput = z.infer<typeof updateHouseRecordSchema>;
 
 export const updateHouseRecordGisSchema = z.object({

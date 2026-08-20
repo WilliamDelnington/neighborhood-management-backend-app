@@ -17,9 +17,11 @@ import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter, wardScopeFilter } from "@/lib/rbac";
 import { isHouseOwnerActor } from "@/services/houseOwnershipService";
 import { assertHouseRecordInScope } from "@/services/houseRecordService";
+import { findHolidayForWard } from "@/services/appointmentHolidayService";
 import type {
     CreateAppointmentInput,
     RateAppointmentInput,
+    RescheduleAppointmentInput,
 } from "@/validators/appointment";
 
 // ---------------------------------------------------------------------------
@@ -27,12 +29,18 @@ import type {
 // ---------------------------------------------------------------------------
 const MIN_BOOKING_DAYS_AHEAD = 1; // T+1
 const MAX_BOOKING_DAYS_AHEAD = 30; // T+30
-const CANCEL_MIN_HOURS_BEFORE = 2; // BR-03
+// BR-03 - ap dung cho ca huy (cancelAppointment) va doi lich (rescheduleAppointment):
+// cong dan/nguoi dat tu thao tac chi duoc lam truoc gio hen it nhat tung nay
+// tieng; can bo duoc phan cong dich vu (hoac admin) khong bi rang buoc nay khi
+// huy (rescheduleAppointment khong cho officer/admin doi thay nen khong can
+// nhanh bypass tuong tu).
+const SELF_SERVICE_MIN_HOURS_BEFORE = 2;
 const NO_SHOW_GRACE_MINUTES = 15;
 const NO_SHOW_LOCK_THRESHOLD = 3; // BR-04
 const NO_SHOW_LOOKBACK_DAYS = 30;
 const NO_SHOW_LOCK_DAYS = 14;
 const REMINDER_LEAD_HOURS = 2;
+const DAY_BEFORE_REMINDER_LEAD_HOURS = 24;
 
 // Chi hai vai tro nay duoc dat lich HO cu dan (proxy - khong tai khoan, hoac
 // chi dinh mot citizenUserId khac ban than) - xem quyet dinh da chot trong ke
@@ -40,6 +48,15 @@ const REMINDER_LEAD_HOURS = 2;
 const PROXY_ELIGIBLE_ROLES = ["neighborhood_leader", "neighborhood_coleader"];
 
 const ACTIVE_APPOINTMENT_STATUSES = ["cho_xac_nhan", "da_xac_nhan"];
+// BR-05 (Chong spam): mot cong dan (citizenUserId) khong duoc co qua tung nay
+// lich hen CHUA HOAN THANH cung luc - rong hon ACTIVE_APPOINTMENT_STATUSES vi
+// tinh ca lich da check-in nhung chua hoan thanh (van dang "treo").
+const MAX_UNFINISHED_APPOINTMENTS_PER_CITIZEN = 3;
+const UNFINISHED_APPOINTMENT_STATUSES = [
+    "cho_xac_nhan",
+    "da_xac_nhan",
+    "da_check_in",
+];
 
 /**
  * Chuyen "YYYY-MM-DD" thanh Date UTC 00:00:00 - dung thong nhat cho
@@ -68,6 +85,28 @@ function combineDateAndTime(date: Date, time: string): Date {
 }
 
 /**
+ * Noi dung thong bao dung chung cho "dat thanh cong" (19.17.1) va ca hai tier
+ * nhac lich (19.17.2/19.17.3) - luon kem dia diem (19.17.5) va ho so can
+ * chuan bi neu dich vu co khai bao (19.17.4). Khong co khai niem QR/ma rieng
+ * (19.17.6) trong he thong nay - dung lai ma lich hen (code) nhu ma tra cuu.
+ */
+function buildAppointmentMessage(
+    service: { name: string; locationAddress: string; description?: string },
+    code: string,
+    startTime: string,
+    dateStr: string,
+): string {
+    const parts = [
+        `Ma ${code}: ${service.name} luc ${startTime} ngay ${dateStr}`,
+        `Dia diem: ${service.locationAddress}`,
+    ];
+    if (service.description) {
+        parts.push(`Ho so can chuan bi: ${service.description}`);
+    }
+    return parts.join(". ");
+}
+
+/**
  * Tra ve chuoi id cua mot truong tham chieu, du dang ObjectId "tho" hay da
  * duoc .populate() thanh document con - cung tien ich voi refIdToString trong
  * houseRecordService.ts (khong export nen viet lai ban rut gon o day).
@@ -92,6 +131,53 @@ async function releaseSlotCounter(appointment: IAppointment): Promise<void> {
         },
         { $inc: { bookedCount: -1 } },
     );
+}
+
+/**
+ * Giai phong TRUC TIEP theo (serviceId, timeSlotId, appointedDate) truyen vao,
+ * khac releaseSlotCounter(appointment) doc truc tiep tu appointment - can dung
+ * ban nay trong rescheduleAppointment vi sau khi appointment.save() ghi de
+ * timeSlotId/appointedDate sang gia tri MOI, khong the doc lai gia tri CU tu
+ * chinh appointment nua.
+ */
+async function releaseSlotCounterByKey(
+    serviceId: unknown,
+    timeSlotId: unknown,
+    appointedDate: Date,
+): Promise<void> {
+    await AppointmentSlotCounter.updateOne(
+        { serviceId, timeSlotId, appointedDate, bookedCount: { $gt: 0 } },
+        { $inc: { bookedCount: -1 } },
+    );
+}
+
+/**
+ * Dat cho nguyen tu cho mot (serviceId, timeSlotId, appointedDate) - xem co
+ * che tai AppointmentSlotCounter.ts. Dung chung boi createAppointment va
+ * rescheduleAppointment; nem HttpError(409) neu het cho.
+ */
+async function reserveSlotCounter(
+    serviceId: unknown,
+    timeSlotId: unknown,
+    appointedDate: Date,
+    maxCapacity: number,
+): Promise<void> {
+    await AppointmentSlotCounter.findOneAndUpdate(
+        { serviceId, timeSlotId, appointedDate },
+        { $setOnInsert: { bookedCount: 0 } },
+        { upsert: true },
+    );
+    const reserved = await AppointmentSlotCounter.findOneAndUpdate(
+        { serviceId, timeSlotId, appointedDate, bookedCount: { $lt: maxCapacity } },
+        { $inc: { bookedCount: 1 } },
+        { new: true },
+    );
+    if (!reserved) {
+        throw new HttpError(
+            "Khung gio nay da het cho, vui long chon khung gio khac",
+            409,
+        );
+    }
 }
 
 /**
@@ -174,7 +260,7 @@ async function appointmentScopeFilter(
  * Nem HttpError(403) neu actor (nhan vien, dang xem lich hen KHONG phai cua
  * chinh minh dat) ngoai pham vi phu trach - dung boi getAppointmentDetailForRequester.
  */
-function assertAppointmentInScope(actorUser: IUser, appointment: IAppointment): void {
+export function assertAppointmentInScope(actorUser: IUser, appointment: IAppointment): void {
     if (actorUser.roles.includes("admin")) return;
     if (
         actorUser.roles.includes("neighborhood_leader") ||
@@ -266,6 +352,13 @@ export async function getAvailableSlots(serviceId: string, dateStr: string) {
     }
 
     const date = parseDateOnly(dateStr);
+    // 19.2.8/19.2.9: ngay nghi/le/tam ngung tiep nhan - khong co khung gio nao
+    // duoc mo, giong het truong hop khong cau hinh khung gio cho THU nay (tra
+    // ve rong, KHONG throw loi - tranh doi hoi 2 man dat/doi lich phai xu ly
+    // rieng mot loai loi khac biet cho truong hop nay).
+    const holiday = await findHolidayForWard(service.wardCode, date);
+    if (holiday) return [];
+
     const isoDayOfWeek = toIsoDayOfWeek(date);
     const activeSlots = service.timeSlots.filter(
         slot => slot.active && slot.dayOfWeek === isoDayOfWeek,
@@ -400,6 +493,23 @@ export async function createAppointment(
         );
     }
 
+    // BR-05: chan dat them neu cong dan nay da co >= 3 lich hen chua hoan
+    // thanh (o bat ky dich vu/ngay nao) - chi ap dung khi biet ro citizenUserId
+    // (bo qua proxy booking cho nguoi khong co tai khoan, vi khong co dinh
+    // danh on dinh de dem).
+    if (subject.citizenUserId) {
+        const unfinishedCount = await Appointment.countDocuments({
+            citizenUserId: subject.citizenUserId,
+            status: { $in: UNFINISHED_APPOINTMENT_STATUSES },
+        });
+        if (unfinishedCount >= MAX_UNFINISHED_APPOINTMENTS_PER_CITIZEN) {
+            throw new HttpError(
+                `Cong dan nay da co ${unfinishedCount} lich hen chua hoan thanh, khong the dat them (toi da ${MAX_UNFINISHED_APPOINTMENTS_PER_CITIZEN})`,
+                409,
+            );
+        }
+    }
+
     // Ngay hen phai trong khoang [T+1, T+30].
     const appointedDate = parseDateOnly(input.appointedDate);
     const today = parseDateOnly(new Date().toISOString().slice(0, 10));
@@ -409,6 +519,18 @@ export async function createAppointment(
     if (diffDays < MIN_BOOKING_DAYS_AHEAD || diffDays > MAX_BOOKING_DAYS_AHEAD) {
         throw new HttpError(
             `Chi duoc dat lich hen tu ${MIN_BOOKING_DAYS_AHEAD} den ${MAX_BOOKING_DAYS_AHEAD} ngay ke tu hom nay`,
+            422,
+        );
+    }
+
+    // 19.2.8/19.2.9: khong cho dat lich vao ngay nghi/le/tam ngung tiep nhan -
+    // getAvailableSlots da tra ve rong cho ngay nay nen client binh thuong
+    // khong the chon duoc, day la lop chan phong thu (vd client dung du lieu
+    // cu, hoac ngay nghi moi duoc khai bao sau khi client da tai danh sach).
+    const holiday = await findHolidayForWard(service.wardCode, appointedDate);
+    if (holiday) {
+        throw new HttpError(
+            `Ngay ${input.appointedDate} la ngay nghi/le (${holiday.name}), khong the dat lich hen`,
             422,
         );
     }
@@ -435,29 +557,8 @@ export async function createAppointment(
         );
     }
 
-    // Dat cho nguyen tu (xem AppointmentSlotCounter.ts): dam bao doc counter
-    // ton tai truoc, roi $inc co dieu kien bookedCount < maxCapacity.
-    await AppointmentSlotCounter.findOneAndUpdate(
-        { serviceId: service._id, timeSlotId: slot._id, appointedDate },
-        { $setOnInsert: { bookedCount: 0 } },
-        { upsert: true },
-    );
-    const reserved = await AppointmentSlotCounter.findOneAndUpdate(
-        {
-            serviceId: service._id,
-            timeSlotId: slot._id,
-            appointedDate,
-            bookedCount: { $lt: slot.maxCapacity },
-        },
-        { $inc: { bookedCount: 1 } },
-        { new: true },
-    );
-    if (!reserved) {
-        throw new HttpError(
-            "Khung gio nay da het cho, vui long chon khung gio khac",
-            409,
-        );
-    }
+    // Dat cho nguyen tu (xem AppointmentSlotCounter.ts).
+    await reserveSlotCounter(service._id, slot._id, appointedDate, slot.maxCapacity);
 
     let appointment: IAppointment;
     try {
@@ -484,15 +585,7 @@ export async function createAppointment(
     } catch (err) {
         // Tao that bai sau khi da dat cho - tra lai cho ngay, tranh "ro ri"
         // suat da dat ma khong co lich hen nao thuc su ton tai.
-        await AppointmentSlotCounter.updateOne(
-            {
-                serviceId: service._id,
-                timeSlotId: slot._id,
-                appointedDate,
-                bookedCount: { $gt: 0 },
-            },
-            { $inc: { bookedCount: -1 } },
-        );
+        await releaseSlotCounterByKey(service._id, slot._id, appointedDate);
         throw err;
     }
 
@@ -508,6 +601,12 @@ export async function createAppointment(
         },
     });
 
+    const createdBody = buildAppointmentMessage(
+        service,
+        appointment.code,
+        slot.startTime,
+        input.appointedDate,
+    );
     const notifyUserIds = new Set<string>();
     if (subject.citizenUserId) notifyUserIds.add(subject.citizenUserId);
     notifyUserIds.add(String(actorUser._id));
@@ -515,7 +614,7 @@ export async function createAppointment(
         title: service.autoApprove
             ? "Dat lich hen thanh cong"
             : "Dat lich hen thanh cong, dang cho xac nhan",
-        body: `Ma ${appointment.code}: ${service.name} luc ${slot.startTime} ngay ${input.appointedDate}`,
+        body: createdBody,
         type: "appointment.created",
         targetUserIds: [...notifyUserIds],
         relatedModel: "Appointment",
@@ -525,7 +624,7 @@ export async function createAppointment(
     if (service.assignedOfficerUserIds.length) {
         await createNotification({
             title: "Co lich hen moi can xu ly",
-            body: `Ma ${appointment.code}: ${service.name} luc ${slot.startTime} ngay ${input.appointedDate}`,
+            body: createdBody,
             type: "appointment.created",
             targetUserIds: service.assignedOfficerUserIds,
             relatedModel: "Appointment",
@@ -608,13 +707,13 @@ export async function listMyAppointments(
 
 /**
  * BR-03: cong dan (chu lich hen/nguoi dat) chi duoc huy truoc gio hen it nhat
- * CANCEL_MIN_HOURS_BEFORE tieng; can bo duoc phan cong dich vu (hoac admin)
- * duoc huy bat ky luc nao.
+ * SELF_SERVICE_MIN_HOURS_BEFORE tieng; can bo duoc phan cong dich vu (hoac
+ * admin) duoc huy bat ky luc nao.
  */
 export async function cancelAppointment(
     actorUser: IUser,
     id: string,
-    reason?: string,
+    reason: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
     if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
@@ -642,9 +741,9 @@ export async function cancelAppointment(
             appointment.startTime,
         );
         const hoursUntil = (appointedAt.getTime() - Date.now()) / 3_600_000;
-        if (hoursUntil < CANCEL_MIN_HOURS_BEFORE) {
+        if (hoursUntil < SELF_SERVICE_MIN_HOURS_BEFORE) {
             throw new HttpError(
-                `Chi duoc huy lich hen truoc gio hen it nhat ${CANCEL_MIN_HOURS_BEFORE} tieng`,
+                `Chi duoc huy lich hen truoc gio hen it nhat ${SELF_SERVICE_MIN_HOURS_BEFORE} tieng`,
                 409,
             );
         }
@@ -677,6 +776,223 @@ export async function cancelAppointment(
         targetId: appointment._id,
         metadata: { reason },
     });
+
+    return getAppointmentById(String(appointment._id));
+}
+
+/**
+ * Cong dan/nguoi dat doi lich hen sang ngay/khung gio khac - CHI duoc phep khi
+ * lich hen dang "da_xac_nhan" (khac cancelAppointment, khong ap dung cho
+ * "cho_xac_nhan" hay cac trang thai khac), va bat buoc phai co ly do. Ap dung
+ * lai dung nguong BR-03 cua huy lich (SELF_SERVICE_MIN_HOURS_BEFORE tieng
+ * truoc gio hen) - chi cong dan/nguoi dat moi duoc doi (khong cho phep
+ * officer/admin doi thay qua endpoint nay, khac voi cancelAppointment nen
+ * khong can nhanh bypass rieng cho ho).
+ *
+ * Giu nguyen _id/code cua lich hen (khong tao lich hen moi) - dat cho o slot
+ * MOI truoc (that bai neu het cho, chua dong gi den slot cu), roi moi giai
+ * phong slot CU sau khi luu thanh cong; neu buoc luu that bai, hoan tac lai
+ * cho vua dat o slot moi. Ghi lai ngay/gio CU + ly do ngay tren Appointment
+ * (chi ban ghi GAN NHAT) va mot audit log "appointment.reschedule" (lich su
+ * day du, bat bien qua tung lan doi).
+ */
+export async function rescheduleAppointment(
+    actorUser: IUser,
+    id: string,
+    input: RescheduleAppointmentInput,
+): Promise<IAppointment> {
+    const appointment = await Appointment.findById(id);
+    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+
+    const isCitizenOrBooker =
+        refIdToString(appointment.citizenUserId) === String(actorUser._id) ||
+        refIdToString(appointment.bookedByUserId) === String(actorUser._id);
+    if (!isCitizenOrBooker) {
+        throw new HttpError("Ban khong co quyen doi lich hen nay", 403);
+    }
+    if (appointment.status !== "da_xac_nhan") {
+        throw new HttpError(
+            "Chi doi duoc lich hen dang o trang thai da xac nhan",
+            409,
+        );
+    }
+    const currentAppointedAt = combineDateAndTime(
+        appointment.appointedDate,
+        appointment.startTime,
+    );
+    const hoursUntilCurrent =
+        (currentAppointedAt.getTime() - Date.now()) / 3_600_000;
+    if (hoursUntilCurrent < SELF_SERVICE_MIN_HOURS_BEFORE) {
+        throw new HttpError(
+            `Chi duoc doi lich hen truoc gio hen it nhat ${SELF_SERVICE_MIN_HOURS_BEFORE} tieng`,
+            409,
+        );
+    }
+
+    const service = await AppointmentService.findById(appointment.serviceId);
+    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service.active) throw new HttpError("Dich vu nay da ngung hoat dong", 400);
+
+    // Ngay hen moi phai trong khoang [T+1, T+30], giong BR-01 luc dat lich.
+    const newAppointedDate = parseDateOnly(input.appointedDate);
+    const today = parseDateOnly(new Date().toISOString().slice(0, 10));
+    const diffDays = Math.round(
+        (newAppointedDate.getTime() - today.getTime()) / 86_400_000,
+    );
+    if (diffDays < MIN_BOOKING_DAYS_AHEAD || diffDays > MAX_BOOKING_DAYS_AHEAD) {
+        throw new HttpError(
+            `Chi duoc doi sang ngay tu ${MIN_BOOKING_DAYS_AHEAD} den ${MAX_BOOKING_DAYS_AHEAD} ngay ke tu hom nay`,
+            422,
+        );
+    }
+
+    // 19.2.8/19.2.9: khong cho doi sang ngay nghi/le/tam ngung tiep nhan -
+    // cung ly do voi createAppointment (lop chan phong thu, binh thuong client
+    // khong the chon duoc ngay nay vi getAvailableSlots da tra ve rong).
+    const newDateHoliday = await findHolidayForWard(
+        service.wardCode,
+        newAppointedDate,
+    );
+    if (newDateHoliday) {
+        throw new HttpError(
+            `Ngay ${input.appointedDate} la ngay nghi/le (${newDateHoliday.name}), khong the doi lich sang ngay nay`,
+            422,
+        );
+    }
+
+    const newSlot = service.timeSlots.find(
+        s => String(s._id) === input.timeSlotId,
+    );
+    if (!newSlot || !newSlot.active) throw new HttpError("Khung gio khong hop le", 422);
+    if (newSlot.dayOfWeek !== toIsoDayOfWeek(newAppointedDate)) {
+        throw new HttpError("Khung gio khong ap dung cho ngay da chon", 422);
+    }
+    if (
+        String(newSlot._id) === String(appointment.timeSlotId) &&
+        newAppointedDate.getTime() === appointment.appointedDate.getTime()
+    ) {
+        throw new HttpError(
+            "Vui long chon ngay hoac khung gio khac voi lich hen hien tai",
+            422,
+        );
+    }
+
+    // BR-02: khong doi sang mot khung gio da co lich hen khac (cung nha) dang
+    // hieu luc - loai tru chinh lich hen dang doi.
+    const duplicate = await Appointment.findOne({
+        _id: { $ne: appointment._id },
+        serviceId: service._id,
+        timeSlotId: newSlot._id,
+        appointedDate: newAppointedDate,
+        houseId: appointment.houseId,
+        status: { $in: ACTIVE_APPOINTMENT_STATUSES },
+    });
+    if (duplicate) {
+        throw new HttpError(
+            "Nha so nay da co lich hen cho khung gio/ngay nay, khong the doi trung",
+            409,
+        );
+    }
+
+    await reserveSlotCounter(
+        service._id,
+        newSlot._id,
+        newAppointedDate,
+        newSlot.maxCapacity,
+    );
+
+    const previous = {
+        serviceId: appointment.serviceId,
+        timeSlotId: appointment.timeSlotId,
+        date: appointment.appointedDate,
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+    };
+
+    try {
+        appointment.rescheduledFromDate = previous.date;
+        appointment.rescheduledFromStartTime = previous.startTime;
+        appointment.rescheduledFromEndTime = previous.endTime;
+        appointment.rescheduleReason = input.reason;
+        appointment.rescheduledAt = new Date();
+        appointment.timeSlotId = newSlot._id;
+        appointment.appointedDate = newAppointedDate;
+        appointment.startTime = newSlot.startTime;
+        appointment.endTime = newSlot.endTime;
+        // Xoa dau nhac gan voi khung gio CU - de scheduler nhac lai dung theo
+        // gio hen MOI (xem checkAppointmentRemindersAndNoShow).
+        appointment.reminderSentAt = undefined;
+        appointment.dayBeforeReminderSentAt = undefined;
+        await appointment.save();
+    } catch (err) {
+        // Luu that bai sau khi da dat cho o slot MOI - tra lai cho ngay (slot
+        // CU chua bi dong den nen khong can hoan tac o do).
+        await releaseSlotCounterByKey(service._id, newSlot._id, newAppointedDate);
+        throw err;
+    }
+
+    // Chi giai phong slot CU SAU KHI luu thanh cong, dung gia tri da luu lai
+    // o `previous` (appointment.timeSlotId/appointedDate luc nay da la gia tri
+    // MOI nen khong the dung releaseSlotCounter(appointment) nhu cac cho khac).
+    await releaseSlotCounterByKey(
+        previous.serviceId,
+        previous.timeSlotId,
+        previous.date,
+    );
+
+    await writeAuditLog({
+        actorId: actorUser._id,
+        action: "appointment.reschedule",
+        targetModel: "Appointment",
+        targetId: appointment._id,
+        metadata: {
+            reason: input.reason,
+            fromDate: previous.date.toISOString().slice(0, 10),
+            fromStartTime: previous.startTime,
+            fromEndTime: previous.endTime,
+            toDate: input.appointedDate,
+            toStartTime: newSlot.startTime,
+            toEndTime: newSlot.endTime,
+        },
+    });
+
+    const bodyText =
+        `Lich hen ${appointment.code} da duoc doi sang luc ${newSlot.startTime} ` +
+        `ngay ${input.appointedDate} (truoc do: ${previous.startTime} ngay ` +
+        `${previous.date.toISOString().slice(0, 10)}). Ly do: ${input.reason}`;
+
+    const notifyIds = [appointment.citizenUserId, appointment.bookedByUserId]
+        .filter(Boolean)
+        .map(String);
+    if (notifyIds.length) {
+        await createNotification({
+            title: "Lich hen da duoc doi lich",
+            body: bodyText,
+            type: "appointment.rescheduled",
+            targetUserIds: [...new Set(notifyIds)],
+            relatedModel: "Appointment",
+            relatedId: appointment._id,
+            createdBy: actorUser._id,
+        });
+    }
+    // "Nguoi phu trach" (nguoi duoc thong bao voi vai tro appointer) - uu tien
+    // chinh officer da xac nhan lich hen nay (officerUserId); neu chua co (vd
+    // dich vu autoApprove, chua ai xac nhan thu cong), bao cho toan bo can bo
+    // duoc phan cong dich vu, giong nhanh thong bao luc tao moi lich hen.
+    const officerNotifyIds = appointment.officerUserId
+        ? [String(appointment.officerUserId)]
+        : service.assignedOfficerUserIds.map(String);
+    if (officerNotifyIds.length) {
+        await createNotification({
+            title: "Lich hen da duoc cong dan doi lich",
+            body: bodyText,
+            type: "appointment.rescheduled",
+            targetUserIds: officerNotifyIds,
+            relatedModel: "Appointment",
+            relatedId: appointment._id,
+            createdBy: actorUser._id,
+        });
+    }
 
     return getAppointmentById(String(appointment._id));
 }
@@ -751,7 +1067,7 @@ export async function rejectAppointment(
     if (notifyIds.length) {
         await createNotification({
             title: "Lich hen bi tu choi",
-            body: `Lich hen ${appointment.code} bi tu choi: ${reason}`,
+            body: `Lich hen ${appointment.code} bi tu choi: ${reason}. Ban co the dat lai lich hen moi cho dich vu "${service.name}".`,
             type: "appointment.rejected",
             targetUserIds: [...new Set(notifyIds)],
             relatedModel: "Appointment",
@@ -1020,8 +1336,10 @@ export type AppointmentReminderNoShowResult = {
 
 /**
  * Job dinh ky (xem startAppointmentScheduler trong lib/scheduler.ts):
- * (a) nhac lich hen "da_xac_nhan" sap toi (<= REMINDER_LEAD_HOURS, chua qua
- *     gio hen) chua duoc nhac - gui thong bao + dong dau reminderSentAt.
+ * (a) nhac lich hen "da_xac_nhan" sap toi, hai tier doc lap: <=
+ *     DAY_BEFORE_REMINDER_LEAD_HOURS (~1 ngay, dayBeforeReminderSentAt) va <=
+ *     REMINDER_LEAD_HOURS (~2 tieng, reminderSentAt) - moi tier chi gui MOT
+ *     LAN nho co dau rieng, ca hai co the cung ton tai tren mot lich hen.
  * (b) lich hen "da_xac_nhan" da qua gio hen + NO_SHOW_GRACE_MINUTES ma chua
  *     check-in - chuyen "vang_mat", tra lai cho, ghi audit log; neu cong dan
  *     do co >= NO_SHOW_LOCK_THRESHOLD lan vang mat trong NO_SHOW_LOOKBACK_DAYS
@@ -1039,22 +1357,72 @@ export async function checkAppointmentRemindersAndNoShow(
 
     const upcoming = await Appointment.find({
         status: "da_xac_nhan",
-        reminderSentAt: { $exists: false },
+        $or: [
+            { reminderSentAt: { $exists: false } },
+            { dayBeforeReminderSentAt: { $exists: false } },
+        ],
     });
+    // Fetch tat ca dich vu lien quan MOT LAN (thay vi truy van rieng tung
+    // lich hen trong vong lap) de lay locationAddress/description dua vao noi
+    // dung nhac lich (19.17.4/19.17.5) - xem buildAppointmentMessage.
+    const serviceIds = [...new Set(upcoming.map(a => String(a.serviceId)))];
+    const services = await AppointmentService.find({
+        _id: { $in: serviceIds },
+    }).select("name locationAddress description");
+    const serviceById = new Map(services.map(s => [String(s._id), s]));
+
     for (const appointment of upcoming) {
+        const service = serviceById.get(String(appointment.serviceId));
+        if (!service) continue;
         const appointedAt = combineDateAndTime(
             appointment.appointedDate,
             appointment.startTime,
         );
         const hoursUntil = (appointedAt.getTime() - now.getTime()) / 3_600_000;
-        if (hoursUntil > 0 && hoursUntil <= REMINDER_LEAD_HOURS) {
-            const notifyIds = [appointment.citizenUserId, appointment.bookedByUserId]
-                .filter(Boolean)
-                .map(String);
+        if (hoursUntil <= 0) continue;
+        const notifyIds = [appointment.citizenUserId, appointment.bookedByUserId]
+            .filter(Boolean)
+            .map(String);
+        const dateStr = appointment.appointedDate.toISOString().slice(0, 10);
+        let dirty = false;
+
+        if (
+            !appointment.dayBeforeReminderSentAt &&
+            hoursUntil <= DAY_BEFORE_REMINDER_LEAD_HOURS
+        ) {
+            if (notifyIds.length) {
+                await createNotification({
+                    title: "Nhac lich hen: con 1 ngay nua",
+                    body: buildAppointmentMessage(
+                        service,
+                        appointment.code,
+                        appointment.startTime,
+                        dateStr,
+                    ),
+                    type: "appointment.reminder",
+                    targetUserIds: [...new Set(notifyIds)],
+                    relatedModel: "Appointment",
+                    relatedId: appointment._id,
+                });
+            }
+            appointment.dayBeforeReminderSentAt = now;
+            dirty = true;
+            remindersSent += 1;
+        }
+
+        if (
+            !appointment.reminderSentAt &&
+            hoursUntil <= REMINDER_LEAD_HOURS
+        ) {
             if (notifyIds.length) {
                 await createNotification({
                     title: "Nhac lich hen sap toi",
-                    body: `Ban co lich hen ${appointment.code} luc ${appointment.startTime} ngay ${appointment.appointedDate.toISOString().slice(0, 10)}`,
+                    body: buildAppointmentMessage(
+                        service,
+                        appointment.code,
+                        appointment.startTime,
+                        dateStr,
+                    ),
                     type: "appointment.reminder",
                     targetUserIds: [...new Set(notifyIds)],
                     relatedModel: "Appointment",
@@ -1062,9 +1430,11 @@ export async function checkAppointmentRemindersAndNoShow(
                 });
             }
             appointment.reminderSentAt = now;
-            await appointment.save();
+            dirty = true;
             remindersSent += 1;
         }
+
+        if (dirty) await appointment.save();
     }
 
     const potentialNoShow = await Appointment.find({ status: "da_xac_nhan" });
