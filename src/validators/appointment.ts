@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const dateOnlySchema = z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngay khong hop le (YYYY-MM-DD)");
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ (YYYY-MM-DD)");
 
 /**
  * Zod chi kiem tra HINH THUC: proxyName/proxyPhone phai co CA HAI hoac KHONG
@@ -13,9 +13,9 @@ const dateOnlySchema = z
  */
 export const createAppointmentSchema = z
     .object({
-        serviceId: z.string().min(1, "Thieu dich vu"),
-        houseId: z.string().min(1, "Thieu nha so"),
-        timeSlotId: z.string().min(1, "Thieu khung gio"),
+        serviceId: z.string().min(1, "Thiếu dịch vụ"),
+        houseId: z.string().min(1, "Thiếu nhà số"),
+        timeSlotId: z.string().min(1, "Thiếu khung giờ"),
         appointedDate: dateOnlySchema,
         note: z.string().trim().max(1000).optional(),
         citizenUserId: z.string().optional(),
@@ -27,7 +27,7 @@ export const createAppointmentSchema = z
         draftId: z.string().length(24).optional(),
     })
     .refine(data => Boolean(data.proxyName?.trim()) === Boolean(data.proxyPhone?.trim()), {
-        message: "Can nhap du ho ten va so dien thoai nguoi duoc dat ho",
+        message: "Cần nhập đủ họ tên và số điện thoại người được đặt hộ",
         path: ["proxyPhone"],
     });
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
@@ -38,12 +38,12 @@ export const cancelAppointmentSchema = z.object({
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>;
 
 export const rejectAppointmentSchema = z.object({
-    reason: z.string().trim().min(1, "Vui long nhap ly do tu choi"),
+    reason: z.string().trim().min(1, "Vui lòng nhập lý do từ chối"),
 });
 export type RejectAppointmentInput = z.infer<typeof rejectAppointmentSchema>;
 
 export const rateAppointmentSchema = z.object({
-    rating: z.number().int().min(1, "Danh gia phai tu 1 den 5 sao").max(5),
+    rating: z.number().int().min(1, "Đánh giá phải từ 1 đến 5 sao").max(5),
     ratingNote: z.string().trim().max(1000).optional(),
 });
 export type RateAppointmentInput = z.infer<typeof rateAppointmentSchema>;

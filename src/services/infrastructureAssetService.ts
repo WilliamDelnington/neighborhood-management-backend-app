@@ -72,7 +72,7 @@ async function findInScope(
     id: string,
 ): Promise<IInfrastructureAsset> {
     const asset = await InfrastructureAsset.findById(id);
-    if (!asset) throw new HttpError("Khong tim thay tai san ha tang", 404);
+    if (!asset) throw new HttpError("Không tìm thấy tài sản hạ tầng", 404);
     if (
         actorUser.roles.includes("neighborhood_leader") ||
         actorUser.roles.includes("neighborhood_coleader")
@@ -85,7 +85,7 @@ async function findInScope(
             .map(String);
         if (!ids.includes(String(asset.neighborhoodId))) {
             throw new HttpError(
-                "Ban khong co quyen thao tac voi tai san ngoai to dan pho duoc phan cong",
+                "Bạn không có quyền thao tác với tài sản ngoài tổ dân phố được phân công",
                 403,
             );
         }
@@ -119,7 +119,7 @@ export async function createInfrastructureAsset(
             .map(String);
         if (!ids.includes(input.neighborhoodId)) {
             throw new HttpError(
-                "Ban khong co quyen tao tai san ngoai to dan pho duoc phan cong",
+                "Bạn không có quyền tạo tài sản ngoài tổ dân phố được phân công",
                 403,
             );
         }
@@ -217,14 +217,14 @@ export async function uploadInfrastructureAssetAttachment(
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -273,7 +273,7 @@ export async function deleteInfrastructureAssetAttachment(
         relatedModel: "InfrastructureAsset",
         relatedId: assetId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();

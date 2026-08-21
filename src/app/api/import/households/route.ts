@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         );
         return apiSuccess(
             job,
-            "Da doc va kiem tra du lieu, vui long xem truoc ket qua truoc khi commit",
+            "Đã đọc và kiểm tra dữ liệu, vui lòng xem trước kết quả trước khi commit",
             201,
         );
     } catch (err) {

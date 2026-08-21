@@ -21,7 +21,7 @@ export async function POST(
         await requirePermission(actorUser, "appointments.checkin");
         const body = rejectAppointmentSchema.parse(await req.json());
         const appointment = await rejectAppointment(actorUser, params.id, body.reason);
-        return apiSuccess(appointment, "Da tu choi lich hen");
+        return apiSuccess(appointment, "Đã từ chối lịch hẹn");
     } catch (err) {
         return apiErrorFromException(err);
     }

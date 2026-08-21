@@ -137,7 +137,7 @@ export async function addOrganizationRepresentative(
     });
     if (duplicate) {
         throw new HttpError(
-            "Quan he dai dien nay da ton tai va dang active",
+            "Quan hệ đại diện này đã tồn tại và đang active",
             409,
         );
     }
@@ -182,7 +182,7 @@ export async function endOrganizationRepresentative(
         active: true,
     });
     if (!representative) {
-        throw new HttpError("Khong tim thay nguoi dai dien", 404);
+        throw new HttpError("Không tìm thấy người đại diện", 404);
     }
 
     representative.active = false;
@@ -225,7 +225,7 @@ export async function verifyOrganizationRepresentative(
         active: true,
     });
     if (!representative) {
-        throw new HttpError("Khong tim thay nguoi dai dien", 404);
+        throw new HttpError("Không tìm thấy người đại diện", 404);
     }
 
     representative.verificationStatus = decision;

@@ -47,7 +47,7 @@ export async function POST(req: Request) {
             String(actorUser._id),
             body,
         );
-        return apiSuccess(transaction, "Tao giao dich thanh cong", 201);
+        return apiSuccess(transaction, "Tạo giao dịch thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

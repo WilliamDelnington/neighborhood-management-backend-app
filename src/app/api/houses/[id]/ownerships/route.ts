@@ -58,7 +58,7 @@ export async function POST(
 
         const body = addHouseOwnershipSchema.parse(await req.json());
         const ownership = await addHouseOwnership(user, params.id, body);
-        return apiSuccess(ownership, "Cap nhat quan he so huu thanh cong", 201);
+        return apiSuccess(ownership, "Cập nhật quan hệ sở hữu thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

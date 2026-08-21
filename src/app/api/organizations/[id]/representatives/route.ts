@@ -59,7 +59,7 @@ export async function POST(
         );
         return apiSuccess(
             representative,
-            "Cap nhat nguoi dai dien thanh cong",
+            "Cập nhật người đại diện thành công",
             201,
         );
     } catch (err) {

@@ -16,12 +16,12 @@ export async function uploadUtilityAppIcon(
     req: Request,
 ): Promise<{ url: string }> {
     if (file.size > MAX_ICON_SIZE_BYTES) {
-        throw new HttpError("Anh vuot qua dung luong cho phep (toi da 5MB)", 400);
+        throw new HttpError("Ảnh vượt quá dung lượng cho phép (tối đa 5MB)", 400);
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ICON_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang anh khong duoc ho tro (chi chap nhan ${ALLOWED_ICON_EXTENSIONS.join(", ")})`,
+            `Định dạng ảnh không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ICON_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -49,7 +49,7 @@ export async function listUtilityApps(
     const filter: Record<string, unknown> = {};
     if (params.activeOnly) filter.active = true;
     const page = params.page || 1;
-    const limit = params.limit || 50;
+    const limit = params.limit || 10;
 
     const [items, total] = await Promise.all([
         UtilityApp.find(filter)
@@ -70,7 +70,7 @@ export async function listUtilityApps(
 
 export async function getUtilityAppById(id: string): Promise<IUtilityApp> {
     const app = await UtilityApp.findById(id);
-    if (!app) throw new HttpError("Khong tim thay tien ich", 404);
+    if (!app) throw new HttpError("Không tìm thấy tiện ích", 404);
     return app;
 }
 
@@ -101,7 +101,7 @@ export async function updateUtilityApp(
     input: UpdateUtilityAppInput,
 ): Promise<IUtilityApp> {
     const app = await UtilityApp.findById(id);
-    if (!app) throw new HttpError("Khong tim thay tien ich", 404);
+    if (!app) throw new HttpError("Không tìm thấy tiện ích", 404);
 
     Object.assign(app, input);
     app.updatedBy = actorId as any;
@@ -123,7 +123,7 @@ export async function deleteUtilityApp(
     id: string,
 ): Promise<void> {
     const app = await UtilityApp.findById(id);
-    if (!app) throw new HttpError("Khong tim thay tien ich", 404);
+    if (!app) throw new HttpError("Không tìm thấy tiện ích", 404);
     await app.deleteOne();
 
     await writeAuditLog({

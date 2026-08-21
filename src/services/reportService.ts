@@ -742,7 +742,7 @@ export async function getMeetingAttendanceReport(params: {
     meetingId: string;
 }): Promise<MeetingAttendanceReport> {
     const meeting = await Meeting.findById(params.meetingId);
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
 
     const byAnswerRaw = await MeetingRegistration.aggregate([
         { $match: { meetingId: meeting._id } },

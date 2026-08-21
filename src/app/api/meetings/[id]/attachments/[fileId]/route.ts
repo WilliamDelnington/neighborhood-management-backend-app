@@ -14,7 +14,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "meetings.update");
         await deleteMeetingAttachment(actorUser, params.id, params.fileId);
-        return apiSuccess(null, "Xoa file dinh kem thanh cong");
+        return apiSuccess(null, "Xóa file đính kèm thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

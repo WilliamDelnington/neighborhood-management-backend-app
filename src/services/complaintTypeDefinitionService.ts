@@ -16,7 +16,7 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     const unique = [...new Set(roleKeys)];
     const count = await Role.countDocuments({ key: { $in: unique }, active: true });
     if (count !== unique.length) {
-        throw new HttpError("Danh sach vai tro co gia tri khong ton tai/da khoa", 422);
+        throw new HttpError("Danh sách vai trò có giá trị không tồn tại/đã khóa", 422);
     }
 }
 
@@ -32,7 +32,7 @@ function assertDefinitionInScope(
 ) {
     if (actorUser.roles.includes("admin")) return;
     if (!actorUser.wardCode || definition.wardCode !== actorUser.wardCode) {
-        throw new HttpError("Loai phan anh khong thuoc phuong/xa ban phu trach", 403);
+        throw new HttpError("Loại phản ánh không thuộc phường/xã bạn phụ trách", 403);
     }
 }
 
@@ -44,7 +44,7 @@ export async function listComplaintTypeDefinitions(params: {
     limit?: number;
 }) {
     const page = params.page || 1;
-    const limit = params.limit || 50;
+    const limit = params.limit || 10;
     const filter: Record<string, unknown> = definitionScope(params.actorUser);
     if (params.active !== undefined) filter.active = params.active;
     if (params.search) {
@@ -76,7 +76,7 @@ export async function createComplaintTypeDefinition(
 ) {
     const key = input.key.trim().toLowerCase();
     if (await ComplaintTypeDefinition.exists({ key })) {
-        throw new HttpError("Ma loai phan anh da ton tai", 409);
+        throw new HttpError("Mã loại phản ánh đã tồn tại", 409);
     }
     await assertRoleKeysExist(input.allowedReceiverRoles);
 
@@ -105,7 +105,7 @@ export async function updateComplaintTypeDefinition(
     input: UpdateComplaintTypeDefinitionInput,
 ) {
     const definition = await ComplaintTypeDefinition.findById(id);
-    if (!definition) throw new HttpError("Khong tim thay loai phan anh", 404);
+    if (!definition) throw new HttpError("Không tìm thấy loại phản ánh", 404);
     assertDefinitionInScope(actorUser, definition);
     if (input.allowedReceiverRoles) {
         await assertRoleKeysExist(input.allowedReceiverRoles);
@@ -137,11 +137,11 @@ export async function archiveComplaintTypeDefinition(
     id: string,
 ) {
     const definition = await ComplaintTypeDefinition.findById(id);
-    if (!definition) throw new HttpError("Khong tim thay loai phan anh", 404);
+    if (!definition) throw new HttpError("Không tìm thấy loại phản ánh", 404);
     assertDefinitionInScope(actorUser, definition);
     if (definition.isBuiltIn) {
         throw new HttpError(
-            "Khong the ngung su dung loai phan anh he thong (isBuiltIn)",
+            "Không thể ngừng sử dụng loại phản ánh hệ thống (isBuiltIn)",
             409,
         );
     }

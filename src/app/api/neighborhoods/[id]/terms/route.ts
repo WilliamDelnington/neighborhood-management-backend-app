@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         await getNeighborhoodById(params.id, user);
         const body = createNeighborhoodTermSchema.parse(await req.json());
         const term = await createNeighborhoodTerm(String(user._id), params.id, body);
-        return apiSuccess(term, "Tao nhiem ky thanh cong", 201);
+        return apiSuccess(term, "Tạo nhiệm kỳ thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

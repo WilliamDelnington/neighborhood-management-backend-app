@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MUC_DO_AN_NINH, TINH_TRANG_THEO_DOI_AN_NINH } from "@/types";
 
 export const createSecurityRecordSchema = z.object({
-    houseId: z.string().min(1, "Thieu ma nha"),
+    houseId: z.string().min(1, "Thiếu mã nhà"),
     hasCamera: z.boolean().default(false),
     hasSecurityComplaint: z.boolean().default(false),
     level: z.enum(MUC_DO_AN_NINH).default("binh_thuong"),
@@ -11,7 +11,7 @@ export const createSecurityRecordSchema = z.object({
     note: z.string().optional(),
     inspectionDate: z
         .string()
-        .datetime({ message: "Ngay kiem tra khong hop le" }),
+        .datetime({ message: "Ngày kiểm tra không hợp lệ" }),
 });
 export type CreateSecurityRecordInput = z.infer<
     typeof createSecurityRecordSchema

@@ -14,7 +14,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "correspondences.send");
         const correspondence = await sendCorrespondence(actorUser, params.id);
-        return apiSuccess(correspondence, "Gui van ban thanh cong");
+        return apiSuccess(correspondence, "Gửi văn bản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

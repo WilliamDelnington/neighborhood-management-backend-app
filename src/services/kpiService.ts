@@ -62,10 +62,10 @@ async function resolveKpiScope(actorUser: IUser, neighborhoodId?: string): Promi
     let neighborhoodIds: Types.ObjectId[] | undefined;
     if (neighborhoodId) {
         if (!Types.ObjectId.isValid(neighborhoodId)) {
-            throw new HttpError("To dan pho khong hop le", 422);
+            throw new HttpError("Tổ dân phố không hợp lệ", 422);
         }
         const neighborhood = await Neighborhood.findById(neighborhoodId).select("wardCode");
-        if (!neighborhood) throw new HttpError("Khong tim thay To dan pho", 404);
+        if (!neighborhood) throw new HttpError("Không tìm thấy Tổ dân phố", 404);
         const assigned = actorNeighborhoodIds(actorUser).map(String);
         if (
             !actorUser.roles.includes("admin") &&
@@ -74,7 +74,7 @@ async function resolveKpiScope(actorUser: IUser, neighborhoodId?: string): Promi
             ) &&
             !assigned.includes(neighborhoodId)
         ) {
-            throw new HttpError("To dan pho nam ngoai pham vi bao cao", 403);
+            throw new HttpError("Tổ dân phố nằm ngoài phạm vi báo cáo", 403);
         }
         neighborhoodIds = [new Types.ObjectId(neighborhoodId)];
     } else if (!actorUser.roles.includes("admin")) {
@@ -296,7 +296,7 @@ export async function listKpiDefinitions(
 
 function assertFormulaSupported(source: KpiDataSource, formula: KpiFormulaType) {
     if (formula === "average" && source !== "task_completion") {
-        throw new HttpError("Cong thuc trung binh hien chi ho tro nguon Nhiem vu hoan thanh", 422);
+        throw new HttpError("Công thức trung bình hiện chỉ hỗ trợ nguồn Nhiệm vụ hoàn thành", 422);
     }
 }
 
@@ -304,7 +304,7 @@ export async function createKpiDefinition(actorUser: IUser, input: CreateKpiDefi
     assertFormulaSupported(input.dataSource, input.formulaType);
     const wardCode = actorUser.roles.includes("admin") ? undefined : actorUser.wardCode;
     if (!actorUser.roles.includes("admin") && !wardCode) {
-        throw new HttpError("Tai khoan chua duoc gan Phuong de cau hinh KPI", 403);
+        throw new HttpError("Tài khoản chưa được gán Phường để cấu hình KPI", 403);
     }
     try {
         const definition = await KpiDefinition.create({
@@ -321,7 +321,7 @@ export async function createKpiDefinition(actorUser: IUser, input: CreateKpiDefi
         });
         return definition;
     } catch (err: any) {
-        if (err?.code === 11000) throw new HttpError("Ma KPI da ton tai trong pham vi nay", 409);
+        if (err?.code === 11000) throw new HttpError("Mã KPI đã tồn tại trong phạm vi này", 409);
         throw err;
     }
 }
@@ -332,12 +332,12 @@ export async function updateKpiDefinition(
     patch: UpdateKpiDefinitionInput,
 ) {
     const definition = await KpiDefinition.findById(id);
-    if (!definition) throw new HttpError("Khong tim thay KPI", 404);
+    if (!definition) throw new HttpError("Không tìm thấy KPI", 404);
     if (
         !actorUser.roles.includes("admin") &&
         definition.wardCode !== actorUser.wardCode
     ) {
-        throw new HttpError("KPI nam ngoai Phuong duoc phu trach", 403);
+        throw new HttpError("KPI nằm ngoài Phường được phụ trách", 403);
     }
     assertFormulaSupported(
         patch.dataSource || definition.dataSource,

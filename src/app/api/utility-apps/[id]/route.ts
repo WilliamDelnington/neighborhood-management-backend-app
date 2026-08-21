@@ -38,7 +38,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(app, "Cap nhat tien ich thanh cong");
+        return apiSuccess(app, "Cập nhật tiện ích thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -54,7 +54,7 @@ export async function DELETE(
         await requirePermission(actorUser, "utility_apps.manage");
 
         await deleteUtilityApp(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa tien ich thanh cong");
+        return apiSuccess(null, "Xóa tiện ích thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

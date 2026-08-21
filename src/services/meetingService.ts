@@ -61,7 +61,7 @@ export async function updateMeeting(
     patch: UpdateMeetingInput,
 ) {
     const meeting = await Meeting.findById(id);
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
 
     const wasPublished = meeting.published;
     const { startTime, ...rest } = patch;
@@ -114,16 +114,16 @@ export async function listMeetings(params: {
 
 export async function getMeetingById(id: string, publicOnly: boolean) {
     const meeting = await Meeting.findById(id);
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
     if (publicOnly && !meeting.published) {
-        throw new HttpError("Khong tim thay cuoc hop", 404);
+        throw new HttpError("Không tìm thấy cuộc họp", 404);
     }
     return meeting;
 }
 
 export async function deleteMeeting(actorId: string, id: string) {
     const meeting = await Meeting.findById(id);
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
     await meeting.deleteOne();
     await MeetingRegistration.deleteMany({ meetingId: id });
 
@@ -170,18 +170,18 @@ export async function uploadMeetingAttachment(
     file: File,
 ) {
     const meeting = await Meeting.findById(meetingId).select("_id");
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -228,7 +228,7 @@ export async function deleteMeetingAttachment(
         relatedModel: "Meeting",
         relatedId: meetingId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();
@@ -248,7 +248,7 @@ export async function registerForMeeting(
     input: RegisterMeetingInput,
 ) {
     const meeting = await Meeting.findById(meetingId);
-    if (!meeting) throw new HttpError("Khong tim thay cuoc hop", 404);
+    if (!meeting) throw new HttpError("Không tìm thấy cuộc họp", 404);
 
     const registration = await MeetingRegistration.findOneAndUpdate(
         { meetingId, userId },

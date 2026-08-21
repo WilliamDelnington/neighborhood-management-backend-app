@@ -20,7 +20,7 @@ export async function POST(
             params.id,
             body,
         );
-        return apiSuccess(complaint, "Da gui de nghi xem xet lai");
+        return apiSuccess(complaint, "Đã gửi đề nghị xem xét lại");
     } catch (err) {
         return apiErrorFromException(err);
     }

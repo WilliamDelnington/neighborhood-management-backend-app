@@ -67,19 +67,19 @@ async function assertNeighborhoodInAuthorScope(
     neighborhoodId: string,
 ) {
     if (!Types.ObjectId.isValid(neighborhoodId)) {
-        throw new HttpError("To dan pho khong hop le", 422);
+        throw new HttpError("Tổ dân phố không hợp lệ", 422);
     }
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay To dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy Tổ dân phố", 404);
     if (actorUser.roles.includes("admin")) return neighborhood;
     if (actorUser.wardCode) {
         if (neighborhood.wardCode !== actorUser.wardCode) {
-            throw new HttpError("To dan pho khong thuoc Phuong dang phu trach", 403);
+            throw new HttpError("Tổ dân phố không thuộc Phường đang phụ trách", 403);
         }
         return neighborhood;
     }
     if (!assignedNeighborhoodIds(actorUser).includes(String(neighborhood._id))) {
-        throw new HttpError("To dan pho nam ngoai pham vi duoc giao", 403);
+        throw new HttpError("Tổ dân phố nằm ngoài phạm vi được giao", 403);
     }
     return neighborhood;
 }
@@ -100,7 +100,7 @@ async function resolveReportNeighborhood(
         }).limit(2);
         if (neighborhoods.length === 1) return neighborhoods[0];
     }
-    throw new HttpError("Vui long chon To dan pho lap bao cao", 422);
+    throw new HttpError("Vui lòng chọn Tổ dân phố lập báo cáo", 422);
 }
 
 async function assertValidWardRecipient(
@@ -108,26 +108,26 @@ async function assertValidWardRecipient(
     neighborhood: { wardCode?: number },
 ) {
     if (!submittedToUserId || !Types.ObjectId.isValid(submittedToUserId)) {
-        throw new HttpError("Vui long chon noi nhan bao cao cap Phuong", 422);
+        throw new HttpError("Vui lòng chọn nơi nhận báo cáo cấp Phường", 422);
     }
     const recipient = await User.findOne({
         _id: submittedToUserId,
         status: "active",
     });
-    if (!recipient) throw new HttpError("Noi nhan bao cao khong hop le", 422);
+    if (!recipient) throw new HttpError("Nơi nhận báo cáo không hợp lệ", 422);
     const receiverRoleKeys = await getRoleKeysWithPermission("reports.receive");
     if (
         !recipient.roles.includes("admin") &&
         !recipient.roles.some(role => receiverRoleKeys.includes(role))
     ) {
-        throw new HttpError("Nguoi duoc chon khong co quyen nhan bao cao", 422);
+        throw new HttpError("Người được chọn không có quyền nhận báo cáo", 422);
     }
     if (
         !recipient.roles.includes("admin") &&
         neighborhood.wardCode &&
         recipient.wardCode !== neighborhood.wardCode
     ) {
-        throw new HttpError("Noi nhan khong thuoc cung Phuong voi To dan pho", 422);
+        throw new HttpError("Nơi nhận không thuộc cùng Phường với Tổ dân phố", 422);
     }
     return recipient;
 }
@@ -311,20 +311,20 @@ export async function getPeriodicReportContext(
 function assertIsAuthor(report: IPeriodicReport, actorUser: IUser): void {
     if (actorUser.roles.includes("admin")) return;
     if (String(report.authorUserId) !== String(actorUser._id)) {
-        throw new HttpError("Chi tac gia bao cao nay moi duoc thao tac", 403);
+        throw new HttpError("Chỉ tác giả báo cáo này mới được thao tác", 403);
     }
 }
 
 async function assertIsReceiver(report: IPeriodicReport, actorUser: IUser) {
     if (actorUser.roles.includes("admin")) return;
     if (String(report.submittedToUserId) !== String(actorUser._id)) {
-        throw new HttpError("Chi noi nhan bao cao moi duoc thao tac", 403);
+        throw new HttpError("Chỉ nơi nhận báo cáo mới được thao tác", 403);
     }
 }
 
 async function getReportInScope(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     if (
         actorUser.roles.includes("admin") ||
         String(report.authorUserId) === String(actorUser._id) ||
@@ -332,7 +332,7 @@ async function getReportInScope(actorUser: IUser, id: string) {
     ) {
         return report;
     }
-    throw new HttpError("Ban khong co quyen xem bao cao nay", 403);
+    throw new HttpError("Bạn không có quyền xem báo cáo này", 403);
 }
 
 export async function createPeriodicReport(
@@ -444,10 +444,10 @@ export async function updatePeriodicReport(
     patch: UpdatePeriodicReportInput,
 ) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!EDITABLE_STATUSES.includes(report.status)) {
-        throw new HttpError("Bao cao da nop, khong the chinh sua truc tiep", 409);
+        throw new HttpError("Báo cáo đã nộp, không thể chỉnh sửa trực tiếp", 409);
     }
 
     const neighborhood = await resolveReportNeighborhood(
@@ -459,7 +459,7 @@ export async function updatePeriodicReport(
         : report.periodStart;
     const periodEnd = patch.periodEnd ? new Date(patch.periodEnd) : report.periodEnd;
     if (periodStart > periodEnd) {
-        throw new HttpError("Ngay bat dau phai truoc hoac bang ngay ket thuc", 422);
+        throw new HttpError("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc", 422);
     }
     const recipientId =
         patch.submittedToUserId !== undefined
@@ -497,12 +497,12 @@ export async function updatePeriodicReport(
 
 export async function refreshPeriodicReportSummary(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!EDITABLE_STATUSES.includes(report.status)) {
-        throw new HttpError("Chi cap nhat so lieu khi bao cao dang duoc soan", 409);
+        throw new HttpError("Chỉ cập nhật số liệu khi báo cáo đang được soạn", 409);
     }
-    if (!report.neighborhoodId) throw new HttpError("Bao cao chua gan To dan pho", 409);
+    if (!report.neighborhoodId) throw new HttpError("Báo cáo chưa gắn Tổ dân phố", 409);
     report.autoSummary = await buildPeriodicReportAutoSummary(
         report.neighborhoodId,
         report.periodStart,
@@ -514,12 +514,12 @@ export async function refreshPeriodicReportSummary(actorUser: IUser, id: string)
 
 export async function submitPeriodicReport(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!EDITABLE_STATUSES.includes(report.status)) {
-        throw new HttpError("Bao cao nay khong o trang thai co the nop", 409);
+        throw new HttpError("Báo cáo này không ở trạng thái có thể nộp", 409);
     }
-    if (!report.neighborhoodId) throw new HttpError("Bao cao chua gan To dan pho", 422);
+    if (!report.neighborhoodId) throw new HttpError("Báo cáo chưa gắn Tổ dân phố", 422);
     const neighborhood = await assertNeighborhoodInAuthorScope(
         actorUser,
         String(report.neighborhoodId),
@@ -540,7 +540,7 @@ export async function submitPeriodicReport(actorUser: IUser, id: string) {
     });
     if (attachments.length === 0) {
         throw new HttpError(
-            "Bao cao dinh ky phai co it nhat mot tep dinh kem truoc khi nop",
+            "Báo cáo định kỳ phải có ít nhất một tệp đính kèm trước khi nộp",
             422,
         );
     }
@@ -597,10 +597,10 @@ export async function submitPeriodicReport(actorUser: IUser, id: string) {
 
 export async function receivePeriodicReport(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     await assertIsReceiver(report, actorUser);
     if (!SUBMITTED_STATUSES.includes(report.status)) {
-        throw new HttpError("Chi tiep nhan bao cao da nop", 409);
+        throw new HttpError("Chỉ tiếp nhận báo cáo đã nộp", 409);
     }
     report.status = "received";
     report.receivedAt = new Date();
@@ -618,10 +618,10 @@ export async function receivePeriodicReport(actorUser: IUser, id: string) {
 
 export async function acceptPeriodicReport(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     await assertIsReceiver(report, actorUser);
     if (report.status !== "received") {
-        throw new HttpError("Bao cao phai duoc tiep nhan truoc khi chap nhan", 409);
+        throw new HttpError("Báo cáo phải được tiếp nhận trước khi chấp nhận", 409);
     }
     report.status = "accepted";
     report.acceptedAt = new Date();
@@ -648,10 +648,10 @@ export async function acceptPeriodicReport(actorUser: IUser, id: string) {
 
 export async function recallPeriodicReport(actorUser: IUser, id: string) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!SUBMITTED_STATUSES.includes(report.status)) {
-        throw new HttpError("Chi thu hoi bao cao chua duoc Phuong tiep nhan", 409);
+        throw new HttpError("Chỉ thu hồi báo cáo chưa được Phường tiếp nhận", 409);
     }
     report.status = "recalled";
     report.recalledAt = new Date();
@@ -672,10 +672,10 @@ export async function requestPeriodicReportRevision(
     note: string,
 ) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     await assertIsReceiver(report, actorUser);
     if (![...SUBMITTED_STATUSES, "received"].includes(report.status)) {
-        throw new HttpError("Chi yeu cau bo sung khi bao cao da duoc nop", 409);
+        throw new HttpError("Chỉ yêu cầu bổ sung khi báo cáo đã được nộp", 409);
     }
     report.status = "revision_required";
     report.revisionNote = note;
@@ -714,18 +714,18 @@ export async function uploadPeriodicReportAttachment(
     file: File,
 ) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!EDITABLE_STATUSES.includes(report.status)) {
-        throw new HttpError("Khong the thay doi tep sau khi nop bao cao", 409);
+        throw new HttpError("Không thể thay đổi tệp sau khi nộp báo cáo", 409);
     }
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-        throw new HttpError("File vuot qua dung luong cho phep (10MB)", 422);
+        throw new HttpError("File vượt quá dung lượng cho phép (10MB)", 422);
     }
     const dotIndex = file.name.lastIndexOf(".");
     const ext = dotIndex >= 0 ? file.name.slice(dotIndex).toLowerCase() : "";
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
-        throw new HttpError("Dinh dang file dinh kem khong duoc ho tro", 422);
+        throw new HttpError("Định dạng file đính kèm không được hỗ trợ", 422);
     }
     const { url } = await saveUploadedFile(
         Buffer.from(await file.arrayBuffer()),
@@ -761,17 +761,17 @@ export async function deletePeriodicReportAttachment(
     fileId: string,
 ) {
     const report = await PeriodicReport.findById(id);
-    if (!report) throw new HttpError("Khong tim thay bao cao", 404);
+    if (!report) throw new HttpError("Không tìm thấy báo cáo", 404);
     assertIsAuthor(report, actorUser);
     if (!EDITABLE_STATUSES.includes(report.status)) {
-        throw new HttpError("Khong the thay doi tep sau khi nop bao cao", 409);
+        throw new HttpError("Không thể thay đổi tệp sau khi nộp báo cáo", 409);
     }
     const asset = await FileAsset.findOne({
         _id: fileId,
         relatedModel: "PeriodicReport",
         relatedId: report._id,
     });
-    if (!asset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!asset) throw new HttpError("Không tìm thấy file đính kèm", 404);
     await deleteUploadedFile(asset.url);
     await asset.deleteOne();
     await writeAuditLog({
@@ -791,7 +791,7 @@ export async function getPeriodicReportVersionForExport(
     const report = await getReportInScope(actorUser, id);
     const targetVersion = version || report.currentVersion;
     if (targetVersion < 1) {
-        throw new HttpError("Bao cao chua co phien ban da nop de xuat", 409);
+        throw new HttpError("Báo cáo chưa có phiên bản đã nộp để xuất", 409);
     }
     const snapshot = await PeriodicReportVersion.findOne({
         reportId: report._id,
@@ -800,6 +800,6 @@ export async function getPeriodicReportVersionForExport(
         .populate("authorUserId", "displayName")
         .populate("submittedToUserId", "displayName")
         .populate("neighborhoodId", "code name wardName");
-    if (!snapshot) throw new HttpError("Khong tim thay phien ban bao cao", 404);
+    if (!snapshot) throw new HttpError("Không tìm thấy phiên bản báo cáo", 404);
     return snapshot;
 }

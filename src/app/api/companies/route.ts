@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
         const body = createCompanySchema.parse(await req.json());
         const company = await createCompany(user, body);
-        return apiSuccess(company, "Tao cong ty thanh cong", 201);
+        return apiSuccess(company, "Tạo công ty thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

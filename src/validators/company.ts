@@ -2,11 +2,11 @@ import { z } from "zod";
 import { VERIFICATION_STATUS } from "@/types";
 
 export const createCompanySchema = z.object({
-    name: z.string().min(1, "Ten cong ty khong duoc de trong"),
-    houseId: z.string().min(1, "Thieu nha so"),
+    name: z.string().min(1, "Tên công ty không được để trống"),
+    houseId: z.string().min(1, "Thiếu nhà số"),
     ownerName: z.string().optional(),
     // Bat buoc - khac Business (tuy chon) - xem models/Company.ts.
-    taxCode: z.string().trim().min(1, "Ma so thue khong duoc de trong"),
+    taxCode: z.string().trim().min(1, "Mã số thuế không được để trống"),
     representativeUserId: z.string().nullable().optional(),
     // Lien ket tuy chon toi mot Organization co san (khong tao moi) - xem
     // ghi chu tren models/Company.ts.

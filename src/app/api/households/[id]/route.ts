@@ -43,7 +43,7 @@ export async function PATCH(
 
         const body = updateHouseholdSchema.parse(await req.json());
         const household = await updateHousehold(user, params.id, body);
-        return apiSuccess(household, "Cap nhat ho dan thanh cong");
+        return apiSuccess(household, "Cập nhật hộ dân thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -62,7 +62,7 @@ export async function DELETE(
         await assertHouseholdInScope(user, existing);
 
         await deleteHousehold(String(user._id), params.id);
-        return apiSuccess(null, "Xoa ho dan thanh cong");
+        return apiSuccess(null, "Xóa hộ dân thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

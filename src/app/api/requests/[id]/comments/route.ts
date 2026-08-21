@@ -36,7 +36,7 @@ export async function POST(
             params.id,
             body.content,
         );
-        return apiSuccess(comment, "Da gui binh luan", 201);
+        return apiSuccess(comment, "Đã gửi bình luận", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -30,7 +30,7 @@ export async function POST(
             params.id,
             body,
         );
-        return apiSuccess(registration, "Dang ky tham du thanh cong");
+        return apiSuccess(registration, "Đăng ký tham dự thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

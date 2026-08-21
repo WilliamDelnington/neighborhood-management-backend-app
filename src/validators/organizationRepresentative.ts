@@ -27,7 +27,7 @@ export const verifyOrganizationRepresentativeSchema = z
         note: z.string().optional(),
     })
     .refine(data => data.decision === "verified" || !!data.note?.trim(), {
-        message: "Vui long nhap ly do khi tu choi",
+        message: "Vui lòng nhập lý do khi từ chối",
         path: ["note"],
     });
 export type VerifyOrganizationRepresentativeInput = z.infer<

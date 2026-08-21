@@ -27,7 +27,7 @@ export async function PUT(
             params.id,
             body,
         );
-        return apiSuccess(businessType, "Cap nhat dong luat giay to thanh cong");
+        return apiSuccess(businessType, "Cập nhật dòng luật giấy tờ thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

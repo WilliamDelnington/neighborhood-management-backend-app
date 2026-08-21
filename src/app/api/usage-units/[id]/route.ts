@@ -37,7 +37,7 @@ export async function PATCH(
 
         const body = updateHouseUsageUnitSchema.parse(await req.json());
         const unit = await updateHouseUsageUnit(user, params.id, body);
-        return apiSuccess(unit, "Cap nhat don vi su dung thanh cong");
+        return apiSuccess(unit, "Cập nhật đơn vị sử dụng thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -53,7 +53,7 @@ export async function DELETE(
         await requirePermission(user, "usage_units.delete");
 
         await deleteHouseUsageUnit(user, params.id);
-        return apiSuccess(null, "Xoa don vi su dung thanh cong");
+        return apiSuccess(null, "Xóa đơn vị sử dụng thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

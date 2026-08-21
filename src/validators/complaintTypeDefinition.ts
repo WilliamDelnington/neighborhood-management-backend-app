@@ -4,13 +4,13 @@ const complaintTypeDefinitionBaseSchema = z.object({
     key: z
         .string()
         .trim()
-        .min(2, "Ma loai phan anh qua ngan")
+        .min(2, "Mã loại phản ánh quá ngắn")
         .max(50)
         .regex(
             /^[a-z][a-z0-9_]*$/,
-            "Ma chi gom chu thuong, so va gach duoi",
+            "Mã chỉ gồm chữ thường, số và gạch dưới",
         ),
-    name: z.string().trim().min(1, "Thieu ten loai phan anh").max(150),
+    name: z.string().trim().min(1, "Thiếu tên loại phản ánh").max(150),
     description: z.string().trim().max(1000).optional(),
     // Thu tu mang the hien uu tien dieu huong (xem
     // resolveComplaintTypeRecipientIds) - khong sap xep lai o day.

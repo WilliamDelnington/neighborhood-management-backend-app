@@ -14,7 +14,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "reports.author");
         await deletePeriodicReportAttachment(actorUser, params.id, params.fileId);
-        return apiSuccess(null, "Da xoa tep dinh kem");
+        return apiSuccess(null, "Đã xóa tệp đính kèm");
     } catch (err) {
         return apiErrorFromException(err);
     }

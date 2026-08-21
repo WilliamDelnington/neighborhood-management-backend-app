@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "support_tickets.create");
         const body = createSupportTicketSchema.parse(await req.json());
         const ticket = await createSupportTicket(actorUser, body);
-        return apiSuccess(ticket, "Gui yeu cau ho tro thanh cong", 201);
+        return apiSuccess(ticket, "Gửi yêu cầu hỗ trợ thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

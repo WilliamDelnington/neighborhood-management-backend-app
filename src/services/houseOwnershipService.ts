@@ -195,8 +195,8 @@ async function resolveExistingOwnerId(
         if (!exists) {
             throw new HttpError(
                 input.ownerType === "organization"
-                    ? "Khong tim thay to chuc"
-                    : "Khong tim thay tai khoan",
+                    ? "Không tìm thấy tổ chức"
+                    : "Không tìm thấy tài khoản",
                 404,
             );
         }
@@ -222,7 +222,7 @@ async function resolveExistingOwnerId(
                 });
             } catch (err: any) {
                 if (err?.code === 11000) {
-                    throw new HttpError("So dien thoai da duoc su dung", 409);
+                    throw new HttpError("Số điện thoại đã được sử dụng", 409);
                 }
                 throw err;
             }
@@ -235,7 +235,7 @@ async function resolveExistingOwnerId(
             return created._id as Types.ObjectId;
         }
         throw new HttpError(
-            "Khong tim thay tai khoan voi so dien thoai nay - nguoi nay can dang ky tai khoan truoc",
+            "Không tìm thấy tài khoản với số điện thoại này - người này cần đăng ký tài khoản trước",
             404,
         );
     }
@@ -413,9 +413,9 @@ export async function endHouseOwnership(
         _id: ownershipId,
         houseId,
     });
-    if (!ownership) throw new HttpError("Khong tim thay quan he so huu", 404);
+    if (!ownership) throw new HttpError("Không tìm thấy quan hệ sở hữu", 404);
     if (!ownership.active) {
-        throw new HttpError("Quan he so huu nay da ket thuc truoc do", 409);
+        throw new HttpError("Quan hệ sở hữu này đã kết thúc trước đó", 409);
     }
 
     // Chinh chu nha (nguoi dung sau quan he so huu nay) khong duoc tu ket thuc
@@ -552,7 +552,7 @@ export async function addHouseOwnership(
     });
     if (duplicate) {
         throw new HttpError(
-            "Quan he so huu nay da ton tai va dang active",
+            "Quan hệ sở hữu này đã tồn tại và đang active",
             409,
         );
     }
@@ -609,11 +609,11 @@ export async function verifyHouseOwnership(
         active: true,
     });
     if (!ownership) {
-        throw new HttpError("Khong tim thay quan he so huu", 404);
+        throw new HttpError("Không tìm thấy quan hệ sở hữu", 404);
     }
     if (ownership.relationshipType === "primary_owner") {
         throw new HttpError(
-            "Chu so huu chinh duoc xac thuc tu dong theo trang thai xac minh cua Nha so, khong xac thuc rieng o day",
+            "Chủ sở hữu chính được xác thực tự động theo trạng thái xác minh của Nhà số, không xác thực riêng ở đây",
             400,
         );
     }

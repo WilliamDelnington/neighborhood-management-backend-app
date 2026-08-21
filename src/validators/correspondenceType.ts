@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 export const createCorrespondenceTypeSchema = z.object({
-    name: z.string().min(1, "Ten loai van ban khong duoc de trong"),
-    code: z.string().min(1, "Ma loai van ban khong duoc de trong"),
+    name: z.string().min(1, "Tên loại văn bản không được để trống"),
+    code: z.string().min(1, "Mã loại văn bản không được để trống"),
     description: z.string().optional(),
-    allowedSenderRoles: z.array(z.string()).min(1, "Chon it nhat mot vai tro nguoi gui"),
+    allowedSenderRoles: z.array(z.string()).min(1, "Chọn ít nhất một vai trò người gửi"),
     allowedReceiverRoles: z
         .array(z.string())
-        .min(1, "Chon it nhat mot vai tro nguoi nhan"),
+        .min(1, "Chọn ít nhất một vai trò người nhận"),
     requireDocumentNumber: z.boolean().default(false),
     active: z.boolean().default(true),
 });

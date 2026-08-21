@@ -41,7 +41,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(asset, "Da cap nhat tai san ha tang");
+        return apiSuccess(asset, "Đã cập nhật tài sản hạ tầng");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -57,7 +57,7 @@ export async function DELETE(
         await requirePermission(actorUser, "infrastructure.manage");
 
         await deleteInfrastructureAsset(actorUser, params.id);
-        return apiSuccess(null, "Da xoa tai san ha tang");
+        return apiSuccess(null, "Đã xóa tài sản hạ tầng");
     } catch (err) {
         return apiErrorFromException(err);
     }

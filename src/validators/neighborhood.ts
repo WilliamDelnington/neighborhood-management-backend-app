@@ -24,9 +24,9 @@ export const createNeighborhoodSchema = z.object({
     // buoc o Mongoose/TS vi to dan pho tao truoc khi co truong nay van ton tai
     // (xem models/Neighborhood.ts).
     provinceCode: z.number(),
-    provinceName: z.string().min(1, "Vui long chon tinh/thanh pho"),
+    provinceName: z.string().min(1, "Vui lòng chọn tỉnh/thành phố"),
     wardCode: z.number(),
-    wardName: z.string().min(1, "Vui long chon phuong/xa"),
+    wardName: z.string().min(1, "Vui lòng chọn phường/xã"),
     address: z.string().optional(),
     description: z.string().optional(),
     contactPhone: z.string().optional(),
@@ -44,14 +44,14 @@ export const createNeighborhoodSchema = z.object({
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["effectiveTo"],
-            message: "Ngay ket thuc hieu luc phai sau ngay bat dau",
+            message: "Ngày kết thúc hiệu lực phải sau ngày bắt đầu",
         });
     }
     if (value.boundaryType === "GEOJSON" && !value.geometry) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["geometry"],
-            message: "Can co du lieu geometry khi chon GEOJSON",
+            message: "Cần có dữ liệu geometry khi chọn GEOJSON",
         });
     }
 });
@@ -87,7 +87,7 @@ export type UnassignColeaderInput = z.infer<typeof unassignColeaderSchema>;
 
 export const createNeighborhoodTermSchema = z
     .object({
-        name: z.string().trim().min(1, "Ten nhiem ky la bat buoc"),
+        name: z.string().trim().min(1, "Tên nhiệm kỳ là bắt buộc"),
         startAt: z.coerce.date(),
         endAt: z.coerce.date(),
         status: z.enum(NEIGHBORHOOD_TERM_STATUSES).default("PLANNED"),
@@ -95,7 +95,7 @@ export const createNeighborhoodTermSchema = z
     })
     .refine(value => value.endAt >= value.startAt, {
         path: ["endAt"],
-        message: "Ngay ket thuc nhiem ky phai sau ngay bat dau",
+        message: "Ngày kết thúc nhiệm kỳ phải sau ngày bắt đầu",
     });
 export type CreateNeighborhoodTermInput = z.infer<
     typeof createNeighborhoodTermSchema
@@ -126,16 +126,16 @@ export const assignNeighborhoodCollaboratorSchema = z
     })
     .superRefine((value, ctx) => {
         if (value.scopeType === "STREET" && !value.streetId) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["streetId"], message: "Can chon tuyen duong" });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["streetId"], message: "Cần chọn tuyến đường" });
         }
         if (value.scopeType === "HOUSE_GROUP" && value.houseIds.length === 0) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["houseIds"], message: "Can chon it nhat mot Nha so" });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["houseIds"], message: "Cần chọn ít nhất một Nhà số" });
         }
         if (value.scopeType === "CAMPAIGN" && !value.campaignId) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["campaignId"], message: "Can chon chien dich" });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["campaignId"], message: "Cần chọn chiến dịch" });
         }
         if (value.startAt && value.endAt && value.endAt <= value.startAt) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["endAt"], message: "Ngay ket thuc phai sau ngay bat dau" });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["endAt"], message: "Ngày kết thúc phải sau ngày bắt đầu" });
         }
     });
 export type AssignNeighborhoodCollaboratorInput = z.infer<

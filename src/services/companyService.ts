@@ -31,7 +31,7 @@ export async function createCompany(
     input: CreateCompanyInput,
 ): Promise<ICompany> {
     const houseRecord = await HouseRecord.findById(input.houseId);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
     // Cung dieu kien voi Household/Business - cong ty tao ra se o trang thai
     // "unverified"/"pending" cho toi khi duoc xac thuc rieng (xem
@@ -80,7 +80,7 @@ export async function listCompanies(params: {
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
     const filter: Record<string, unknown> = {};
 
     if (params.status) {
@@ -134,7 +134,7 @@ export async function getCompanyById(id: string): Promise<ICompany> {
         .populate("houseId", "code address cluster ownerId ownerType status")
         .populate("representativeUserId", "displayName phone")
         .populate("organizationId", "name");
-    if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+    if (!company) throw new HttpError("Không tìm thấy công ty", 404);
     return company;
 }
 
@@ -144,7 +144,7 @@ export async function updateCompany(
     patch: UpdateCompanyInput,
 ): Promise<ICompany> {
     const company = await Company.findById(id);
-    if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+    if (!company) throw new HttpError("Không tìm thấy công ty", 404);
 
     const houseRecord = await HouseRecord.findById(company.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
@@ -185,7 +185,7 @@ export async function transitionCompanyStatus(
     targetStatus: VerificationStatus,
 ): Promise<ICompany> {
     const company = await Company.findById(id);
-    if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+    if (!company) throw new HttpError("Không tìm thấy công ty", 404);
 
     const isAdmin = actorUser.roles.includes("admin");
     if (!isAdmin) {
@@ -242,7 +242,7 @@ export async function deleteCompany(
     id: string,
 ): Promise<ICompany> {
     const company = await Company.findById(id);
-    if (!company) throw new HttpError("Khong tim thay cong ty", 404);
+    if (!company) throw new HttpError("Không tìm thấy công ty", 404);
 
     const houseRecord = await HouseRecord.findById(company.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);

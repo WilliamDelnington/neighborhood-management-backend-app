@@ -17,7 +17,7 @@ export async function POST(req: Request) {
             throw new HttpError("Thieu anh can tai len", 400);
         }
         const result = await uploadUtilityAppIcon(String(actorUser._id), file, req);
-        return apiSuccess(result, "Tai icon thanh cong");
+        return apiSuccess(result, "Tải icon thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

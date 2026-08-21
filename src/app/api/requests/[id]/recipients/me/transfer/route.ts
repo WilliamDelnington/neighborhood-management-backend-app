@@ -24,7 +24,7 @@ export async function POST(
             params.id,
             body,
         );
-        return apiSuccess(recipient, "Da gui de nghi chuyen tiep yeu cau");
+        return apiSuccess(recipient, "Đã gửi đề nghị chuyển tiếp yêu cầu");
     } catch (err) {
         return apiErrorFromException(err);
     }
