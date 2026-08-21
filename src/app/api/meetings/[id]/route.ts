@@ -49,7 +49,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(meeting, "Cap nhat cuoc hop thanh cong");
+        return apiSuccess(meeting, "Cập nhật cuộc họp thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -64,7 +64,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "meetings.update");
         await deleteMeeting(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa cuoc hop thanh cong");
+        return apiSuccess(null, "Xóa cuộc họp thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

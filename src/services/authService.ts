@@ -36,7 +36,7 @@ export async function loginWithZalo(input: ZaloLoginInput) {
 
     if (profile.verifiedVia === "graph_api" && !user && !verifiedPhone) {
         throw new HttpError(
-            "Vui long cho phep chia se so dien thoai de lien ket tai khoan",
+            "Vui lòng cho phép chia sẻ số điện thoại để liên kết tài khoản",
             403,
         );
     }
@@ -48,7 +48,7 @@ export async function loginWithZalo(input: ZaloLoginInput) {
         });
         if (conflictingUser) {
             throw new HttpError(
-                "So dien thoai nay da thuoc mot tai khoan khac",
+                "Số điện thoại này đã thuộc một tài khoản khác",
                 409,
             );
         }
@@ -65,7 +65,7 @@ export async function loginWithZalo(input: ZaloLoginInput) {
                 phoneUser.zaloUserId !== profile.zaloUserId
             ) {
                 throw new HttpError(
-                    "So dien thoai nay da lien ket voi tai khoan Zalo khac",
+                    "Số điện thoại này đã liên kết với tài khoản Zalo khác",
                     409,
                 );
             }
@@ -115,7 +115,7 @@ export async function loginWithZalo(input: ZaloLoginInput) {
 export async function registerWithPhone(input: PhoneRegisterInput) {
     const existing = await User.findOne({ phone: input.phone });
     if (existing) {
-        throw new HttpError("So dien thoai da duoc su dung", 409);
+        throw new HttpError("Số điện thoại đã được sử dụng", 409);
     }
 
     const passwordHash = await hashPassword(input.password);
@@ -131,7 +131,7 @@ export async function registerWithPhone(input: PhoneRegisterInput) {
         });
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }
@@ -160,15 +160,15 @@ export async function loginWithPhone(input: PhoneLoginInput) {
         "+passwordHash",
     );
     if (!user || !user.passwordHash) {
-        throw new HttpError("So dien thoai hoac mat khau khong dung", 401);
+        throw new HttpError("Số điện thoại hoặc mật khẩu không đúng", 401);
     }
     if (user.status === "locked") {
-        throw new HttpError("Tai khoan da bi khoa", 401);
+        throw new HttpError("Tài khoản đã bị khóa", 401);
     }
 
     const matches = await comparePassword(input.password, user.passwordHash);
     if (!matches) {
-        throw new HttpError("So dien thoai hoac mat khau khong dung", 401);
+        throw new HttpError("Số điện thoại hoặc mật khẩu không đúng", 401);
     }
 
     loginRateLimiter.reset(input.phone);
@@ -197,18 +197,18 @@ export async function setPassword(
     input: { currentPassword?: string; password: string },
 ) {
     const user = await User.findById(userId).select("+passwordHash");
-    if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
+    if (!user) throw new HttpError("Không tìm thấy tài khoản", 404);
 
     if (user.passwordHash) {
         if (!input.currentPassword) {
-            throw new HttpError("Vui long nhap mat khau hien tai", 400);
+            throw new HttpError("Vui lòng nhập mật khẩu hiện tại", 400);
         }
         const matches = await comparePassword(
             input.currentPassword,
             user.passwordHash,
         );
         if (!matches) {
-            throw new HttpError("Mat khau hien tai khong dung", 401);
+            throw new HttpError("Mật khẩu hiện tại không đúng", 401);
         }
     }
 
@@ -234,7 +234,7 @@ export async function updateOwnProfile(
         input.householdId !== String(user.householdId || "")
     ) {
         const household = await Household.findById(input.householdId);
-        if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+        if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
 
         const oldHouseholdId = user.householdId
             ? String(user.householdId)
@@ -276,7 +276,7 @@ export async function updateOwnProfile(
         await user.save();
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }
@@ -309,20 +309,20 @@ export async function changeOwnPhone(
     );
     if (!verifiedPhone) {
         throw new HttpError(
-            "Khong xac thuc duoc so dien thoai tu Zalo, vui long thu lai",
+            "Không xác thực được số điện thoại từ Zalo, vui lòng thử lại",
             400,
         );
     }
 
     const user = await User.findById(userId);
-    if (!user) throw new HttpError("Khong tim thay tai khoan", 404);
+    if (!user) throw new HttpError("Không tìm thấy tài khoản", 404);
 
     const conflictingUser = await User.findOne({
         phone: verifiedPhone,
         _id: { $ne: user._id },
     });
     if (conflictingUser) {
-        throw new HttpError("So dien thoai nay da thuoc mot tai khoan khac", 409);
+        throw new HttpError("Số điện thoại này đã thuộc một tài khoản khác", 409);
     }
 
     user.phone = verifiedPhone;
@@ -330,7 +330,7 @@ export async function changeOwnPhone(
         await user.save();
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }

@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             params.id,
             body,
         );
-        return apiSuccess(assignment, "Da phan cong cong tac vien", 201);
+        return apiSuccess(assignment, "Đã phân công cộng tác viên", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -56,7 +56,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
             params.id,
             body.assignmentId,
         );
-        return apiSuccess(null, "Da ket thuc phan cong cong tac vien");
+        return apiSuccess(null, "Đã kết thúc phân công cộng tác viên");
     } catch (err) {
         return apiErrorFromException(err);
     }

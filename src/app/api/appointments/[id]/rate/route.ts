@@ -20,7 +20,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         const body = rateAppointmentSchema.parse(await req.json());
         const appointment = await rateAppointment(actorUser, params.id, body);
-        return apiSuccess(appointment, "Da gui danh gia lich hen");
+        return apiSuccess(appointment, "Đã gửi đánh giá lịch hẹn");
     } catch (err) {
         return apiErrorFromException(err);
     }

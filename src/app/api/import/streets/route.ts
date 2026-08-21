@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         );
         return apiSuccess(
             job,
-            "Da doc file, vui long chon cot du lieu tuong ung truoc khi xem truoc",
+            "Đã đọc file, vui lòng chọn cột dữ liệu tương ứng trước khi xem trước",
             201,
         );
     } catch (err) {

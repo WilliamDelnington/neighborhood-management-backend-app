@@ -20,7 +20,7 @@ export async function POST(
         );
         return apiSuccess(
             job,
-            "Da nhap du lieu ho dan vao he thong thanh cong",
+            "Đã nhập dữ liệu hộ dân vào hệ thống thành công",
         );
     } catch (err) {
         return apiErrorFromException(err);

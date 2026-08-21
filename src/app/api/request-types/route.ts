@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         const input = createRequestTypeDefinitionSchema.parse(await req.json());
         return apiSuccess(
             await createRequestTypeDefinition(actorUser, input),
-            "Tao loai nhiem vu thanh cong",
+            "Tạo loại nhiệm vụ thành công",
             201,
         );
     } catch (err) {

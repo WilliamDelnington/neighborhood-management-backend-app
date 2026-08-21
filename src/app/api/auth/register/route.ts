@@ -10,7 +10,7 @@ export async function POST(req: Request) {
         await connectDB();
         const body = phoneRegisterSchema.parse(await req.json());
         const result = await registerWithPhone(body);
-        return apiSuccess(result, "Dang ky thanh cong", 201);
+        return apiSuccess(result, "Đăng ký thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -146,12 +146,12 @@ export async function listNeighborhoods(params: {
         // dang phu trach") - CHI admin duoc dung tham so nay, tranh mot
         // neighborhood_leader tu truy van pham vi cua nguoi dung khac.
         if (!params.actorUser.roles.includes("admin")) {
-            throw new HttpError("Ban khong co quyen thuc hien thao tac nay", 403);
+            throw new HttpError("Bạn không có quyền thực hiện thao tác này", 403);
         }
         const targetUser = await User.findById(params.leaderUserId).select(
             "neighborhoodId assignedNeighborhoodIds",
         );
-        if (!targetUser) throw new HttpError("Khong tim thay nguoi dung", 404);
+        if (!targetUser) throw new HttpError("Không tìm thấy người dùng", 404);
         const ids = [
             targetUser.neighborhoodId,
             ...(targetUser.assignedNeighborhoodIds || []),
@@ -281,7 +281,7 @@ function assertNeighborhoodInScope(user: IUser, neighborhood: INeighborhood): vo
     if (user.roles.includes("admin")) return;
     if (isWardScoped(user)) {
         if (!user.wardCode || neighborhood.wardCode !== user.wardCode) {
-            throw new HttpError("Ban khong co quyen xem to dan pho nay", 403);
+            throw new HttpError("Bạn không có quyền xem tổ dân phố này", 403);
         }
         return;
     }
@@ -295,7 +295,7 @@ function assertNeighborhoodInScope(user: IUser, neighborhood: INeighborhood): vo
     }
     if (!ownNeighborhoodIds(user).includes(String(neighborhood._id))) {
         throw new HttpError(
-            "Ban khong co quyen xem to dan pho nay",
+            "Bạn không có quyền xem tổ dân phố này",
             403,
         );
     }
@@ -309,7 +309,7 @@ export async function getNeighborhoodById(
     const neighborhood = await Neighborhood.findById(id)
         .populate("leaderUserId", LEADER_POPULATE)
         .populate("streetIds", "name code active");
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     assertNeighborhoodInScope(actorUser, neighborhood);
     const [houseCount, coleaders, currentTerm, attachmentCount] = await Promise.all([
         HouseRecord.countDocuments({ neighborhoodId: neighborhood._id }),
@@ -340,7 +340,7 @@ export async function createNeighborhood(
     });
     if (existing) {
         throw new HttpError(
-            "Ma to trong Phuong/Xa hoac so thu tu da ton tai",
+            "Mã tổ trong Phường/Xã hoặc số thứ tự đã tồn tại",
             409,
         );
     }
@@ -375,7 +375,7 @@ export async function updateNeighborhood(
     patch: UpdateNeighborhoodInput,
 ): Promise<INeighborhood> {
     const neighborhood = await Neighborhood.findById(id);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     const priorState = neighborhood.toObject();
     for (const [key, value] of Object.entries(patch)) {
@@ -392,7 +392,7 @@ export async function updateNeighborhood(
         neighborhood.effectiveTo &&
         neighborhood.effectiveTo < neighborhood.effectiveFrom
     ) {
-        throw new HttpError("Ngay ket thuc hieu luc phai sau ngay bat dau", 422);
+        throw new HttpError("Ngày kết thúc hiệu lực phải sau ngày bắt đầu", 422);
     }
     neighborhood.updatedBy = actorId as any;
     await neighborhood.save();
@@ -431,7 +431,7 @@ export async function assignNeighborhoodLeader(
 ): Promise<INeighborhood> {
     await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     const currentLeaderId = neighborhood.leaderUserId
         ? String(neighborhood.leaderUserId)
@@ -450,24 +450,24 @@ export async function assignNeighborhoodLeader(
             neighborhoodId,
             status: "ACTIVE",
         });
-        if (!term) throw new HttpError("Nhiem ky khong hop le", 422);
+        if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
         assignmentEndAt = term.endAt;
     }
     if (assignmentEndAt && assignmentEndAt <= new Date()) {
-        throw new HttpError("Ngay ket thuc phan cong phai o tuong lai", 422);
+        throw new HttpError("Ngày kết thúc phân công phải ở tương lai", 422);
     }
     if (leaderUserId) {
         newLeader = await User.findById(leaderUserId);
-        if (!newLeader) throw new HttpError("Khong tim thay nguoi dung", 404);
+        if (!newLeader) throw new HttpError("Không tìm thấy người dùng", 404);
         if (newLeader.status !== "active") {
             throw new HttpError(
-                "Chi co the gan tai khoan dang hoat dong lam to truong",
+                "Chỉ có thể gán tài khoản đang hoạt động làm tổ trưởng",
                 422,
             );
         }
         if (!newLeader.roles.includes("neighborhood_leader")) {
             throw new HttpError(
-                "Nguoi dung duoc chon phai co vai tro To truong",
+                "Người dùng được chọn phải có vai trò Tổ trưởng",
                 422,
             );
         }
@@ -582,7 +582,7 @@ export async function assignNeighborhoodLeader(
 
 export async function getLeaderHistory(neighborhoodId: string) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     return NeighborhoodLeaderAssignment.find({ neighborhoodId })
         .sort({ assignedAt: -1 })
@@ -625,7 +625,7 @@ export async function assignNeighborhoodColeader(
 ): Promise<void> {
     await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     let assignmentEndAt = options?.endAt;
     const termId = options?.termId;
@@ -635,11 +635,11 @@ export async function assignNeighborhoodColeader(
             neighborhoodId,
             status: "ACTIVE",
         });
-        if (!term) throw new HttpError("Nhiem ky khong hop le", 422);
+        if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
         assignmentEndAt = term.endAt;
     }
     if (assignmentEndAt && assignmentEndAt <= new Date()) {
-        throw new HttpError("Ngay ket thuc phan cong phai o tuong lai", 422);
+        throw new HttpError("Ngày kết thúc phân công phải ở tương lai", 422);
     }
 
     const existing = await NeighborhoodColeaderAssignment.findOne({
@@ -650,16 +650,16 @@ export async function assignNeighborhoodColeader(
     if (existing) return;
 
     const newColeader = await User.findById(coleaderUserId);
-    if (!newColeader) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!newColeader) throw new HttpError("Không tìm thấy người dùng", 404);
     if (newColeader.status !== "active") {
         throw new HttpError(
-            "Chi co the gan tai khoan dang hoat dong lam to pho",
+            "Chỉ có thể gán tài khoản đang hoạt động làm tổ phó",
             422,
         );
     }
     if (!newColeader.roles.includes("neighborhood_coleader")) {
         throw new HttpError(
-            "Nguoi dung duoc chon phai co vai tro To pho",
+            "Người dùng được chọn phải có vai trò Tổ phó",
             422,
         );
     }
@@ -671,7 +671,7 @@ export async function assignNeighborhoodColeader(
     });
     if (activeElsewhere) {
         throw new HttpError(
-            "Nguoi dung nay dang la To pho cua mot to dan pho khac",
+            "Người dùng này đang là Tổ phó của một tổ dân phố khác",
             422,
         );
     }
@@ -738,7 +738,7 @@ export async function unassignNeighborhoodColeader(
 
 export async function getColeaderHistory(neighborhoodId: string) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     return NeighborhoodColeaderAssignment.find({ neighborhoodId })
         .sort({ assignedAt: -1 })
@@ -750,7 +750,7 @@ export async function getColeaderHistory(neighborhoodId: string) {
 
 export async function listNeighborhoodTerms(neighborhoodId: string) {
     const exists = await Neighborhood.exists({ _id: neighborhoodId });
-    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     return NeighborhoodTerm.find({ neighborhoodId })
         .sort({ startAt: -1 })
         .populate("createdBy", "displayName")
@@ -770,7 +770,7 @@ async function assertSingleActiveTerm(
     });
     if (existing) {
         throw new HttpError(
-            "To dan pho da co mot nhiem ky dang hoat dong; hay ket thuc nhiem ky cu truoc",
+            "Tổ dân phố đã có một nhiệm kỳ đang hoạt động; hãy kết thúc nhiệm kỳ cũ trước",
             409,
         );
     }
@@ -782,7 +782,7 @@ export async function createNeighborhoodTerm(
     input: CreateNeighborhoodTermInput,
 ) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     await assertSingleActiveTerm(neighborhoodId, input.status);
     const term = await NeighborhoodTerm.create({
         ...input,
@@ -815,12 +815,12 @@ export async function updateNeighborhoodTerm(
     patch: UpdateNeighborhoodTermInput,
 ) {
     const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
-    if (!term) throw new HttpError("Khong tim thay nhiem ky", 404);
+    if (!term) throw new HttpError("Không tìm thấy nhiệm kỳ", 404);
     await assertSingleActiveTerm(neighborhoodId, patch.status, termId);
     const before = term.toObject();
     Object.assign(term, patch, { updatedBy: actorId });
     if (term.endAt < term.startAt) {
-        throw new HttpError("Ngay ket thuc nhiem ky phai sau ngay bat dau", 422);
+        throw new HttpError("Ngày kết thúc nhiệm kỳ phải sau ngày bắt đầu", 422);
     }
     await term.save();
 
@@ -861,7 +861,7 @@ export async function updateNeighborhoodTerm(
 
 export async function listNeighborhoodHistory(neighborhoodId: string) {
     const exists = await Neighborhood.exists({ _id: neighborhoodId });
-    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     return NeighborhoodHistory.find({ neighborhoodId })
         .sort({ createdAt: -1 })
         .limit(200)
@@ -871,7 +871,7 @@ export async function listNeighborhoodHistory(neighborhoodId: string) {
 export async function listNeighborhoodCollaborators(neighborhoodId: string) {
     await expireNeighborhoodOfficerAssignments();
     const exists = await Neighborhood.exists({ _id: neighborhoodId });
-    if (!exists) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     return NeighborhoodCollaboratorAssignment.find({
         neighborhoodId,
         unassignedAt: { $exists: false },
@@ -894,24 +894,24 @@ export async function assignNeighborhoodCollaborator(
         Neighborhood.findById(neighborhoodId),
         User.findById(input.collaboratorUserId),
     ]);
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     if (!collaborator || collaborator.status !== "active") {
-        throw new HttpError("Cong tac vien khong hop le", 422);
+        throw new HttpError("Cộng tác viên không hợp lệ", 422);
     }
     if (
         !collaborator.roles.includes("neighborhood_collaborator") &&
         !collaborator.roles.includes("cooperator")
     ) {
-        throw new HttpError("Tai khoan phai co vai tro Cong tac vien", 422);
+        throw new HttpError("Tài khoản phải có vai trò Cộng tác viên", 422);
     }
     const startAt = input.startAt || new Date();
     if (input.endAt && input.endAt <= startAt) {
-        throw new HttpError("Ngay ket thuc phai sau ngay bat dau", 422);
+        throw new HttpError("Ngày kết thúc phải sau ngày bắt đầu", 422);
     }
 
     if (input.scopeType === "STREET") {
         const allowed = neighborhood.streetIds.some(id => String(id) === input.streetId);
-        if (!allowed) throw new HttpError("Tuyen duong khong thuoc To dan pho", 422);
+        if (!allowed) throw new HttpError("Tuyến đường không thuộc Tổ dân phố", 422);
     }
     if (input.scopeType === "HOUSE_GROUP") {
         const count = await HouseRecord.countDocuments({
@@ -919,7 +919,7 @@ export async function assignNeighborhoodCollaborator(
             neighborhoodId,
         });
         if (count !== input.houseIds.length) {
-            throw new HttpError("Co Nha so khong thuoc To dan pho", 422);
+            throw new HttpError("Có Nhà số không thuộc Tổ dân phố", 422);
         }
     }
     if (input.scopeType === "CAMPAIGN") {
@@ -931,7 +931,7 @@ export async function assignNeighborhoodCollaborator(
             }),
         ]);
         if (!campaign || !target) {
-            throw new HttpError("Chien dich khong giao cho To dan pho nay", 422);
+            throw new HttpError("Chiến dịch không giao cho Tổ dân phố này", 422);
         }
     }
 
@@ -944,7 +944,7 @@ export async function assignNeighborhoodCollaborator(
     if (input.scopeType === "STREET") duplicateFilter.streetId = input.streetId;
     if (input.scopeType === "CAMPAIGN") duplicateFilter.campaignId = input.campaignId;
     if (await NeighborhoodCollaboratorAssignment.exists(duplicateFilter)) {
-        throw new HttpError("Pham vi cong tac nay da duoc phan cong", 409);
+        throw new HttpError("Phạm vi công tác này đã được phân công", 409);
     }
 
     const assignment = await NeighborhoodCollaboratorAssignment.create({
@@ -991,7 +991,7 @@ export async function unassignNeighborhoodCollaborator(
         neighborhoodId,
         unassignedAt: { $exists: false },
     });
-    if (!assignment) throw new HttpError("Khong tim thay phan cong", 404);
+    if (!assignment) throw new HttpError("Không tìm thấy phân công", 404);
     assignment.unassignedAt = new Date();
     assignment.unassignedBy = actorId as any;
     await assignment.save();

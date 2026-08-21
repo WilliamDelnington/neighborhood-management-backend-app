@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "requests.create");
         const body = createRequestSchema.parse(await req.json());
         const request = await createRequest(actorUser, body);
-        return apiSuccess(request, "Gui yeu cau thanh cong", 201);
+        return apiSuccess(request, "Gửi yêu cầu thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

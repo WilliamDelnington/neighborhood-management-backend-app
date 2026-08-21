@@ -8,14 +8,14 @@ import { TRANG_THAI_PHAN_ANH } from "@/types";
 // xem assertValidComplaintCategory trong complaintService.ts.
 const complaintCategoryKeySchema = z
     .string()
-    .min(1, "Thieu nhom phan anh")
+    .min(1, "Thiếu nhóm phản ánh")
     .max(50)
-    .regex(/^[a-z][a-z0-9_]*$/, "Nhom phan anh khong hop le");
+    .regex(/^[a-z][a-z0-9_]*$/, "Nhóm phản ánh không hợp lệ");
 
 export const createComplaintSchema = z.object({
     category: complaintCategoryKeySchema,
-    title: z.string().min(3, "Tieu de qua ngan"),
-    content: z.string().min(10, "Noi dung qua ngan"),
+    title: z.string().min(3, "Tiêu đề quá ngắn"),
+    content: z.string().min(10, "Nội dung quá ngắn"),
     area: z.string().optional(),
     // Nha so nguoi gui chu dong chon (khong bat buoc, khong can la nha cua
     // chinh ho) - xem createComplaint/resolveComplaintWardCode.
@@ -42,20 +42,20 @@ export type UpdateComplaintStatusInput = z.infer<
 export const updateComplaintSchema = z
     .object({
         category: complaintCategoryKeySchema.optional(),
-        title: z.string().min(3, "Tieu de qua ngan").optional(),
-        content: z.string().min(10, "Noi dung qua ngan").optional(),
+        title: z.string().min(3, "Tiêu đề quá ngắn").optional(),
+        content: z.string().min(10, "Nội dung quá ngắn").optional(),
     })
     .refine(
         data =>
             data.category !== undefined ||
             data.title !== undefined ||
             data.content !== undefined,
-        { message: "Khong co truong nao duoc thay doi" },
+        { message: "Không có trường nào được thay đổi" },
     );
 export type UpdateComplaintInput = z.infer<typeof updateComplaintSchema>;
 
 export const requestReevaluationSchema = z.object({
-    note: z.string().min(1, "Vui long nhap ly do de nghi xem xet lai"),
+    note: z.string().min(1, "Vui lòng nhập lý do đề nghị xem xét lại"),
 });
 export type RequestReevaluationInput = z.infer<
     typeof requestReevaluationSchema
@@ -74,12 +74,12 @@ export const escalateComplaintSchema = z.object({
 });
 
 export const chooseAssigneeSchema = z.object({
-    userId: z.string().min(1, "Thieu nguoi phu trach"),
+    userId: z.string().min(1, "Thiếu người phụ trách"),
 });
 export type ChooseAssigneeInput = z.infer<typeof chooseAssigneeSchema>;
 
 export const requestComplaintInfoSchema = z.object({
-    content: z.string().min(1, "Vui long nhap thong tin can bo sung"),
+    content: z.string().min(1, "Vui lòng nhập thông tin cần bổ sung"),
 });
 export type RequestComplaintInfoInput = z.infer<
     typeof requestComplaintInfoSchema

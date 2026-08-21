@@ -14,7 +14,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "surveys.publish");
         const survey = await closeSurvey(actorUser, params.id);
-        return apiSuccess(survey, "Dong khao sat thanh cong");
+        return apiSuccess(survey, "Đóng khảo sát thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

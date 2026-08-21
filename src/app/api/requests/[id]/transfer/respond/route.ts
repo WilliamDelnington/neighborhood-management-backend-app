@@ -27,8 +27,8 @@ export async function POST(
         return apiSuccess(
             recipient,
             body.decision === "accept"
-                ? "Da chap nhan chuyen tiep yeu cau"
-                : "Da tu choi chuyen tiep yeu cau",
+                ? "Đã chấp nhận chuyển tiếp yêu cầu"
+                : "Đã từ chối chuyển tiếp yêu cầu",
         );
     } catch (err) {
         return apiErrorFromException(err);

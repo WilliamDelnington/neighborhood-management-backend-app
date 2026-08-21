@@ -37,7 +37,7 @@ export async function PATCH(
             params.ownershipId,
             body.reason,
         );
-        return apiSuccess(ownership, "Da ket thuc quan he so huu");
+        return apiSuccess(ownership, "Đã kết thúc quan hệ sở hữu");
     } catch (err) {
         return apiErrorFromException(err);
     }

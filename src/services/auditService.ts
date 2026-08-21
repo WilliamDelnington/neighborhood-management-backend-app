@@ -34,7 +34,7 @@ export async function listAuditLogs(params: ListAuditLogsParams = {}) {
         };
     }
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
 
     const [items, total] = await Promise.all([
         AuditLog.find(filter)

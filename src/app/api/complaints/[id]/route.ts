@@ -52,7 +52,7 @@ export async function PATCH(
         await requirePermission(actorUser, "complaints.update_own");
         const body = updateComplaintSchema.parse(await req.json());
         const complaint = await updateComplaint(actorUser, params.id, body);
-        return apiSuccess(complaint, "Cap nhat phan anh thanh cong");
+        return apiSuccess(complaint, "Cập nhật phản ánh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -67,7 +67,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "complaints.delete");
         await deleteComplaint(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa phan anh thanh cong");
+        return apiSuccess(null, "Xóa phản ánh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

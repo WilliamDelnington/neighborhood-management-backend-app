@@ -2,8 +2,8 @@ import { z } from "zod";
 import { LOAI_THONG_BAO, SYSTEM_ROLE_KEYS } from "@/types";
 
 export const createAnnouncementSchema = z.object({
-    title: z.string().min(3, "Tieu de qua ngan"),
-    content: z.string().min(10, "Noi dung qua ngan"),
+    title: z.string().min(3, "Tiêu đề quá ngắn"),
+    content: z.string().min(10, "Nội dung quá ngắn"),
     category: z.enum(LOAI_THONG_BAO).default("chung"),
     priority: z.boolean().default(false),
     pinned: z.boolean().default(false),

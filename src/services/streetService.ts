@@ -38,7 +38,7 @@ export async function listStreets(params: {
 
 export async function getStreetById(id: string): Promise<IStreet> {
     const street = await Street.findById(id);
-    if (!street) throw new HttpError("Khong tim thay duong/pho", 404);
+    if (!street) throw new HttpError("Không tìm thấy đường/phố", 404);
     return street;
 }
 
@@ -48,7 +48,7 @@ export async function createStreet(
 ): Promise<IStreet> {
     const existing = await Street.findOne({ code: input.code });
     if (existing) {
-        throw new HttpError("Ma duong/pho da ton tai", 409);
+        throw new HttpError("Mã đường/phố đã tồn tại", 409);
     }
 
     const street = await Street.create({
@@ -74,7 +74,7 @@ export async function updateStreet(
     patch: UpdateStreetInput,
 ): Promise<IStreet> {
     const street = await Street.findById(id);
-    if (!street) throw new HttpError("Khong tim thay duong/pho", 404);
+    if (!street) throw new HttpError("Không tìm thấy đường/phố", 404);
 
     const priorState = street.toObject();
     for (const [key, value] of Object.entries(patch)) {

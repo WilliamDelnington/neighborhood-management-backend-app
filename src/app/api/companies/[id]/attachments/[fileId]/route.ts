@@ -33,7 +33,7 @@ export async function DELETE(
             params.id,
             params.fileId,
         );
-        return apiSuccess(null, "Xoa tai lieu dinh kem thanh cong");
+        return apiSuccess(null, "Xóa tài liệu đính kèm thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

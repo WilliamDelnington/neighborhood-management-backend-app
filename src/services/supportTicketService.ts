@@ -106,13 +106,13 @@ export async function getSupportTicketDetailForOwnerOrStaff(
     const ticket = await SupportTicket.findById(ticketId)
         .populate("createdByUserId", "displayName phone")
         .populate("respondedByUserId", "displayName");
-    if (!ticket) throw new HttpError("Khong tim thay yeu cau ho tro", 404);
+    if (!ticket) throw new HttpError("Không tìm thấy yêu cầu hỗ trợ", 404);
 
     const isOwner =
         String(ticket.createdByUserId._id || ticket.createdByUserId) ===
         requester.userId;
     if (!requester.isStaff && !isOwner) {
-        throw new HttpError("Ban khong co quyen xem yeu cau ho tro nay", 403);
+        throw new HttpError("Bạn không có quyền xem yêu cầu hỗ trợ này", 403);
     }
 
     return ticket;
@@ -130,17 +130,17 @@ export async function updateSupportTicket(
     patch: { content: string },
 ): Promise<ISupportTicket> {
     const ticket = await SupportTicket.findById(ticketId);
-    if (!ticket) throw new HttpError("Khong tim thay yeu cau ho tro", 404);
+    if (!ticket) throw new HttpError("Không tìm thấy yêu cầu hỗ trợ", 404);
 
     if (
         !actorUser.roles.includes("admin") &&
         String(ticket.createdByUserId) !== String(actorUser._id)
     ) {
-        throw new HttpError("Ban khong co quyen sua yeu cau nay", 403);
+        throw new HttpError("Bạn không có quyền sửa yêu cầu này", 403);
     }
     if (ticket.status === "dong" || ticket.status === "da_xu_ly") {
         throw new HttpError(
-            "Yeu cau da ket thuc, khong the bo sung them",
+            "Yêu cầu đã kết thúc, không thể bổ sung thêm",
             400,
         );
     }
@@ -169,7 +169,7 @@ export async function updateSupportTicketStatus(
     input: UpdateSupportTicketStatusInput,
 ): Promise<ISupportTicket> {
     const ticket = await SupportTicket.findById(ticketId);
-    if (!ticket) throw new HttpError("Khong tim thay yeu cau ho tro", 404);
+    if (!ticket) throw new HttpError("Không tìm thấy yêu cầu hỗ trợ", 404);
 
     ticket.status = input.status;
     if (input.response !== undefined) {

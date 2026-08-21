@@ -20,7 +20,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "complaints.assign");
         const complaint = await receiveComplaint(actorUser, params.id);
-        return apiSuccess(complaint, "Da tiep nhan phan anh");
+        return apiSuccess(complaint, "Đã tiếp nhận phản ánh");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -70,13 +70,13 @@ function validateRequestFormData(
 ) {
     const serialized = JSON.stringify(data);
     if (Buffer.byteLength(serialized, "utf8") > 64 * 1024) {
-        throw new HttpError("Du lieu bieu mau vuot qua 64 KB", 422);
+        throw new HttpError("Dữ liệu biểu mẫu vượt quá 64 KB", 422);
     }
     const allowedKeys = new Set(definition.fields.map(field => field.key));
     const unknownKeys = Object.keys(data).filter(key => !allowedKeys.has(key));
     if (unknownKeys.length > 0) {
         throw new HttpError(
-            `Bieu mau co truong khong hop le: ${unknownKeys.join(", ")}`,
+            `Biểu mẫu có trường không hợp lệ: ${unknownKeys.join(", ")}`,
             422,
         );
     }
@@ -89,7 +89,7 @@ function validateRequestFormData(
             value === "" ||
             (Array.isArray(value) && value.length === 0);
         if (requireRequiredFields && field.required && missing) {
-            throw new HttpError(`Thieu truong bat buoc: ${field.label}`, 422);
+            throw new HttpError(`Thiếu trường bắt buộc: ${field.label}`, 422);
         }
         if (missing) continue;
         const invalid =
@@ -104,7 +104,7 @@ function validateRequestFormData(
                 (!Array.isArray(value) ||
                     value.some(item => typeof item !== "string")));
         if (invalid) {
-            throw new HttpError(`Sai kieu du lieu tai truong: ${field.label}`, 422);
+            throw new HttpError(`Sai kiểu dữ liệu tại trường: ${field.label}`, 422);
         }
         if (
             (field.type === "single_select" &&
@@ -112,7 +112,7 @@ function validateRequestFormData(
             (field.type === "multi_select" &&
                 (value as string[]).some(item => !field.options.includes(item)))
         ) {
-            throw new HttpError(`Gia tri lua chon khong hop le: ${field.label}`, 422);
+            throw new HttpError(`Giá trị lựa chọn không hợp lệ: ${field.label}`, 422);
         }
     }
     return serialized;
@@ -237,7 +237,7 @@ export async function assertCanManageRequest(
     if (actorUser.roles.includes("admin")) return;
     if (String(request.createdBy) === String(actorUser._id)) return;
     if (await userHasPermission(actorUser, "requests.update")) return;
-    throw new HttpError("Ban khong co quyen thao tac tren yeu cau nay", 403);
+    throw new HttpError("Bạn không có quyền thao tác trên yêu cầu này", 403);
 }
 
 async function attachRecipients(request: IRequest) {
@@ -298,7 +298,7 @@ async function resolveRecipientIds(
     );
     if (invalidRoles.length > 0) {
         throw new HttpError(
-            `Vai tro khong du dieu kien nhan yeu cau loai nay: ${invalidRoles.join(", ")}`,
+            `Vai trò không đủ điều kiện nhận yêu cầu loại này: ${invalidRoles.join(", ")}`,
             422,
         );
     }
@@ -312,7 +312,7 @@ async function resolveRecipientIds(
         }).select("_id");
         if (eligibleUsers.length !== recipientIds.size) {
             throw new HttpError(
-                "Co nguoi nhan cu the khong thuoc vai tro du dieu kien",
+                "Có người nhận cụ thể không thuộc vai trò đủ điều kiện",
                 422,
             );
         }
@@ -411,12 +411,12 @@ export async function createRequest(
         definition &&
         !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
     ) {
-        throw new HttpError("Vai tro cua ban khong duoc gui loai nhiem vu nay", 403);
+        throw new HttpError("Vai trò của bạn không được gửi loại nhiệm vụ này", 403);
     }
     const allowedTypes = await getUserAllowedRequestTypes(actorUser);
     if (allowedTypes !== null && !allowedTypes.includes(input.type)) {
         throw new HttpError(
-            `Ban khong duoc phep gui yeu cau loai "${requestTypeLabel(input.type, definition)}"`,
+            `Bạn không được phép gửi yêu cầu loại "${requestTypeLabel(input.type, definition)}"`,
             403,
         );
     }
@@ -438,7 +438,7 @@ export async function createRequest(
             !actorUser.roles.includes("neighborhood_coleader")
         ) {
             throw new HttpError(
-                "Chi To truong/To pho moi duoc gui nhiem vu theo Nha so",
+                "Chỉ Tổ trưởng/Tổ phó mới được gửi nhiệm vụ theo Nhà số",
                 403,
             );
         }
@@ -458,7 +458,7 @@ export async function createRequest(
     }
 
     if (recipientIds.size === 0) {
-        throw new HttpError("Khong tim thay nguoi nhan phu hop", 422);
+        throw new HttpError("Không tìm thấy người nhận phù hợp", 422);
     }
 
     let houseId = input.houseId;
@@ -658,7 +658,7 @@ export async function assertCanViewRequest(
         userId: actorUser._id,
     });
     if (!isRecipient) {
-        throw new HttpError("Ban khong co quyen xem yeu cau nay", 403);
+        throw new HttpError("Bạn không có quyền xem yêu cầu này", 403);
     }
 }
 
@@ -666,7 +666,7 @@ export async function getRequestById(actorUser: IUser, id: string) {
     const request = await RequestModel.findById(id)
         .select("+formDataEncrypted")
         .populate("createdBy", "displayName");
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
 
     await assertCanViewRequest(actorUser, request);
 
@@ -679,7 +679,7 @@ export async function updateRequest(
     input: UpdateRequestInput,
 ) {
     const request = await RequestModel.findById(id).select("+formDataEncrypted");
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanManageRequest(actorUser, request);
     const definition = request.typeDefinitionId
         ? await RequestTypeDefinition.findById(request.typeDefinitionId)
@@ -752,7 +752,7 @@ export async function updateRequest(
 
 export async function cancelRequest(actorUser: IUser, id: string) {
     const request = await RequestModel.findById(id);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanManageRequest(actorUser, request);
 
     await RequestRecipient.deleteMany({ requestId: request._id });
@@ -812,7 +812,7 @@ async function assertCanAttachToRequest(
         userId: actorUser._id,
     });
     if (isRecipient) return;
-    throw new HttpError("Ban khong co quyen tai file cho yeu cau nay", 403);
+    throw new HttpError("Bạn không có quyền tải file cho yêu cầu này", 403);
 }
 
 export async function uploadRequestAttachment(
@@ -821,19 +821,19 @@ export async function uploadRequestAttachment(
     file: File,
 ) {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanAttachToRequest(actorUser, request);
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -876,7 +876,7 @@ export async function deleteRequestAttachment(
     fileAssetId: string,
 ) {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanManageRequest(actorUser, request);
 
     const fileAsset = await FileAsset.findOne({
@@ -884,7 +884,7 @@ export async function deleteRequestAttachment(
         relatedModel: "Request",
         relatedId: requestId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();
@@ -1105,7 +1105,7 @@ export async function updateMyRequestStatus(
     const recipient = await RequestRecipient.findOne({ requestId, userId });
     if (!recipient)
         throw new HttpError(
-            "Ban khong phai la nguoi nhan cua yeu cau nay",
+            "Bạn không phải là người nhận của yêu cầu này",
             404,
         );
 
@@ -1162,12 +1162,12 @@ export async function confirmRequestRecipient(
     note?: string,
 ) {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanManageRequest(actorUser, request);
 
     const recipient = await RequestRecipient.findOne({ requestId, userId });
     if (!recipient)
-        throw new HttpError("Khong tim thay nguoi nhan cua yeu cau nay", 404);
+        throw new HttpError("Không tìm thấy người nhận của yêu cầu này", 404);
     if (recipient.status !== "awaiting_confirmation") {
         throw new HttpError(
             "Chỉ có thể xác nhận khi người nhận đang ở trạng thái Chờ xác nhận",
@@ -1223,7 +1223,7 @@ export async function initiateRequestTransfer(
     input: InitiateRequestTransferInput,
 ): Promise<IRequestRecipient> {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
 
     const recipient = await RequestRecipient.findOne({
         requestId,
@@ -1231,32 +1231,32 @@ export async function initiateRequestTransfer(
     });
     if (!recipient) {
         throw new HttpError(
-            "Ban khong phai la nguoi nhan cua yeu cau nay",
+            "Bạn không phải là người nhận của yêu cầu này",
             404,
         );
     }
     if (recipient.status === "resolved") {
         throw new HttpError(
-            "Yeu cau da hoan thanh, khong the chuyen tiep",
+            "Yêu cầu đã hoàn thành, không thể chuyển tiếp",
             409,
         );
     }
     if (recipient.transferStatus === "pending") {
         throw new HttpError(
-            "Yeu cau nay dang co de nghi chuyen tiep chua duoc xu ly",
+            "Yêu cầu này đang có đề nghị chuyển tiếp chưa được xử lý",
             409,
         );
     }
 
     if (String(input.toUserId) === String(actorUser._id)) {
         throw new HttpError(
-            "Khong the chuyen tiep yeu cau cho chinh minh",
+            "Không thể chuyển tiếp yêu cầu cho chính mình",
             422,
         );
     }
     const toUser = await User.findById(input.toUserId).select("_id");
     if (!toUser) {
-        throw new HttpError("Khong tim thay nguoi duoc chuyen", 404);
+        throw new HttpError("Không tìm thấy người được chuyển", 404);
     }
 
     recipient.transferStatus = "pending";
@@ -1313,7 +1313,7 @@ export async function respondToRequestTransfer(
     decision: "accept" | "reject",
 ): Promise<IRequestRecipient> {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
 
     const recipient = await RequestRecipient.findOne({
         requestId,
@@ -1321,7 +1321,7 @@ export async function respondToRequestTransfer(
     });
     if (!recipient) {
         throw new HttpError(
-            "Khong co de nghi chuyen tiep nao dang cho xu ly",
+            "Không có đề nghị chuyển tiếp nào đang chờ xử lý",
             404,
         );
     }
@@ -1332,7 +1332,7 @@ export async function respondToRequestTransfer(
         String(request.createdBy) === String(actorUser._id);
     if (!isProposedAssignee && !isOriginalSender) {
         throw new HttpError(
-            "Ban khong co quyen phan hoi de nghi chuyen tiep nay",
+            "Bạn không có quyền phản hồi đề nghị chuyển tiếp này",
             403,
         );
     }
@@ -1401,15 +1401,15 @@ export async function updateRequestFormData(
     const request = await RequestModel.findById(requestId).select(
         "+formDataEncrypted",
     );
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     if (!request.typeDefinitionId) {
-        throw new HttpError("Yeu cau nay khong co bieu mau dong", 422);
+        throw new HttpError("Yêu cầu này không có biểu mẫu động", 422);
     }
     const definition = await RequestTypeDefinition.findById(
         request.typeDefinitionId,
     );
     if (!definition) {
-        throw new HttpError("Khong tim thay cau hinh bieu mau", 409);
+        throw new HttpError("Không tìm thấy cấu hình biểu mẫu", 409);
     }
 
     const canManage =
@@ -1423,13 +1423,13 @@ export async function updateRequestFormData(
     const dataEntryMode =
         request.formDefinitionSnapshot?.dataEntryMode || definition.dataEntryMode;
     if (dataEntryMode === "sender" && !canManage) {
-        throw new HttpError("Chi nguoi giao viec duoc cap nhat bieu mau nay", 403);
+        throw new HttpError("Chỉ người giao việc được cập nhật biểu mẫu này", 403);
     }
     if (dataEntryMode === "recipient" && !canManage && !recipient) {
-        throw new HttpError("Ban khong phai nguoi nhan cua yeu cau nay", 403);
+        throw new HttpError("Bạn không phải người nhận của yêu cầu này", 403);
     }
     if (recipient?.status === "resolved") {
-        throw new HttpError("Yeu cau da hoan thanh, khong the sua du lieu", 409);
+        throw new HttpError("Yêu cầu đã hoàn thành, không thể sửa dữ liệu", 409);
     }
 
     request.formDataEncrypted = encryptSensitive(

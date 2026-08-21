@@ -2,10 +2,10 @@ import { z } from "zod";
 import { DANG_KY_HOP } from "@/types";
 
 export const createMeetingSchema = z.object({
-    title: z.string().min(3, "Tieu de qua ngan"),
-    startTime: z.string().datetime("Thoi gian khong hop le"),
-    location: z.string().min(1, "Vui long nhap dia diem"),
-    content: z.string().min(1, "Vui long nhap noi dung"),
+    title: z.string().min(3, "Tiêu đề quá ngắn"),
+    startTime: z.string().datetime("Thời gian không hợp lệ"),
+    location: z.string().min(1, "Vui lòng nhập địa điểm"),
+    content: z.string().min(1, "Vui lòng nhập nội dung"),
     minutes: z.string().optional(),
     published: z.boolean().default(false),
     eligibleRoles: z.array(z.string()).optional(),
@@ -25,7 +25,7 @@ export const registerMeetingSchema = z
         delegateName: z.string().optional(),
     })
     .refine(data => data.answer !== "uy_quyen" || !!data.delegateName?.trim(), {
-        message: "Vui long nhap ten nguoi duoc uy quyen",
+        message: "Vui lòng nhập tên người được ủy quyền",
         path: ["delegateName"],
     });
 export type RegisterMeetingInput = z.infer<typeof registerMeetingSchema>;

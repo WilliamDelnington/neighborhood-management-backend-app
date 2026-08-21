@@ -18,19 +18,19 @@ import { isValidVnPhone } from "@/lib/phone";
 // LoginPage.tsx) - chi dung khi tao tai khoan MOI (khong ghi de mat khau tai
 // khoan da ton tai, xem houseRecordService.resolveOrCreateHouseOwner).
 const personInfoSchema = z.object({
-    displayName: z.string().min(1, "Ten khong duoc de trong"),
+    displayName: z.string().min(1, "Tên không được để trống"),
     phone: z
         .string()
-        .min(1, "Thieu so dien thoai")
-        .refine(isValidVnPhone, "So dien thoai khong hop le"),
+        .min(1, "Thiếu số điện thoại")
+        .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
     email: z
         .string()
-        .email("Email khong hop le")
+        .email("Email không hợp lệ")
         .optional()
         .or(z.literal("")),
     password: z
         .string()
-        .min(6, "Mat khau phai co it nhat 6 ky tu")
+        .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
         .optional(),
 });
 export type CreateHouseRecordOwnerInput = z.infer<typeof personInfoSchema>;
@@ -39,7 +39,7 @@ export type CreateHouseRecordOwnerInput = z.infer<typeof personInfoSchema>;
 // tim-hoac-tao theo taxCode, khong thi luon tao moi (khong co khoa nao de doi
 // chieu trung lap - xem houseRecordService.resolveOrCreateOrganizationOwner).
 const organizationInfoSchema = z.object({
-    name: z.string().min(1, "Ten to chuc khong duoc de trong"),
+    name: z.string().min(1, "Tên tổ chức không được để trống"),
     // Khong bat buoc - khong phai to chuc nao cung co ma so thue.
     taxCode: z.string().trim().min(1).optional(),
     organizationType: z.enum(ORGANIZATION_TYPE).optional(),
@@ -47,7 +47,7 @@ const organizationInfoSchema = z.object({
     phone: z.string().optional(),
     email: z
         .string()
-        .email("Email khong hop le")
+        .email("Email không hợp lệ")
         .optional()
         .or(z.literal("")),
 });
@@ -56,12 +56,12 @@ const houseRecordBaseSchema = z.object({
     // Cluster van la truong client cu gui len; streetId la lua chon moi (Street
     // picker) - it nhat mot trong hai phai co, resolve/dong bo o service layer
     // (xem src/lib/streetSync.ts).
-    cluster: z.string().min(1, "Cum dan cu khong duoc de trong").optional(),
+    cluster: z.string().min(1, "Cụm dân cư không được để trống").optional(),
     streetId: z.string().min(1).optional(),
     // To dan pho cua chinh nha so nay - khong suy ra tu Street vi mot duong/pho
     // co the chay qua nhieu to dan pho. Optional/nullable, admin gan thu cong.
     neighborhoodId: z.string().nullable().optional(),
-    address: z.string().min(1, "Dia chi khong duoc de trong"),
+    address: z.string().min(1, "Địa chỉ không được để trống"),
     // Phuong/xa va tinh/thanh pho - hien thi dia chi day du, khong bat buoc va
     // khong gan voi bat ky rang buoc/pham vi nao (xem lib/administrativeDivisions.ts).
     provinceCode: z.number().optional(),
@@ -163,13 +163,13 @@ export const updateHouseRecordStatusSchema = z
         note: z.string().optional(),
     })
     .refine(data => data.status !== "denied" || !!data.note?.trim(), {
-        message: "Vui long nhap ly do khi tu choi nha so",
+        message: "Vui lòng nhập lý do khi từ chối nhà số",
         path: ["note"],
     })
     .refine(
         data => data.status !== "needs_update" || !!data.note?.trim(),
         {
-            message: "Vui long nhap chi tiet can cap nhat",
+            message: "Vui lòng nhập chi tiết cần cập nhật",
             path: ["note"],
         },
     );

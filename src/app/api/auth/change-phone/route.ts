@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         const user = await requireUser(req);
         const body = changePhoneSchema.parse(await req.json());
         const updated = await changeOwnPhone(String(user._id), body);
-        return apiSuccess(updated, "Da doi so dien thoai thanh cong");
+        return apiSuccess(updated, "Đã đổi số điện thoại thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

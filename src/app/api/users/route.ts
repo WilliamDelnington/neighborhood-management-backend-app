@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
         const body = createHouseOwnerSchema.parse(await req.json());
         const user = await createHouseOwnerByStaff(actorUser, body);
-        return apiSuccess(user, "Tao tai khoan chu ho thanh cong", 201);
+        return apiSuccess(user, "Tạo tài khoản chủ hộ thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -19,7 +19,7 @@ export async function POST(
             String(actorUser._id),
             params.id,
         );
-        return apiSuccess(transaction, "Da huy giao dich");
+        return apiSuccess(transaction, "Đã hủy giao dịch");
     } catch (err) {
         return apiErrorFromException(err);
     }

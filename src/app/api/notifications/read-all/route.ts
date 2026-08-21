@@ -10,7 +10,7 @@ export async function POST(req: Request) {
         await connectDB();
         const actorUser = await requireUser(req);
         const result = await markAllAsRead(String(actorUser._id));
-        return apiSuccess(result, "Da danh dau toan bo thong bao la da doc");
+        return apiSuccess(result, "Đã đánh dấu toàn bộ thông báo là đã đọc");
     } catch (err) {
         return apiErrorFromException(err);
     }

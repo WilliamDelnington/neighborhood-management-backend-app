@@ -16,7 +16,7 @@ export async function PATCH(
         const input = updateRequestFormDataSchema.parse(await req.json());
         return apiSuccess(
             await updateRequestFormData(actorUser, params.id, input.formData),
-            "Luu du lieu bieu mau thanh cong",
+            "Lưu dữ liệu biểu mẫu thành công",
         );
     } catch (err) {
         return apiErrorFromException(err);

@@ -41,7 +41,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(type, "Cap nhat loai van ban thanh cong");
+        return apiSuccess(type, "Cập nhật loại văn bản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -60,7 +60,7 @@ export async function DELETE(
             String(actorUser._id),
             params.id,
         );
-        return apiSuccess(result, "Xoa loai van ban thanh cong");
+        return apiSuccess(result, "Xóa loại văn bản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -43,7 +43,7 @@ export async function PUT(req: Request) {
             body,
             houseDocumentAdapter,
         );
-        return apiSuccess(settings, "Cap nhat yeu cau giay to thanh cong");
+        return apiSuccess(settings, "Cập nhật yêu cầu giấy tờ thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -33,7 +33,7 @@ export async function listDocumentTypes(
         filter.name = { $regex: params.search, $options: "i" };
     }
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
 
     const [items, total] = await Promise.all([
         DocumentType.find(filter)
@@ -55,7 +55,7 @@ export async function listDocumentTypes(
 export async function getDocumentTypeById(id: string): Promise<IDocumentType> {
     const documentType = await DocumentType.findById(id);
     if (!documentType) {
-        throw new HttpError("Khong tim thay loai giay to", 404);
+        throw new HttpError("Không tìm thấy loại giấy tờ", 404);
     }
     return documentType;
 }
@@ -67,7 +67,7 @@ export async function createDocumentType(
     const code = input.code.trim().toUpperCase();
     const existing = await DocumentType.findOne({ code });
     if (existing) {
-        throw new HttpError("Ma loai giay to da ton tai", 409);
+        throw new HttpError("Mã loại giấy tờ đã tồn tại", 409);
     }
 
     const documentType = await DocumentType.create({
@@ -128,7 +128,7 @@ export async function deleteDocumentType(actorId: string, id: string) {
     });
     if (referencingCount > 0) {
         throw new HttpError(
-            "Loai giay to dang duoc mot loai hinh kinh doanh yeu cau, vui long go bo khoi dong luat truoc khi xoa",
+            "Loại giấy tờ đang được một loại hình kinh doanh yêu cầu, vui lòng gỡ bỏ khỏi dòng luật trước khi xóa",
             409,
         );
     }
@@ -138,7 +138,7 @@ export async function deleteDocumentType(actorId: string, id: string) {
     });
     if (submittedDocCount > 0) {
         throw new HttpError(
-            "Loai giay to nay da co ho kinh doanh nop, khong the xoa",
+            "Loại giấy tờ này đã có hộ kinh doanh nộp, không thể xóa",
             409,
         );
     }

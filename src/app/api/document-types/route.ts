@@ -63,7 +63,7 @@ export async function POST(req: Request) {
             String(actorUser._id),
             body,
         );
-        return apiSuccess(documentType, "Tao loai giay to thanh cong", 201);
+        return apiSuccess(documentType, "Tạo loại giấy tờ thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

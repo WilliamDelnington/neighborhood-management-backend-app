@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const upsertSettingSchema = z.object({
-    key: z.string().min(1, "Key cau hinh la bat buoc"),
+    key: z.string().min(1, "Key cấu hình là bắt buộc"),
     value: z.any(),
     description: z.string().optional(),
 });

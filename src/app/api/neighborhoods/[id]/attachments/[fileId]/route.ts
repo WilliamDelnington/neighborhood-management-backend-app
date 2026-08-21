@@ -29,7 +29,7 @@ export async function DELETE(
             action: "ATTACHMENT_REMOVED",
             metadata: { fileId: params.fileId },
         });
-        return apiSuccess(null, "Da xoa tai lieu dinh kem");
+        return apiSuccess(null, "Đã xóa tài liệu đính kèm");
     } catch (err) {
         return apiErrorFromException(err);
     }

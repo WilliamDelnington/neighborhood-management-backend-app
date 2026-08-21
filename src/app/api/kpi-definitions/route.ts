@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         const input = createKpiDefinitionSchema.parse(await req.json());
         return apiSuccess(
             await createKpiDefinition(actorUser, input),
-            "Da tao KPI",
+            "Đã tạo KPI",
             201,
         );
     } catch (err) {

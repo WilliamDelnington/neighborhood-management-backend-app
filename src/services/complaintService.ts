@@ -223,7 +223,7 @@ export function assertComplaintInScope(
             return;
         }
         throw new HttpError(
-            "Ban khong co quyen xem phan anh nay (ngoai pham vi phu trach)",
+            "Bạn không có quyền xem phản ánh này (ngoài phạm vi phụ trách)",
             403,
         );
     }
@@ -247,7 +247,7 @@ export function assertComplaintInScope(
             !ids.includes(String(complaint.neighborhoodId))
         ) {
             throw new HttpError(
-                "Ban khong co quyen xem phan anh nay (ngoai pham vi phu trach)",
+                "Bạn không có quyền xem phản ánh này (ngoài phạm vi phụ trách)",
                 403,
             );
         }
@@ -257,7 +257,7 @@ export function assertComplaintInScope(
     if (!clusters.length) return;
     if (complaint.cluster && !clusters.includes(complaint.cluster)) {
         throw new HttpError(
-            "Ban khong co quyen xem phan anh nay (ngoai pham vi phu trach)",
+            "Bạn không có quyền xem phản ánh này (ngoài phạm vi phụ trách)",
             403,
         );
     }
@@ -284,12 +284,12 @@ async function assertValidComplaintCategory(
     const definition = await getComplaintTypeByKey(category);
     if (definition) {
         if (!definition.active) {
-            throw new HttpError("Loai phan anh nay da ngung su dung", 422);
+            throw new HttpError("Loại phản ánh này đã ngừng sử dụng", 422);
         }
         return definition;
     }
     if (LEGACY_COMPLAINT_CATEGORIES.has(category)) return null;
-    throw new HttpError("Nhom phan anh khong hop le", 422);
+    throw new HttpError("Nhóm phản ánh không hợp lệ", 422);
 }
 
 // Trong 3 vai tro nay, chi vai tro nao XUAT HIEN trong
@@ -421,7 +421,7 @@ export async function createComplaint(
             "neighborhoodId cluster",
         );
         if (!targetHouse) {
-            throw new HttpError("Khong tim thay nha so duoc chon", 404);
+            throw new HttpError("Không tìm thấy nhà số được chọn", 404);
         }
         targetHouseId = targetHouse._id as mongoose.Types.ObjectId;
         neighborhoodId = targetHouse.neighborhoodId;
@@ -704,7 +704,7 @@ export function assertComplaintReadable(
         String((complaint.createdByUserId as any)?._id || complaint.createdByUserId) ===
         requester.userId;
     if (!requester.isStaff && !isOwner) {
-        throw new HttpError("Ban khong co quyen xem phan anh nay", 403);
+        throw new HttpError("Bạn không có quyền xem phản ánh này", 403);
     }
     if (
         requester.isStaff &&
@@ -712,7 +712,7 @@ export function assertComplaintReadable(
         requester.allowedCategories &&
         !requester.allowedCategories.includes(complaint.category)
     ) {
-        throw new HttpError("Ban khong co quyen xem nhom phan anh nay", 403);
+        throw new HttpError("Bạn không có quyền xem nhóm phản ánh này", 403);
     }
     if (requester.isStaff && !isOwner && requester.actorUser) {
         assertComplaintInScope(
@@ -732,7 +732,7 @@ export async function getComplaintDetailForOwnerOrStaff(
         .populate("createdByUserId", "displayName phone")
         .populate("assigneeId", "displayName")
         .populate("targetHouseId", "code address");
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     assertComplaintReadable(complaint, requester);
 
@@ -754,7 +754,7 @@ export async function getComplaintByCode(code: string) {
         "displayName",
     );
     if (!complaint)
-        throw new HttpError("Khong tim thay phan anh voi ma nay", 404);
+        throw new HttpError("Không tìm thấy phản ánh với mã này", 404);
     const timeline = await getTimelineFor(String(complaint._id), true);
     const plain = complaint.toObject();
     delete (plain as any).internalNotes;
@@ -767,13 +767,13 @@ export async function updateComplaintStatus(
     input: UpdateComplaintStatusInput,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     // "hoan_thanh" la nguoi gui phan anh TU XAC NHAN hai long - nhan vien
     // khong duoc dat trang thai nay thay ho, xem confirmComplaintResolution.
     if (input.status === "hoan_thanh") {
         throw new HttpError(
-            "Trang thai nay chi nguoi gui phan anh moi duoc xac nhan",
+            "Trạng thái này chỉ người gửi phản ánh mới được xác nhận",
             400,
         );
     }
@@ -823,7 +823,7 @@ export async function updateComplaintStatus(
 function assertIsComplaintSender(complaint: IComplaint, actorUser: IUser): void {
     if (String(complaint.createdByUserId) !== String(actorUser._id)) {
         throw new HttpError(
-            "Chi nguoi gui phan anh nay moi duoc thuc hien hanh dong nay",
+            "Chỉ người gửi phản ánh này mới được thực hiện hành động này",
             403,
         );
     }
@@ -837,17 +837,17 @@ export async function updateComplaint(
     patch: UpdateComplaintInput,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     if (
         !actorUser.roles.includes("admin") &&
         String(complaint.createdByUserId) !== String(actorUser._id)
     ) {
-        throw new HttpError("Ban khong co quyen sua phan anh nay", 403);
+        throw new HttpError("Bạn không có quyền sửa phản ánh này", 403);
     }
     if (complaint.status === "dong" || complaint.status === "hoan_thanh") {
         throw new HttpError(
-            "Phan anh da ket thuc, khong the chinh sua noi dung",
+            "Phản ánh đã kết thúc, không thể chỉnh sửa nội dung",
             400,
         );
     }
@@ -913,11 +913,11 @@ export async function confirmComplaintResolution(
     input?: { rating?: number; ratingNote?: string },
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertIsComplaintSender(complaint, actorUser);
     if (complaint.status !== "da_xu_ly") {
         throw new HttpError(
-            "Chi xac nhan hoan thanh khi phan anh da duoc xu ly",
+            "Chỉ xác nhận hoàn thành khi phản ánh đã được xử lý",
             400,
         );
     }
@@ -925,7 +925,7 @@ export async function confirmComplaintResolution(
         input?.rating !== undefined &&
         (input.rating < 1 || input.rating > 5)
     ) {
-        throw new HttpError("Danh gia phai tu 1 den 5 sao", 400);
+        throw new HttpError("Đánh giá phải từ 1 đến 5 sao", 400);
     }
 
     complaint.status = "hoan_thanh";
@@ -963,11 +963,11 @@ export async function requestComplaintReevaluation(
     input: RequestReevaluationInput,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertIsComplaintSender(complaint, actorUser);
     if (complaint.status !== "da_xu_ly") {
         throw new HttpError(
-            "Chi de nghi xem xet lai khi phan anh da duoc xu ly",
+            "Chỉ đề nghị xem xét lại khi phản ánh đã được xử lý",
             400,
         );
     }
@@ -977,7 +977,7 @@ export async function requestComplaintReevaluation(
     });
     if (usedCount > 0) {
         throw new HttpError(
-            "Phan anh nay da duoc de nghi xem xet lai truoc do, khong the gui them",
+            "Phản ánh này đã được đề nghị xem xét lại trước đó, không thể gửi thêm",
             400,
         );
     }
@@ -1017,7 +1017,7 @@ export async function requestComplaintReevaluation(
 
 export async function deleteComplaint(actorId: string, complaintId: string) {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     await ComplaintTimeline.deleteMany({ complaintId: complaint._id });
     await complaint.deleteOne();
@@ -1037,16 +1037,16 @@ export async function assignComplaint(
     input: AssignComplaintInput,
 ) {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     assertComplaintInScope(actorUser, complaint, false);
     const wasAssigned = !!complaint.assigneeId;
     if (wasAssigned && !input.transferReason?.trim()) {
-        throw new HttpError("Phai nhap ly do khi chuyen nguoi phu trach", 422);
+        throw new HttpError("Phải nhập lý do khi chuyển người phụ trách", 422);
     }
     const primary = await User.findById(input.primaryAssigneeId).select("status");
     if (!primary || primary.status !== "active") {
-        throw new HttpError("Nguoi phu trach chinh khong hop le", 422);
+        throw new HttpError("Người phụ trách chính không hợp lệ", 422);
     }
     complaint.assigneeId = input.primaryAssigneeId as any;
     complaint.secondaryAssigneeIds = [...new Set(input.secondaryAssigneeIds)] as any;
@@ -1229,11 +1229,11 @@ export async function receiveComplaint(
     complaintId: string,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
     if (!(await canReceiveOrChooseAssignee(complaint))) {
         throw new HttpError(
-            "Phan anh da ket thuc hoac dang co yeu cau xu ly con hieu luc, khong the tiep nhan",
+            "Phản ánh đã kết thúc hoặc đang có yêu cầu xử lý còn hiệu lực, không thể tiếp nhận",
             409,
         );
     }
@@ -1289,11 +1289,11 @@ export async function choosePersonInCharge(
     assigneeUserId: string,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
     if (!(await canReceiveOrChooseAssignee(complaint))) {
         throw new HttpError(
-            "Phan anh da ket thuc hoac dang co yeu cau xu ly con hieu luc, khong the chon nguoi phu trach",
+            "Phản ánh đã kết thúc hoặc đang có yêu cầu xử lý còn hiệu lực, không thể chọn người phụ trách",
             409,
         );
     }
@@ -1302,7 +1302,7 @@ export async function choosePersonInCharge(
     // User dang active.
     const assignee = await User.findById(assigneeUserId).select("status");
     if (!assignee || assignee.status !== "active") {
-        throw new HttpError("Nguoi phu trach chinh khong hop le", 422);
+        throw new HttpError("Người phụ trách chính không hợp lệ", 422);
     }
 
     complaint.assigneeId = assigneeUserId as any;
@@ -1365,15 +1365,15 @@ export async function requestComplaintInfo(
     input: RequestComplaintInfoInput,
 ): Promise<IComplaint> {
     const complaint = await Complaint.findById(complaintId);
-    if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
+    if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
     if (complaint.status !== "moi_tiep_nhan") {
-        throw new HttpError("Phan anh khong o trang thai moi tiep nhan", 409);
+        throw new HttpError("Phản ánh không ở trạng thái mới tiếp nhận", 409);
     }
 
     const content = input.content.trim();
     if (!content) {
-        throw new HttpError("Vui long nhap thong tin can bo sung", 422);
+        throw new HttpError("Vui lòng nhập thông tin cần bổ sung", 422);
     }
 
     complaint.status = "can_bo_sung";

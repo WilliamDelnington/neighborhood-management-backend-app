@@ -18,7 +18,7 @@ export async function POST(req: Request) {
             body.code,
             body.displayName,
         );
-        return apiSuccess(result, "Xac thuc OTP thanh cong");
+        return apiSuccess(result, "Xác thực OTP thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

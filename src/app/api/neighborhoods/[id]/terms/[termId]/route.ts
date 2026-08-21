@@ -25,7 +25,7 @@ export async function PATCH(
             params.termId,
             body,
         );
-        return apiSuccess(term, "Cap nhat nhiem ky thanh cong");
+        return apiSuccess(term, "Cập nhật nhiệm kỳ thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

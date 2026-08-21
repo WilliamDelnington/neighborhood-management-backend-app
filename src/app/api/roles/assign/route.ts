@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
         const body = assignRoleSchema.parse(await req.json());
         const result = await assignRole(String(actorUser._id), body);
-        return apiSuccess(result, "Gan vai tro thanh cong");
+        return apiSuccess(result, "Gán vai trò thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

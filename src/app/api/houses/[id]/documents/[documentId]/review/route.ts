@@ -31,7 +31,7 @@ export async function PUT(
             body.approvalNote,
             houseDocumentAdapter,
         );
-        return apiSuccess(houseDocument, "Cap nhat ket qua duyet thanh cong");
+        return apiSuccess(houseDocument, "Cập nhật kết quả duyệt thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "correspondences.create");
         const body = createCorrespondenceSchema.parse(await req.json());
         const correspondence = await createCorrespondence(actorUser, body);
-        return apiSuccess(correspondence, "Tao van ban thanh cong", 201);
+        return apiSuccess(correspondence, "Tạo văn bản thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

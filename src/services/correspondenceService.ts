@@ -31,16 +31,16 @@ export async function createCorrespondence(
 ) {
     const type = await loadCorrespondenceType(input.correspondenceTypeId);
     if (!type.active) {
-        throw new HttpError("Loai van ban nay hien khong con su dung", 400);
+        throw new HttpError("Loại văn bản này hiện không còn sử dụng", 400);
     }
     if (!actorUser.roles.some(r => type.allowedSenderRoles.includes(r))) {
         throw new HttpError(
-            "Vai tro cua ban khong duoc phep gui loai van ban nay",
+            "Vai trò của bạn không được phép gửi loại văn bản này",
             403,
         );
     }
     if (type.requireDocumentNumber && !input.documentNumber?.trim()) {
-        throw new HttpError("Loai van ban nay bat buoc nhap so/ky hieu", 400);
+        throw new HttpError("Loại văn bản này bắt buộc nhập số/ký hiệu", 400);
     }
 
     return Correspondence.create({
@@ -107,7 +107,7 @@ export function assertCorrespondenceInScope(
     ) {
         return;
     }
-    throw new HttpError("Ban khong co quyen thao tac voi van ban nay", 403);
+    throw new HttpError("Bạn không có quyền thao tác với văn bản này", 403);
 }
 
 export async function updateCorrespondence(
@@ -116,20 +116,20 @@ export async function updateCorrespondence(
     patch: UpdateCorrespondenceInput,
 ) {
     const correspondence = await Correspondence.findById(id);
-    if (!correspondence) throw new HttpError("Khong tim thay van ban", 404);
+    if (!correspondence) throw new HttpError("Không tìm thấy văn bản", 404);
     const type = await loadCorrespondenceType(
         correspondence.correspondenceTypeId,
     );
     assertCorrespondenceInScope(actorUser, correspondence, type);
     if (correspondence.status !== "nhap") {
-        throw new HttpError("Van ban da gui, khong the sua", 400);
+        throw new HttpError("Văn bản đã gửi, không thể sửa", 400);
     }
     if (
         type.requireDocumentNumber &&
         patch.documentNumber !== undefined &&
         !patch.documentNumber.trim()
     ) {
-        throw new HttpError("Loai van ban nay bat buoc nhap so/ky hieu", 400);
+        throw new HttpError("Loại văn bản này bắt buộc nhập số/ký hiệu", 400);
     }
 
     Object.assign(correspondence, patch);
@@ -181,13 +181,13 @@ export async function sendCorrespondence(
     id: string,
 ): Promise<ICorrespondence> {
     const correspondence = await Correspondence.findById(id);
-    if (!correspondence) throw new HttpError("Khong tim thay van ban", 404);
+    if (!correspondence) throw new HttpError("Không tìm thấy văn bản", 404);
     const type = await loadCorrespondenceType(
         correspondence.correspondenceTypeId,
     );
     assertCorrespondenceInScope(actorUser, correspondence, type);
     if (correspondence.status === "da_gui") {
-        throw new HttpError("Van ban nay da duoc gui truoc do", 400);
+        throw new HttpError("Văn bản này đã được gửi trước đó", 400);
     }
 
     if (
@@ -195,7 +195,7 @@ export async function sendCorrespondence(
         !type.allowedReceiverRoles.includes("neighborhood_leader")
     ) {
         throw new HttpError(
-            "Loai van ban nay khong the gui theo to dan pho",
+            "Loại văn bản này không thể gửi theo tổ dân phố",
             400,
         );
     }
@@ -210,7 +210,7 @@ export async function sendCorrespondence(
             );
         if (!allValid) {
             throw new HttpError(
-                "Mot so nguoi nhan khong hop le voi loai van ban nay",
+                "Một số người nhận không hợp lệ với loại văn bản này",
                 400,
             );
         }
@@ -221,7 +221,7 @@ export async function sendCorrespondence(
         type,
     );
     if (recipientIds.size === 0) {
-        throw new HttpError("Chua chon nguoi nhan cho van ban nay", 400);
+        throw new HttpError("Chưa chọn người nhận cho văn bản này", 400);
     }
 
     correspondence.status = "da_gui";
@@ -308,7 +308,7 @@ export async function getCorrespondenceById(id: string) {
         "correspondenceTypeId",
         "name code requireDocumentNumber allowedSenderRoles allowedReceiverRoles",
     );
-    if (!correspondence) throw new HttpError("Khong tim thay van ban", 404);
+    if (!correspondence) throw new HttpError("Không tìm thấy văn bản", 404);
     return correspondence;
 }
 
@@ -326,7 +326,7 @@ async function loadCorrespondenceAndType(id: string) {
     const correspondence = await Correspondence.findById(id).select(
         "_id senderId status targetUserIds targetNeighborhoodIds correspondenceTypeId",
     );
-    if (!correspondence) throw new HttpError("Khong tim thay van ban", 404);
+    if (!correspondence) throw new HttpError("Không tìm thấy văn bản", 404);
     const type = await loadCorrespondenceType(
         correspondence.correspondenceTypeId,
     );
@@ -362,14 +362,14 @@ export async function uploadCorrespondenceAttachment(
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -421,7 +421,7 @@ export async function deleteCorrespondenceAttachment(
         relatedModel: "Correspondence",
         relatedId: correspondenceId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();
@@ -455,7 +455,7 @@ export async function createCorrespondenceReply(
     input: CreateCorrespondenceReplyInput,
 ) {
     const correspondence = await Correspondence.findById(correspondenceId);
-    if (!correspondence) throw new HttpError("Khong tim thay van ban", 404);
+    if (!correspondence) throw new HttpError("Không tìm thấy văn bản", 404);
     const type = await loadCorrespondenceType(
         correspondence.correspondenceTypeId,
     );

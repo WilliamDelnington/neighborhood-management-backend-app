@@ -43,7 +43,7 @@ export async function POST(req: Request) {
 
         const body = createOrganizationSchema.parse(await req.json());
         const organization = await createOrganization(user, body);
-        return apiSuccess(organization, "Tao to chuc thanh cong", 201);
+        return apiSuccess(organization, "Tạo tổ chức thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

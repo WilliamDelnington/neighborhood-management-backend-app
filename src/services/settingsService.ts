@@ -78,14 +78,14 @@ const ALLOWED_LOGO_EXTENSIONS = [".jpg", ".jpeg", ".png", ".svg", ".webp"];
 export async function uploadAppLogo(actorId: string, file: File) {
     if (file.size > MAX_LOGO_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 2MB)",
+            "File vượt quá dung lượng cho phép (tối đa 2MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_LOGO_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang anh khong duoc ho tro (chi chap nhan ${ALLOWED_LOGO_EXTENSIONS.join(", ")})`,
+            `Định dạng ảnh không được hỗ trợ (chỉ chấp nhận ${ALLOWED_LOGO_EXTENSIONS.join(", ")})`,
             400,
         );
     }

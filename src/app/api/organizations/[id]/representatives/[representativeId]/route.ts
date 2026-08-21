@@ -31,7 +31,7 @@ export async function PATCH(
             params.representativeId,
             body.reason,
         );
-        return apiSuccess(representative, "Da ket thuc quan he dai dien");
+        return apiSuccess(representative, "Đã kết thúc quan hệ đại diện");
     } catch (err) {
         return apiErrorFromException(err);
     }

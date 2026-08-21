@@ -42,7 +42,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(neighborhood, "Cap nhat to dan pho thanh cong");
+        return apiSuccess(neighborhood, "Cập nhật tổ dân phố thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
