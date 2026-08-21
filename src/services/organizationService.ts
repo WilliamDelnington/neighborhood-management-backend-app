@@ -20,7 +20,7 @@ import type {
  */
 export async function assertRepresentativeUser(userId: string): Promise<IUser> {
     const user = await User.findById(userId);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
     if (user.status !== "active") {
         throw new HttpError(
             "Chỉ có thể chọn tài khoản đang hoạt động làm người đại diện",
@@ -119,7 +119,7 @@ export async function getOrganizationById(
     id: string,
 ): Promise<IOrganization> {
     const organization = await Organization.findById(id);
-    if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
+    if (!organization) throw new HttpError("Không tìm thấy tổ chức", 404);
     await assertOrganizationInScope(actorUser, organization);
     await organization.populate("representativeUserId", "displayName phone");
     return organization;
@@ -193,7 +193,7 @@ export async function updateOrganization(
     patch: UpdateOrganizationInput,
 ): Promise<IOrganization> {
     const organization = await Organization.findById(id);
-    if (!organization) throw new HttpError("Khong tim thay to chuc", 404);
+    if (!organization) throw new HttpError("Không tìm thấy tổ chức", 404);
     await assertOrganizationInScope(actorUser, organization);
 
     const priorState = organization.toObject();

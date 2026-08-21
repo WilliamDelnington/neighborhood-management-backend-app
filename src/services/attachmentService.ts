@@ -33,7 +33,7 @@ export async function deleteAttachment(
         relatedModel,
         relatedId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();

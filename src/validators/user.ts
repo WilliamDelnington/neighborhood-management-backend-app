@@ -24,15 +24,15 @@ export const CREATABLE_STAFF_ROLES = [
 export const createHouseOwnerSchema = z.object({
     phone: z
         .string()
-        .min(1, "Thieu so dien thoai")
-        .refine(isValidVnPhone, "So dien thoai khong hop le"),
-    displayName: z.string().min(1, "Thieu ho ten"),
+        .min(1, "Thiếu số điện thoại")
+        .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
+    displayName: z.string().min(1, "Thiếu họ tên"),
     address: z.string().optional(),
-    idNumber: z.string().min(1, "Thieu so CMND/CCCD"),
+    idNumber: z.string().min(1, "Thiếu số CMND/CCCD"),
     role: z.enum(CREATABLE_STAFF_ROLES).default("house_owner"),
     password: z
         .string()
-        .min(6, "Mat khau phai co it nhat 6 ky tu")
+        .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
         .optional(),
 });
 export type CreateHouseOwnerInput = z.infer<typeof createHouseOwnerSchema>;
@@ -59,7 +59,7 @@ export const updateUserSchema = z
         wardName: z.string().nullable().optional(),
     })
     .refine(data => data.status === undefined || !!data.statusReason?.trim(), {
-        message: "Vui long nhap ly do khi khoa/mo tai khoan",
+        message: "Vui lòng nhập lý do khi khóa/mở tài khoản",
         path: ["statusReason"],
     });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
@@ -69,7 +69,7 @@ export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 // khac (xem userService.lockUserStatus).
 export const lockUserStatusSchema = z.object({
     status: z.enum(["active", "locked"]),
-    statusReason: z.string().min(1, "Vui long nhap ly do khoa/mo tai khoan"),
+    statusReason: z.string().min(1, "Vui lòng nhập lý do khóa/mở tài khoản"),
 });
 export type LockUserStatusInput = z.infer<typeof lockUserStatusSchema>;
 

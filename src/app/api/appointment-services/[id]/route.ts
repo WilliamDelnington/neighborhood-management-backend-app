@@ -19,7 +19,7 @@ export async function PATCH(
         await requirePermission(actorUser, "appointments.manage");
         const body = updateAppointmentServiceSchema.parse(await req.json());
         const service = await updateAppointmentService(actorUser, params.id, body);
-        return apiSuccess(service, "Cap nhat dich vu dat lich hen thanh cong");
+        return apiSuccess(service, "Cập nhật dịch vụ đặt lịch hẹn thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -39,7 +39,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "appointments.manage");
         await archiveAppointmentService(actorUser, params.id);
-        return apiSuccess(null, "Ngung hoat dong dich vu dat lich hen thanh cong");
+        return apiSuccess(null, "Ngừng hoạt động dịch vụ đặt lịch hẹn thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

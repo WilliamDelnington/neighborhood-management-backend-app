@@ -54,7 +54,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             action: "ATTACHMENT_ADDED",
             metadata: { fileId: attachment._id, name: attachment.name },
         });
-        return apiSuccess(attachment, "Them tai lieu dinh kem thanh cong", 201);
+        return apiSuccess(attachment, "Thêm tài liệu đính kèm thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

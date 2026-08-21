@@ -16,7 +16,7 @@ export async function POST(
         await requirePermission(actorUser, "surveys.respond");
         const body = respondSurveySchema.parse(await req.json());
         const response = await respondToSurvey(actorUser, params.id, body);
-        return apiSuccess(response, "Gui tra loi khao sat thanh cong", 201);
+        return apiSuccess(response, "Gửi trả lời khảo sát thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

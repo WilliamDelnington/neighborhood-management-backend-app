@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
         const body = createCitizenSchema.parse(await req.json());
         const citizen = await createCitizen(user, body);
-        return apiSuccess(citizen, "Them nhan khau thanh cong", 201);
+        return apiSuccess(citizen, "Thêm nhân khẩu thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

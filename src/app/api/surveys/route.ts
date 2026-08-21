@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "surveys.create");
         const body = createSurveySchema.parse(await req.json());
         const survey = await createSurvey(actorUser, body);
-        return apiSuccess(survey, "Tao khao sat thanh cong", 201);
+        return apiSuccess(survey, "Tạo khảo sát thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

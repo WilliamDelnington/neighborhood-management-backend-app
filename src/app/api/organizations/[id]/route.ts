@@ -36,7 +36,7 @@ export async function PATCH(
 
         const body = updateOrganizationSchema.parse(await req.json());
         const organization = await updateOrganization(user, params.id, body);
-        return apiSuccess(organization, "Cap nhat to chuc thanh cong");
+        return apiSuccess(organization, "Cập nhật tổ chức thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

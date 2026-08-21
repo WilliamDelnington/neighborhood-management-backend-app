@@ -24,7 +24,7 @@ export async function listCorrespondenceTypes(
         filter.name = { $regex: params.search, $options: "i" };
     }
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
 
     const [items, total] = await Promise.all([
         CorrespondenceType.find(filter)
@@ -47,7 +47,7 @@ export async function getCorrespondenceTypeById(
     id: string,
 ): Promise<ICorrespondenceType> {
     const type = await CorrespondenceType.findById(id);
-    if (!type) throw new HttpError("Khong tim thay loai van ban", 404);
+    if (!type) throw new HttpError("Không tìm thấy loại văn bản", 404);
     return type;
 }
 
@@ -57,7 +57,7 @@ export async function createCorrespondenceType(
 ) {
     const code = input.code.trim().toUpperCase();
     const existing = await CorrespondenceType.findOne({ code });
-    if (existing) throw new HttpError("Ma loai van ban da ton tai", 409);
+    if (existing) throw new HttpError("Mã loại văn bản đã tồn tại", 409);
 
     const type = await CorrespondenceType.create({
         ...input,
@@ -115,7 +115,7 @@ export async function deleteCorrespondenceType(actorId: string, id: string) {
     });
     if (usedCount > 0) {
         throw new HttpError(
-            "Loai van ban nay da co van ban duoc tao, khong the xoa",
+            "Loại văn bản này đã có văn bản được tạo, không thể xóa",
             409,
         );
     }

@@ -26,14 +26,14 @@ async function assertUsersCanCoEdit(userIds: string[]): Promise<void> {
         const user = await User.findById(userId);
         if (!user || user.status !== "active") {
             throw new HttpError(
-                "Dong chu bien phai la tai khoan dang hoat dong",
+                "Đồng chủ biên phải là tài khoản đang hoạt động",
                 422,
             );
         }
         // eslint-disable-next-line no-await-in-loop
         if (!(await userHasPermission(user, "surveys.update"))) {
             throw new HttpError(
-                `Tai khoan ${user.displayName} khong co quyen chinh sua khao sat`,
+                `Tài khoản ${user.displayName} không có quyền chỉnh sửa khảo sát`,
                 422,
             );
         }
@@ -58,7 +58,7 @@ function assertSurveyEditable(actorUser: IUser, survey: ISurvey): void {
         return;
     }
     throw new HttpError(
-        "Ban khong phai nguoi tao hoac dong chu bien cua khao sat nay",
+        "Bạn không phải người tạo hoặc đồng chủ biên của khảo sát này",
         403,
     );
 }
@@ -100,7 +100,7 @@ export async function updateSurvey(
     patch: UpdateSurveyInput,
 ) {
     const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
     assertSurveyEditable(actorUser, survey);
 
     if (patch.coEditorUserIds?.length) {
@@ -127,7 +127,7 @@ export async function openSurvey(
     id: string,
 ): Promise<ISurvey> {
     const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
     assertSurveyEditable(actorUser, survey);
 
     survey.status = "dang_mo";
@@ -169,7 +169,7 @@ export async function closeSurvey(
     id: string,
 ): Promise<ISurvey> {
     const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
     assertSurveyEditable(actorUser, survey);
 
     survey.status = "da_dong";
@@ -189,7 +189,7 @@ export async function closeSurvey(
 
 export async function deleteSurvey(actorUser: IUser, id: string) {
     const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
     assertSurveyEditable(actorUser, survey);
     await survey.deleteOne();
     await SurveyResponse.deleteMany({ surveyId: id });
@@ -231,7 +231,7 @@ export async function getSurveyById(id: string) {
     const survey = await Survey.findById(id)
         .populate("createdBy", "displayName")
         .populate("coEditorUserIds", "displayName");
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
     return survey;
 }
 
@@ -242,7 +242,7 @@ export async function respondToSurvey(
 ) {
     const userId = String(actorUser._id);
     const survey = await Survey.findById(surveyId);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
 
     if (survey.status !== "dang_mo") {
         throw new HttpError("Khảo sát hiện không mở", 400);
@@ -251,7 +251,7 @@ export async function respondToSurvey(
     const context = await resolveUserEligibilityContext(actorUser);
     if (!isSurveyEligible(survey, actorUser, context)) {
         throw new HttpError(
-            "Ban khong thuoc doi tuong duoc tra loi khao sat nay",
+            "Bạn không thuộc đối tượng được trả lời khảo sát này",
             403,
         );
     }
@@ -259,7 +259,7 @@ export async function respondToSurvey(
     const validQuestionIds = new Set(survey.questions.map(q => String(q._id)));
     for (const answer of input.answers) {
         if (!validQuestionIds.has(answer.questionId)) {
-            throw new HttpError("Cau hoi khong thuoc khao sat nay", 422);
+            throw new HttpError("Câu hỏi không thuộc khảo sát này", 422);
         }
     }
 
@@ -287,7 +287,7 @@ export type SurveyQuestionResult = {
 
 export async function getSurveyResults(surveyId: string) {
     const survey = await Survey.findById(surveyId);
-    if (!survey) throw new HttpError("Khong tim thay khao sat", 404);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
 
     const responses = await SurveyResponse.find({ surveyId });
 

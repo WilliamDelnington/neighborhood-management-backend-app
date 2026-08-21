@@ -21,7 +21,7 @@ export async function PATCH(
         await requirePermission(actorUser, "houses.update_gis");
         const input = updateHouseRecordGisSchema.parse(await req.json());
         const house = await updateHouseRecordGis(actorUser, params.id, input);
-        return apiSuccess(house, "Cap nhat toa do GIS thanh cong");
+        return apiSuccess(house, "Cập nhật tọa độ GIS thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

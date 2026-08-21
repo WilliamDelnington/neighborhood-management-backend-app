@@ -49,7 +49,7 @@ export async function POST(
             body.note,
             { termId: body.termId, endAt: body.endAt },
         );
-        return apiSuccess(null, "Da gan To pho thanh cong");
+        return apiSuccess(null, "Đã gán Tổ phó thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -71,7 +71,7 @@ export async function DELETE(
             params.id,
             body.coleaderUserId,
         );
-        return apiSuccess(null, "Da go To pho thanh cong");
+        return apiSuccess(null, "Đã gỡ Tổ phó thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -33,7 +33,7 @@ export async function PATCH(
         const actorUser = await requireUser(req);
         const body = updateRequestSchema.parse(await req.json());
         const request = await updateRequest(actorUser, params.id, body);
-        return apiSuccess(request, "Cap nhat yeu cau thanh cong");
+        return apiSuccess(request, "Cập nhật yêu cầu thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -47,7 +47,7 @@ export async function DELETE(
         await connectDB();
         const actorUser = await requireUser(req);
         await cancelRequest(actorUser, params.id);
-        return apiSuccess(null, "Huy yeu cau thanh cong");
+        return apiSuccess(null, "Hủy yêu cầu thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -71,7 +71,7 @@ export function assertAnnouncementInScope(
         !ids.includes(String(announcement.neighborhoodId))
     ) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi thong bao ngoai to dan pho duoc phan cong",
+            "Bạn không có quyền thao tác với thông báo ngoài tổ dân phố được phân công",
             403,
         );
     }
@@ -83,7 +83,7 @@ export async function updateAnnouncement(
     patch: UpdateAnnouncementInput,
 ) {
     const announcement = await Announcement.findById(id);
-    if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
+    if (!announcement) throw new HttpError("Không tìm thấy thông báo", 404);
 
     Object.assign(announcement, patch);
     announcement.updatedBy = actorId as any;
@@ -152,7 +152,7 @@ export async function publishAnnouncement(
     id: string,
 ): Promise<IAnnouncement> {
     const announcement = await Announcement.findById(id);
-    if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
+    if (!announcement) throw new HttpError("Không tìm thấy thông báo", 404);
 
     announcement.status = "da_dang";
     announcement.publishedAt = new Date();
@@ -263,16 +263,16 @@ export async function getAnnouncementById(id: string, publicOnly: boolean) {
         "neighborhoodId",
         "name",
     );
-    if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
+    if (!announcement) throw new HttpError("Không tìm thấy thông báo", 404);
     if (publicOnly && announcement.status !== "da_dang") {
-        throw new HttpError("Khong tim thay thong bao", 404);
+        throw new HttpError("Không tìm thấy thông báo", 404);
     }
     return announcement;
 }
 
 export async function deleteAnnouncement(actorId: string, id: string) {
     const announcement = await Announcement.findById(id);
-    if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
+    if (!announcement) throw new HttpError("Không tìm thấy thông báo", 404);
     await announcement.deleteOne();
 
     const attachments = await FileAsset.find({
@@ -320,18 +320,18 @@ export async function uploadAnnouncementAttachment(
     const announcement = await Announcement.findById(announcementId).select(
         "_id",
     );
-    if (!announcement) throw new HttpError("Khong tim thay thong bao", 404);
+    if (!announcement) throw new HttpError("Không tìm thấy thông báo", 404);
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -378,7 +378,7 @@ export async function deleteAnnouncementAttachment(
         relatedModel: "Announcement",
         relatedId: announcementId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();

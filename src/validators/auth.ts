@@ -3,15 +3,15 @@ import { isValidVnPhone } from "@/lib/phone";
 
 const phoneField = z
     .string()
-    .min(1, "Thieu so dien thoai")
-    .refine(isValidVnPhone, "So dien thoai khong hop le");
+    .min(1, "Thiếu số điện thoại")
+    .refine(isValidVnPhone, "Số điện thoại không hợp lệ");
 const passwordField = z
     .string()
-    .min(6, "Mat khau phai co it nhat 6 ky tu");
+    .min(6, "Mật khẩu phải có ít nhất 6 ký tự");
 
 export const zaloLoginSchema = z.object({
-    accessToken: z.string().min(1, "Thieu accessToken"),
-    zaloUserId: z.string().min(1, "Thieu zaloUserId"),
+    accessToken: z.string().min(1, "Thiếu accessToken"),
+    zaloUserId: z.string().min(1, "Thiếu zaloUserId"),
     name: z.string().optional(),
     avatarUrl: z.string().optional(),
     // One-time token returned by zmp-sdk getPhoneNumber. Production must
@@ -30,7 +30,7 @@ export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;
 // thuc la mot lo hong - phai di qua changePhoneSchema/changeOwnPhone (xac
 // thuc lai qua Zalo getPhoneNumber, xem app/api/auth/change-phone).
 export const updateProfileSchema = z.object({
-    email: z.string().email("Email khong hop le").optional(),
+    email: z.string().email("Email không hợp lệ").optional(),
     address: z.string().optional(),
     householdId: z.string().optional(),
     notificationPermission: z.boolean().optional(),
@@ -41,7 +41,7 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 // + phoneToken mot-lan-dung tu zmp-sdk getPhoneNumber), KHONG nhan phone tho
 // tu client o production (xem lib/zalo.ts verifyZaloPhoneToken).
 export const changePhoneSchema = z.object({
-    accessToken: z.string().min(1, "Thieu accessToken"),
+    accessToken: z.string().min(1, "Thiếu accessToken"),
     phoneToken: z.string().optional(),
     // Sandbox-only helper for automated/local testing.
     phone: z.string().optional(),
@@ -51,13 +51,13 @@ export type ChangePhoneInput = z.infer<typeof changePhoneSchema>;
 export const phoneRegisterSchema = z.object({
     phone: phoneField,
     password: passwordField,
-    displayName: z.string().min(1, "Thieu ho ten"),
+    displayName: z.string().min(1, "Thiếu họ tên"),
 });
 export type PhoneRegisterInput = z.infer<typeof phoneRegisterSchema>;
 
 export const phoneLoginSchema = z.object({
     phone: phoneField,
-    password: z.string().min(1, "Thieu mat khau"),
+    password: z.string().min(1, "Thiếu mật khẩu"),
 });
 export type PhoneLoginInput = z.infer<typeof phoneLoginSchema>;
 
@@ -83,8 +83,8 @@ export const otpVerifySchema = z.object({
     phone: phoneField,
     code: z
         .string()
-        .length(6, "Ma OTP phai gom 6 chu so")
-        .regex(/^\d{6}$/, "Ma OTP phai gom 6 chu so"),
+        .length(6, "Mã OTP phải gồm 6 chữ số")
+        .regex(/^\d{6}$/, "Mã OTP phải gồm 6 chữ số"),
     displayName: z.string().min(1).optional(),
 });
 export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;

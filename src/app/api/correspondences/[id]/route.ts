@@ -49,7 +49,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(correspondence, "Cap nhat van ban thanh cong");
+        return apiSuccess(correspondence, "Cập nhật văn bản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -4,7 +4,7 @@ import { z } from "zod";
 // va House/Household/Company.requiredDocuments). reviewerRoles rong = fallback
 // ve permission ".verify" tuong ung khi duyet (xem requiredDocumentService).
 export const documentRuleSchema = z.object({
-    documentTypeId: z.string().min(1, "Thieu loai giay to"),
+    documentTypeId: z.string().min(1, "Thiếu loại giấy tờ"),
     isRequired: z.boolean().default(true),
     warningBeforeDays: z.number().int().positive().optional(),
     reviewerRoles: z.array(z.string()).default([]),
@@ -19,8 +19,8 @@ export type PutRequiredDocumentsInput = z.infer<
 >;
 
 export const createDocumentSchema = z.object({
-    documentTypeId: z.string().min(1, "Thieu loai giay to"),
-    fileAssetId: z.string().min(1, "Thieu file da tai len"),
+    documentTypeId: z.string().min(1, "Thiếu loại giấy tờ"),
+    fileAssetId: z.string().min(1, "Thiếu file đã tải lên"),
     docNumber: z.string().optional(),
     issueDate: z.coerce.date().optional(),
     expiryDate: z.coerce.date().optional(),
@@ -36,7 +36,7 @@ export const reviewDocumentSchema = z
     .refine(
         data => data.decision !== "rejected" || !!data.rejectionReason?.trim(),
         {
-            message: "Vui long nhap ly do khi tu choi / yeu cau bo sung",
+            message: "Vui lòng nhập lý do khi từ chối / yêu cầu bổ sung",
             path: ["rejectionReason"],
         },
     );

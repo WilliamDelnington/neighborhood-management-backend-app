@@ -6,9 +6,9 @@ const fieldSchema = z
         key: z
             .string()
             .trim()
-            .min(1, "Thieu ma truong")
-            .regex(/^[a-z][a-z0-9_]*$/, "Ma truong khong hop le"),
-        label: z.string().trim().min(1, "Thieu ten truong"),
+            .min(1, "Thiếu mã trường")
+            .regex(/^[a-z][a-z0-9_]*$/, "Mã trường không hợp lệ"),
+        label: z.string().trim().min(1, "Thiếu tên trường"),
         type: z.enum(REQUEST_FORM_FIELD_TYPES),
         required: z.boolean().default(false),
         options: z.array(z.string().trim().min(1)).default([]),
@@ -24,7 +24,7 @@ const fieldSchema = z
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ["options"],
-                message: "Truong lua chon phai co it nhat mot gia tri",
+                message: "Trường lựa chọn phải có ít nhất một giá trị",
             });
         }
     });
@@ -33,13 +33,13 @@ const requestTypeDefinitionBaseSchema = z.object({
         key: z
             .string()
             .trim()
-            .min(2, "Ma loai nhiem vu qua ngan")
+            .min(2, "Mã loại nhiệm vụ quá ngắn")
             .max(50)
             .regex(
                 /^[a-z][a-z0-9_]*$/,
-                "Ma chi gom chu thuong, so va gach duoi",
+                "Mã chỉ gồm chữ thường, số và gạch dưới",
             ),
-        name: z.string().trim().min(1, "Thieu ten loai nhiem vu").max(150),
+        name: z.string().trim().min(1, "Thiếu tên loại nhiệm vụ").max(150),
         description: z.string().trim().max(1000).optional(),
         fields: z.array(fieldSchema).max(50).default([]),
         allowedSenderRoles: z.array(z.string()).min(1),
@@ -58,7 +58,7 @@ function ensureUniqueFieldKeys(
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ["fields"],
-                message: "Ma truong trong bieu mau khong duoc trung nhau",
+                message: "Mã trường trong biểu mẫu không được trùng nhau",
             });
         }
 }

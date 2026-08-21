@@ -55,7 +55,7 @@ export async function POST(req: Request) {
             String(actorUser._id),
             body,
         );
-        return apiSuccess(businessType, "Tao loai hinh kinh doanh thanh cong", 201);
+        return apiSuccess(businessType, "Tạo loại hình kinh doanh thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

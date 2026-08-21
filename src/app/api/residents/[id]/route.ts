@@ -39,7 +39,7 @@ export async function PATCH(
         assertResidentRecordInScope(actorUser, existing);
         const body = updateResidentRecordSchema.parse(await req.json());
         const record = await updateResidentRecord(actorUser, params.id, body);
-        return apiSuccess(record, "Cap nhat ho so cu tru thanh cong");
+        return apiSuccess(record, "Cập nhật hồ sơ cư trú thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -56,7 +56,7 @@ export async function DELETE(
         const existing = await getResidentRecordById(params.id);
         assertResidentRecordInScope(actorUser, existing);
         await deleteResidentRecord(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa ho so cu tru thanh cong");
+        return apiSuccess(null, "Xóa hồ sơ cư trú thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

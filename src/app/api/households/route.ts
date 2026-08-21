@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
         const body = createHouseholdSchema.parse(await req.json());
         const household = await createHousehold(user, body);
-        return apiSuccess(household, "Tao ho dan thanh cong", 201);
+        return apiSuccess(household, "Tạo hộ dân thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

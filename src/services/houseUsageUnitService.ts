@@ -47,12 +47,12 @@ async function assertOccupantAvailableForHouse(
     const occupant = await model.findById(occupantId);
     if (!occupant) {
         throw new HttpError(
-            "Khong tim thay doi tuong duoc chon cho don vi su dung",
+            "Không tìm thấy đối tượng được chọn cho đơn vị sử dụng",
             404,
         );
     }
     if (String(occupant.houseId) !== String(houseId)) {
-        throw new HttpError("Doi tuong duoc chon khong thuoc ve nha so nay", 400);
+        throw new HttpError("Đối tượng được chọn không thuộc về nhà số này", 400);
     }
 
     const alreadyLinked = await HouseUsageUnit.exists({
@@ -60,7 +60,7 @@ async function assertOccupantAvailableForHouse(
     });
     if (alreadyLinked) {
         throw new HttpError(
-            "Doi tuong nay da duoc gan vao mot don vi su dung khac",
+            "Đối tượng này đã được gán vào một đơn vị sử dụng khác",
             409,
         );
     }
@@ -77,12 +77,12 @@ export async function createHouseUsageUnit(
     input: CreateHouseUsageUnitInput,
 ): Promise<IHouseUsageUnit> {
     const houseRecord = await HouseRecord.findById(input.houseId);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
 
     const occupantId = resolveOccupantId(input);
     if (!occupantId) {
-        throw new HttpError("Thieu doi tuong cho don vi su dung", 400);
+        throw new HttpError("Thiếu đối tượng cho đơn vị sử dụng", 400);
     }
     await assertOccupantAvailableForHouse(
         input.usageType,
@@ -118,7 +118,7 @@ export async function listHouseUsageUnitsByHouse(
     houseId: string,
 ): Promise<IHouseUsageUnit[]> {
     const houseRecord = await HouseRecord.findById(houseId);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
 
     return HouseUsageUnit.find({ houseId })
@@ -135,7 +135,7 @@ export async function getHouseUsageUnitById(
         .populate("householdId", "code headOfHousehold status")
         .populate("businessId", "name status")
         .populate("companyId", "name status");
-    if (!unit) throw new HttpError("Khong tim thay don vi su dung", 404);
+    if (!unit) throw new HttpError("Không tìm thấy đơn vị sử dụng", 404);
     return unit;
 }
 
@@ -150,7 +150,7 @@ export async function updateHouseUsageUnit(
     patch: UpdateHouseUsageUnitInput,
 ): Promise<IHouseUsageUnit> {
     const unit = await HouseUsageUnit.findById(id);
-    if (!unit) throw new HttpError("Khong tim thay don vi su dung", 404);
+    if (!unit) throw new HttpError("Không tìm thấy đơn vị sử dụng", 404);
 
     const houseRecord = await HouseRecord.findById(unit.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
@@ -176,7 +176,7 @@ export async function deleteHouseUsageUnit(
     id: string,
 ): Promise<IHouseUsageUnit> {
     const unit = await HouseUsageUnit.findById(id);
-    if (!unit) throw new HttpError("Khong tim thay don vi su dung", 404);
+    if (!unit) throw new HttpError("Không tìm thấy đơn vị sử dụng", 404);
 
     const houseRecord = await HouseRecord.findById(unit.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);

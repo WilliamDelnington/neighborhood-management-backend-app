@@ -14,7 +14,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "reports.author");
         const report = await submitPeriodicReport(actorUser, params.id);
-        return apiSuccess(report, "Da nop bao cao");
+        return apiSuccess(report, "Đã nộp báo cáo");
     } catch (err) {
         return apiErrorFromException(err);
     }

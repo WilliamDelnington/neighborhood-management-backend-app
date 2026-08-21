@@ -15,7 +15,7 @@ export async function POST(req: Request) {
         await connectDB();
         const user = await requireUser(req);
         await revokeSessions(String(user._id));
-        return apiSuccess(null, "Da dang xuat");
+        return apiSuccess(null, "Đã đăng xuất");
     } catch (err) {
         return apiErrorFromException(err);
     }

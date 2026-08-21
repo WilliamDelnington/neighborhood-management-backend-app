@@ -50,7 +50,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(announcement, "Cap nhat thong bao thanh cong");
+        return apiSuccess(announcement, "Cập nhật thông báo thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -66,7 +66,7 @@ export async function DELETE(
         await requirePermission(actorUser, "announcements.update");
         assertAnnouncementInScope(actorUser, await getAnnouncementById(params.id, false));
         await deleteAnnouncement(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa thong bao thanh cong");
+        return apiSuccess(null, "Xóa thông báo thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -20,7 +20,7 @@ export async function PATCH(
         const input = updateComplaintTypeDefinitionSchema.parse(await req.json());
         return apiSuccess(
             await updateComplaintTypeDefinition(actorUser, params.id, input),
-            "Cap nhat loai phan anh thanh cong",
+            "Cập nhật loại phản ánh thành công",
         );
     } catch (err) {
         return apiErrorFromException(err);
@@ -37,7 +37,7 @@ export async function DELETE(
         await requirePermission(actorUser, "complaint_types.manage");
         return apiSuccess(
             await archiveComplaintTypeDefinition(actorUser, params.id),
-            "Da ngung su dung loai phan anh",
+            "Đã ngừng sử dụng loại phản ánh",
         );
     } catch (err) {
         return apiErrorFromException(err);

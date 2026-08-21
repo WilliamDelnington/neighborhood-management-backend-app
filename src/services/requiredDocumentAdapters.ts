@@ -23,7 +23,7 @@ import type { RequiredDocumentAdapter } from "@/services/requiredDocumentService
  */
 export const houseDocumentAdapter: RequiredDocumentAdapter<IHouseRecord> = {
     label: "Nhà số",
-    notFoundMessage: "Khong tim thay nha so",
+    notFoundMessage: "Không tìm thấy nhà số",
     relatedModelName: "HouseDocument",
     verifyPermission: "houses.verify",
     category: "house",
@@ -50,7 +50,7 @@ export const houseDocumentAdapter: RequiredDocumentAdapter<IHouseRecord> = {
  */
 export const householdDocumentAdapter: RequiredDocumentAdapter<IHousehold> = {
     label: "Hộ dân",
-    notFoundMessage: "Khong tim thay ho dan",
+    notFoundMessage: "Không tìm thấy hộ dân",
     relatedModelName: "HouseholdDocument",
     verifyPermission: "households.verify",
     category: "household",
@@ -82,7 +82,7 @@ export const householdDocumentAdapter: RequiredDocumentAdapter<IHousehold> = {
  */
 export const companyDocumentAdapter: RequiredDocumentAdapter<ICompany> = {
     label: "Công ty",
-    notFoundMessage: "Khong tim thay cong ty",
+    notFoundMessage: "Không tìm thấy công ty",
     relatedModelName: "CompanyDocument",
     verifyPermission: "companies.verify",
     category: "company",

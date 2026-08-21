@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "announcements.create");
         const body = createAnnouncementSchema.parse(await req.json());
         const announcement = await createAnnouncement(actorUser, body);
-        return apiSuccess(announcement, "Tao thong bao thanh cong", 201);
+        return apiSuccess(announcement, "Tạo thông báo thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

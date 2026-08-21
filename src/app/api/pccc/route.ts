@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "pccc.create");
         const body = createPcccCheckSchema.parse(await req.json());
         const check = await createPcccCheck(actorUser, body);
-        return apiSuccess(check, "Tao bien ban kiem tra PCCC thanh cong", 201);
+        return apiSuccess(check, "Tạo biên bản kiểm tra PCCC thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

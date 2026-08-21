@@ -40,7 +40,7 @@ async function handleUpsert(req: Request) {
     await requirePermission(actorUser, "settings.update");
     const body = upsertSettingSchema.parse(await req.json());
     const setting = await upsertSetting(String(actorUser._id), body);
-    return apiSuccess(setting, "Cap nhat cau hinh thanh cong");
+    return apiSuccess(setting, "Cập nhật cấu hình thành công");
 }
 
 export async function POST(req: Request) {

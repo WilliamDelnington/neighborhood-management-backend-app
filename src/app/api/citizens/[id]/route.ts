@@ -64,7 +64,7 @@ export async function PATCH(
 
         const body = updateCitizenSchema.parse(await req.json());
         const citizen = await updateCitizen(user, params.id, body);
-        return apiSuccess(citizen, "Cap nhat nhan khau thanh cong");
+        return apiSuccess(citizen, "Cập nhật nhân khẩu thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -83,7 +83,7 @@ export async function DELETE(
         await assertCitizenInScope(user, existing);
 
         await deleteCitizen(String(user._id), params.id);
-        return apiSuccess(null, "Xoa nhan khau thanh cong");
+        return apiSuccess(null, "Xóa nhân khẩu thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
         const body = createInfrastructureAssetSchema.parse(await req.json());
         const asset = await createInfrastructureAsset(actorUser, body);
-        return apiSuccess(asset, "Da tao tai san ha tang", 201);
+        return apiSuccess(asset, "Đã tạo tài sản hạ tầng", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

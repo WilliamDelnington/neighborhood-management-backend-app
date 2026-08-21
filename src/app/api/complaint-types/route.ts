@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         const input = createComplaintTypeDefinitionSchema.parse(await req.json());
         return apiSuccess(
             await createComplaintTypeDefinition(actorUser, input),
-            "Tao loai phan anh thanh cong",
+            "Tạo loại phản ánh thành công",
             201,
         );
     } catch (err) {

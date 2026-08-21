@@ -33,7 +33,7 @@ export async function PATCH(
 
         const body = updateStreetSchema.parse(await req.json());
         const street = await updateStreet(String(user._id), params.id, body);
-        return apiSuccess(street, "Cap nhat duong/pho thanh cong");
+        return apiSuccess(street, "Cập nhật đường/phố thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -39,7 +39,7 @@ export async function PATCH(
         assertSecurityRecordInScope(actorUser, existing);
         const body = updateSecurityRecordSchema.parse(await req.json());
         const record = await updateSecurityRecord(actorUser, params.id, body);
-        return apiSuccess(record, "Cap nhat ho so an ninh thanh cong");
+        return apiSuccess(record, "Cập nhật hồ sơ an ninh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -56,7 +56,7 @@ export async function DELETE(
         const existing = await getSecurityRecordById(params.id);
         assertSecurityRecordInScope(actorUser, existing);
         await deleteSecurityRecord(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa ho so an ninh thanh cong");
+        return apiSuccess(null, "Xóa hồ sơ an ninh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

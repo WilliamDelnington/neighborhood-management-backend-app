@@ -10,7 +10,7 @@ export async function POST(req: Request) {
         await connectDB();
         const body = zaloLoginSchema.parse(await req.json());
         const result = await loginWithZalo(body);
-        return apiSuccess(result, "Dang nhap thanh cong");
+        return apiSuccess(result, "Đăng nhập thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

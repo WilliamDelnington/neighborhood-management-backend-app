@@ -13,7 +13,7 @@ export type ImportPreviewRow = Record<string, unknown>;
  * validate body cho mot endpoint commit dung chung trong tuong lai.
  */
 export const commitImportSchema = z.object({
-    importJobId: z.string().min(1, "Thieu ma import job"),
+    importJobId: z.string().min(1, "Thiếu mã import job"),
 });
 export type CommitImportInput = z.infer<typeof commitImportSchema>;
 

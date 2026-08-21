@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
         const body = createStreetSchema.parse(await req.json());
         const street = await createStreet(String(user._id), body);
-        return apiSuccess(street, "Tao duong/pho thanh cong", 201);
+        return apiSuccess(street, "Tạo đường/phố thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

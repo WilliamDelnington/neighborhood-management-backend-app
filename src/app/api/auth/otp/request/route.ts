@@ -16,7 +16,7 @@ export async function POST(req: Request) {
         // Khong bao gio dua `code` (chi danh cho test goi truc tiep service)
         // vao response - chi tra ve thong bao chung (xem docstring requestOtp).
         await requestOtp(body.phone);
-        return apiSuccess(null, "Neu hop le, ma OTP da duoc gui");
+        return apiSuccess(null, "Nếu hợp lệ, mã OTP đã được gửi");
     } catch (err) {
         return apiErrorFromException(err);
     }

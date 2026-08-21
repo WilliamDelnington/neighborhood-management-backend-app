@@ -7,7 +7,7 @@ import {
 } from "./requiredDocument";
 
 export const createBusinessTypeSchema = z.object({
-    name: z.string().min(1, "Ten loai hinh kinh doanh khong duoc de trong"),
+    name: z.string().min(1, "Tên loại hình kinh doanh không được để trống"),
     description: z.string().optional(),
     active: z.boolean().default(true),
     sortOrder: z.number().default(0),

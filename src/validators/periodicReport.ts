@@ -19,7 +19,7 @@ const periodicReportInputSchema = z.object({
 
 export const createPeriodicReportSchema = periodicReportInputSchema
     .refine(value => new Date(value.periodStart) <= new Date(value.periodEnd), {
-        message: "Ngay bat dau phai truoc hoac bang ngay ket thuc",
+        message: "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc",
         path: ["periodEnd"],
     });
 export type CreatePeriodicReportInput = z.infer<
@@ -32,7 +32,7 @@ export type UpdatePeriodicReportInput = z.infer<
 >;
 
 export const requestPeriodicReportRevisionSchema = z.object({
-    note: z.string().trim().min(1, "Vui long nhap ly do yeu cau bo sung").max(5_000),
+    note: z.string().trim().min(1, "Vui lòng nhập lý do yêu cầu bổ sung").max(5_000),
 });
 export type RequestPeriodicReportRevisionInput = z.infer<
     typeof requestPeriodicReportRevisionSchema

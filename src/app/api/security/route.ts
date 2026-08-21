@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "security.create");
         const body = createSecurityRecordSchema.parse(await req.json());
         const record = await createSecurityRecord(actorUser, body);
-        return apiSuccess(record, "Tao ho so an ninh thanh cong", 201);
+        return apiSuccess(record, "Tạo hồ sơ an ninh thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

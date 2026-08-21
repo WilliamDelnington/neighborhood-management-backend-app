@@ -93,12 +93,12 @@ export async function POST(req: Request) {
                 file,
                 meta,
             );
-            return apiSuccess(fileAsset, "Them file thanh cong", 201);
+            return apiSuccess(fileAsset, "Thêm file thành công", 201);
         }
 
         const body = createFileAssetSchema.parse(await req.json());
         const fileAsset = await createFileAsset(String(actorUser._id), body);
-        return apiSuccess(fileAsset, "Them file thanh cong", 201);
+        return apiSuccess(fileAsset, "Thêm file thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

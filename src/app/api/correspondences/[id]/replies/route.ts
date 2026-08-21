@@ -38,7 +38,7 @@ export async function POST(
             params.id,
             body,
         );
-        return apiSuccess(reply, "Gui phan hoi thanh cong", 201);
+        return apiSuccess(reply, "Gửi phản hồi thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

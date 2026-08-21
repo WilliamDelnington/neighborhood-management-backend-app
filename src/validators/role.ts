@@ -6,7 +6,7 @@ const permissionsField = z
     .default([])
     .refine(
         permissions => permissions.every(isValidPermissionKey),
-        "Danh sach permission chua key khong hop le",
+        "Danh sách permission chứa key không hợp lệ",
     );
 
 // Truoc la z.array(z.enum(NHOM_PHAN_ANH)) (danh sach tinh) - nay category la
@@ -14,21 +14,21 @@ const permissionsField = z
 // muc tuy chinh do admin tao sau nay), nen chuyen sang permissive regex-string
 // cung quy uoc voi requestTypesField ben duoi.
 const complaintCategoriesField = z.array(
-    z.string().regex(/^[a-z][a-z0-9_]*$/, "Nhom phan anh khong hop le"),
+    z.string().regex(/^[a-z][a-z0-9_]*$/, "Nhóm phản ánh không hợp lệ"),
 );
 const requestTypesField = z.array(
-    z.string().regex(/^[a-z][a-z0-9_]*$/, "Loai yeu cau khong hop le"),
+    z.string().regex(/^[a-z][a-z0-9_]*$/, "Loại yêu cầu không hợp lệ"),
 );
 
 export const createRoleSchema = z.object({
     key: z
         .string()
-        .min(2, "Key qua ngan")
+        .min(2, "Key quá ngắn")
         .regex(
             /^[a-z][a-z0-9_]*$/,
-            "Key chi gom chu thuong, so va gach duoi, bat dau bang chu",
+            "Key chỉ gồm chữ thường, số và gạch dưới, bắt đầu bằng chữ",
         ),
-    name: z.string().min(1, "Thieu ten vai tro"),
+    name: z.string().min(1, "Thiếu tên vai trò"),
     description: z.string().optional(),
     permissions: permissionsField,
     // Bo trong = khong gioi han (xem tat ca nhom phan anh).
@@ -41,7 +41,7 @@ export const createRoleSchema = z.object({
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 
 export const updateRoleSchema = z.object({
-    name: z.string().min(1, "Thieu ten vai tro").optional(),
+    name: z.string().min(1, "Thiếu tên vai trò").optional(),
     description: z.string().optional(),
     permissions: permissionsField.optional(),
     // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
