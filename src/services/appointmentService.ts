@@ -766,7 +766,7 @@ export async function cancelAppointment(
         const hoursUntil = (appointedAt.getTime() - Date.now()) / 3_600_000;
         if (hoursUntil < SELF_SERVICE_MIN_HOURS_BEFORE) {
             throw new HttpError(
-                `Chỉ được hủy lịch hẹn trước giờ hẹn ít nhất ${CANCEL_MIN_HOURS_BEFORE} tiếng`,
+                `Chỉ được hủy lịch hẹn trước giờ hẹn ít nhất ${SELF_SERVICE_MIN_HOURS_BEFORE} tiếng`,
                 409,
             );
         }
