@@ -56,6 +56,30 @@ export type CreateInspectionCampaignInput = z.infer<
     typeof createInspectionCampaignSchema
 >;
 
+export const updateInspectionCampaignDetailsSchema = z.object({
+    name: z.string().trim().min(3, "Tên chiến dịch quá ngắn").max(300),
+    purpose: z.string().trim().min(10, "Mục tiêu chiến dịch quá ngắn").max(5000),
+});
+export type UpdateInspectionCampaignDetailsInput = z.infer<
+    typeof updateInspectionCampaignDetailsSchema
+>;
+
+export const updateInspectionCampaignChecklistSchema = z.object({
+    checklistTemplate: z.array(campaignChecklistItemSchema).min(1).max(200),
+}).superRefine((input, ctx) => {
+    const itemIds = input.checklistTemplate.map(item => item.itemId);
+    if (new Set(itemIds).size !== itemIds.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["checklistTemplate"],
+            message: "Mã mục checklist không được trùng nhau",
+        });
+    }
+});
+export type UpdateInspectionCampaignChecklistInput = z.infer<
+    typeof updateInspectionCampaignChecklistSchema
+>;
+
 export const inspectionAnswerSchema = z.object({
     checklistItemId: z.string().trim().min(1),
     value: z.unknown(),

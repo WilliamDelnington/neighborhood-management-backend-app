@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import type { SessionTokenPayload, UploadTokenPayload } from "@/types";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "180d";
 // Rieng cho upload token (xem UploadTokenPayload) - ngan han vi chi dung mot
 // lan cho luong openMediaPicker cua Zalo, khong phai phien dang nhap.
 const UPLOAD_TOKEN_EXPIRES_IN = "10m";

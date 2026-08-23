@@ -3,8 +3,8 @@ import { HOUSE_USAGE_TYPE } from "@/types";
 
 export const createHouseUsageUnitSchema = z
     .object({
-        houseId: z.string().min(1, "Thieu nha so"),
-        unitLabel: z.string().min(1, "Ten don vi khong duoc de trong"),
+        houseId: z.string().min(1, "Thiếu nhà số"),
+        unitLabel: z.string().min(1, "Tên đơn vị không được để trống"),
         usageType: z.enum(HOUSE_USAGE_TYPE),
         householdId: z.string().optional(),
         businessId: z.string().optional(),
@@ -23,7 +23,7 @@ export const createHouseUsageUnitSchema = z
         },
         {
             message:
-                "Phai chon dung mot doi tuong (ho dan/ho kinh doanh/cong ty) khop voi loai don vi",
+                "Phải chọn đúng một đối tượng (hộ dân/hộ kinh doanh/công ty) khớp với loại đơn vị",
         },
     );
 export type CreateHouseUsageUnitInput = z.infer<

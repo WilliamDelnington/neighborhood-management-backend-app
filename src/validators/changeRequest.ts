@@ -20,7 +20,7 @@ export const createChangeRequestSchema = z
                 data.changeType !== "data_discrepancy") ||
             (data.patch && Object.keys(data.patch).length > 0),
         {
-            message: "Vui long nhap it nhat mot truong can thay doi",
+            message: "Vui lòng nhập ít nhất một trường cần thay đổi",
             path: ["patch"],
         },
     )
@@ -31,7 +31,7 @@ export const createChangeRequestSchema = z
                 typeof data.patch?.neighborhoodId === "string" &&
                 data.patch.neighborhoodId.length > 0),
         {
-            message: "Vui long chon to dan pho muon chuyen den",
+            message: "Vui lòng chọn tổ dân phố muốn chuyển đến",
             path: ["patch", "neighborhoodId"],
         },
     );
@@ -43,7 +43,7 @@ export const decideChangeRequestSchema = z
         decisionNote: z.string().optional(),
     })
     .refine(data => data.approve || !!data.decisionNote?.trim(), {
-        message: "Vui long nhap ly do khi tu choi yeu cau",
+        message: "Vui lòng nhập lý do khi từ chối yêu cầu",
         path: ["decisionNote"],
     });
 export type DecideChangeRequestInput = z.infer<typeof decideChangeRequestSchema>;

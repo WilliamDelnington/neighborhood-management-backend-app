@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MUC_NGUY_CO_PCCC, TINH_TRANG_THEO_DOI_PCCC } from "@/types";
 
 export const createPcccCheckSchema = z.object({
-    houseId: z.string().min(1, "Thieu ma nha"),
+    houseId: z.string().min(1, "Thiếu mã nhà"),
     hasFireExtinguisher: z.boolean().default(false),
     hasEmergencyExit: z.boolean().default(false),
     hasIndoorEvCharging: z.boolean().default(false),
@@ -13,7 +13,7 @@ export const createPcccCheckSchema = z.object({
     note: z.string().optional(),
     inspectionDate: z
         .string()
-        .datetime({ message: "Ngay kiem tra khong hop le" }),
+        .datetime({ message: "Ngày kiểm tra không hợp lệ" }),
     inspectorId: z.string().optional(),
     followUpStatus: z.enum(TINH_TRANG_THEO_DOI_PCCC).default("chua_khac_phuc"),
 });

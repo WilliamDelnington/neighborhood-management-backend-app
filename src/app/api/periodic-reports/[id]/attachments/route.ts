@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         if (!(file instanceof File)) throw new HttpError("Thieu file can tai len", 422);
         return apiSuccess(
             await uploadPeriodicReportAttachment(actorUser, params.id, file),
-            "Da tai tep dinh kem",
+            "Đã tải tệp đính kèm",
             201,
         );
     } catch (err) {

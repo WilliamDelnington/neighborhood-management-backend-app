@@ -48,7 +48,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "meetings.create");
         const body = createMeetingSchema.parse(await req.json());
         const meeting = await createMeeting(String(actorUser._id), body);
-        return apiSuccess(meeting, "Tao cuoc hop thanh cong", 201);
+        return apiSuccess(meeting, "Tạo cuộc họp thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -3,16 +3,16 @@ import { LOAI_CAU_HOI_KHAO_SAT } from "@/types";
 
 const surveyQuestionSchema = z.object({
     _id: z.string().optional(),
-    question: z.string().min(1, "Vui long nhap noi dung cau hoi"),
+    question: z.string().min(1, "Vui lòng nhập nội dung câu hỏi"),
     type: z.enum(LOAI_CAU_HOI_KHAO_SAT),
     options: z.array(z.string()).default([]),
     required: z.boolean().default(true),
 });
 
 export const createSurveySchema = z.object({
-    title: z.string().min(3, "Tieu de qua ngan"),
+    title: z.string().min(3, "Tiêu đề quá ngắn"),
     description: z.string().optional(),
-    questions: z.array(surveyQuestionSchema).min(1, "Can it nhat mot cau hoi"),
+    questions: z.array(surveyQuestionSchema).min(1, "Cần ít nhất một câu hỏi"),
     eligibleRoles: z.array(z.string()).optional(),
     eligibleClusters: z.array(z.string()).optional(),
     eligibleStreetIds: z.array(z.string()).optional(),
@@ -22,6 +22,10 @@ export const createSurveySchema = z.object({
     // Nhan xet/tong hop cua nguoi phu trach khao sat sau khi co ket qua (B08.06)
     // - khong bat buoc luc tao, chi dung khi cap nhat.
     resultSummary: z.string().optional(),
+    // Nguoi duoc chu khao sat (nguoi tao) uy quyen cung chinh sua/mo/dong/xoa -
+    // xem surveyService.assertSurveyEditable/assertUsersCanCoEdit. Moi id phai
+    // la tai khoan dang co quyen "surveys.update".
+    coEditorUserIds: z.array(z.string()).optional(),
 });
 export type CreateSurveyInput = z.infer<typeof createSurveySchema>;
 
@@ -37,6 +41,6 @@ const surveyAnswerSchema = z.object({
 export const respondSurveySchema = z.object({
     answers: z
         .array(surveyAnswerSchema)
-        .min(1, "Vui long tra loi it nhat mot cau hoi"),
+        .min(1, "Vui lòng trả lời ít nhất một câu hỏi"),
 });
 export type RespondSurveyInput = z.infer<typeof respondSurveySchema>;

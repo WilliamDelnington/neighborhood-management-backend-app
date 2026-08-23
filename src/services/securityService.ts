@@ -42,7 +42,7 @@ export async function createSecurityRecord(
     const house = await HouseRecord.findById(input.houseId).select(
         "_id code address",
     );
-    if (!house) throw new HttpError("Khong tim thay nha", 404);
+    if (!house) throw new HttpError("Không tìm thấy nhà", 404);
 
     const record = await SecurityRecord.create({
         houseId: input.houseId,
@@ -121,7 +121,7 @@ export async function getSecurityRecordById(id: string) {
         .populate("updatedBy", "displayName")
         .populate("createdBy", "displayName")
         .populate("assigneeId", "displayName");
-    if (!record) throw new HttpError("Khong tim thay ho so an ninh", 404);
+    if (!record) throw new HttpError("Không tìm thấy hồ sơ an ninh", 404);
     return record;
 }
 
@@ -150,7 +150,7 @@ export function assertSecurityRecordInScope(
             house && typeof house === "object" ? house.neighborhoodId : undefined;
         if (!neighborhoodId || !ids.includes(String(neighborhoodId))) {
             throw new HttpError(
-                "Ban khong co quyen thao tac voi ho so ngoai to dan pho duoc phan cong",
+                "Bạn không có quyền thao tác với hồ sơ ngoài tổ dân phố được phân công",
                 403,
             );
         }
@@ -161,7 +161,7 @@ export function assertSecurityRecordInScope(
     const cluster = house && typeof house === "object" ? house.cluster : undefined;
     if (cluster && !user.assignedClusters.includes(cluster)) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi ho so ngoai cum duoc phan cong",
+            "Bạn không có quyền thao tác với hồ sơ ngoài cụm được phân công",
             403,
         );
     }
@@ -173,13 +173,13 @@ export async function updateSecurityRecord(
     patch: UpdateSecurityRecordInput,
 ) {
     const record = await SecurityRecord.findById(id);
-    if (!record) throw new HttpError("Khong tim thay ho so an ninh", 404);
+    if (!record) throw new HttpError("Không tìm thấy hồ sơ an ninh", 404);
 
     const previousLevel = record.level;
 
     if (patch.houseId !== undefined) {
         const house = await HouseRecord.findById(patch.houseId).select("_id");
-        if (!house) throw new HttpError("Khong tim thay nha", 404);
+        if (!house) throw new HttpError("Không tìm thấy nhà", 404);
         record.houseId = patch.houseId as unknown as typeof record.houseId;
     }
 
@@ -218,7 +218,7 @@ export async function updateSecurityRecord(
 
 export async function deleteSecurityRecord(actorId: string, id: string) {
     const record = await SecurityRecord.findByIdAndDelete(id);
-    if (!record) throw new HttpError("Khong tim thay ho so an ninh", 404);
+    if (!record) throw new HttpError("Không tìm thấy hồ sơ an ninh", 404);
 
     await writeAuditLog({
         actorId,

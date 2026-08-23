@@ -64,7 +64,7 @@ export async function markAsRead(userId: string, deliveryId: string) {
     );
     if (!delivery) {
         throw new HttpError(
-            "Khong tim thay thong bao hoac ban khong co quyen truy cap",
+            "Không tìm thấy thông báo hoặc bạn không có quyền truy cập",
             404,
         );
     }

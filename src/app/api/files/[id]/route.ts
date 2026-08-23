@@ -57,7 +57,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(fileAsset, "Cap nhat file thanh cong");
+        return apiSuccess(fileAsset, "Cập nhật file thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -72,7 +72,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "files.delete");
         await deleteFileAsset(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa file thanh cong");
+        return apiSuccess(null, "Xóa file thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

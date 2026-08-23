@@ -35,6 +35,28 @@ export {
     default as BusinessDocument,
     type IBusinessDocument,
 } from "./BusinessDocument";
+export {
+    type IRequiredDocumentRule,
+    RequiredDocumentRuleSchema,
+} from "./RequiredDocumentRule";
+export {
+    default as RequiredDocumentSettings,
+    type IRequiredDocumentSettings,
+    type RequiredDocumentSettingsCategory,
+    REQUIRED_DOCUMENT_SETTINGS_CATEGORIES,
+} from "./RequiredDocumentSettings";
+export {
+    default as HouseDocument,
+    type IHouseDocument,
+} from "./HouseDocument";
+export {
+    default as HouseholdDocument,
+    type IHouseholdDocument,
+} from "./HouseholdDocument";
+export {
+    default as CompanyDocument,
+    type ICompanyDocument,
+} from "./CompanyDocument";
 export { default as Citizen, type ICitizen } from "./Citizen";
 export { default as Complaint, type IComplaint } from "./Complaint";
 export {
@@ -44,10 +66,15 @@ export {
     COMPLAINT_TIMELINE_ACTIONS,
 } from "./ComplaintTimeline";
 export {
+    default as ComplaintTypeDefinition,
+    type IComplaintTypeDefinition,
+} from "./ComplaintTypeDefinition";
+export {
     default as SupportTicket,
     type ISupportTicket,
 } from "./SupportTicket";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
+export { default as News, type INews } from "./News";
 export {
     default as CorrespondenceType,
     type ICorrespondenceType,
@@ -188,3 +215,27 @@ export {
     CHANGE_REQUEST_TYPES,
     CHANGE_REQUEST_STATUS,
 } from "./ChangeRequest";
+export { default as UtilityApp, type IUtilityApp } from "./UtilityApp";
+export {
+    default as AppointmentService,
+    type IAppointmentService,
+    type IAppointmentTimeSlot,
+    type AppointmentServiceScope,
+    APPOINTMENT_SERVICE_SCOPES,
+} from "./AppointmentService";
+export {
+    default as Appointment,
+    type IAppointment,
+    type AppointmentStatus,
+    APPOINTMENT_STATUSES,
+} from "./Appointment";
+export {
+    default as AppointmentSlotCounter,
+    type IAppointmentSlotCounter,
+} from "./AppointmentSlotCounter";
+export {
+    default as AppointmentHoliday,
+    type IAppointmentHoliday,
+    type AppointmentHolidayType,
+    APPOINTMENT_HOLIDAY_TYPES,
+} from "./AppointmentHoliday";

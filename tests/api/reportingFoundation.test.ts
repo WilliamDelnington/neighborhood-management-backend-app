@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    FileAsset,
     KpiDefinition,
     Neighborhood,
     PeriodicReportVersion,
@@ -63,6 +64,19 @@ describe("B12/A14/A15 reporting foundation", () => {
             neighborhoodId: String(neighborhood._id),
             submittedToUserId: String(receiver._id),
             sections: { generalSituation: "Phiên bản một" },
+        });
+        // Bao cao dinh ky bat buoc phai co it nhat mot tep dinh kem truoc khi
+        // nop (xem submitPeriodicReport) - tao truoc mot FileAsset gia lap.
+        await FileAsset.create({
+            name: "bao-cao.pdf",
+            url: "/uploads/periodic-reports/bao-cao.pdf",
+            category: "attachment",
+            relatedModel: "PeriodicReport",
+            relatedId: report._id,
+            isPublic: false,
+            audienceAll: false,
+            targetRoles: [],
+            uploadedBy: leader._id,
         });
         const firstSubmit = await submitPeriodicReport(leader, String(report._id));
         expect(firstSubmit.status).toBe("submitted");

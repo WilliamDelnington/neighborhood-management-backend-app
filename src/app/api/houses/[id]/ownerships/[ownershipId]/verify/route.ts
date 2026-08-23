@@ -37,7 +37,7 @@ export async function POST(
             body.decision,
             body.note,
         );
-        return apiSuccess(ownership, "Da cap nhat trang thai xac thuc");
+        return apiSuccess(ownership, "Đã cập nhật trạng thái xác thực");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -22,7 +22,7 @@ export async function POST(
         );
         return apiSuccess(
             changeRequest,
-            body.approve ? "Da duyet yeu cau" : "Da tu choi yeu cau",
+            body.approve ? "Đã duyệt yêu cầu" : "Đã từ chối yêu cầu",
         );
     } catch (err) {
         return apiErrorFromException(err);

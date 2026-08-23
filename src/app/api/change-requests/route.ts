@@ -56,7 +56,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "change_requests.create");
         const body = createChangeRequestSchema.parse(await req.json());
         const changeRequest = await createChangeRequest(actorUser, body);
-        return apiSuccess(changeRequest, "Gui yeu cau thanh cong", 201);
+        return apiSuccess(changeRequest, "Gửi yêu cầu thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

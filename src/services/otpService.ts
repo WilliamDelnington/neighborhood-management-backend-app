@@ -13,7 +13,10 @@ import { sanitizeUserWithPermissions } from "@/services/authService";
 import { sendEsmsSms } from "@/lib/esms";
 import { sendEsmsZns } from "@/lib/esmsZns";
 
-const OTP_TTL_MS = 5 * 60 * 1000;
+// 12 phut - du thoi gian cho nguoi dung nhan va nhap ma trong cac thao tac
+// mat nhieu thoi gian (vd doi tin nhan SMS/ZNS bi cham), truoc day 5 phut
+// qua ngan gay het han ma OTP khi nguoi dung con dang thao tac.
+const OTP_TTL_MS = 12 * 60 * 1000;
 const OTP_CODE_LENGTH = 6;
 
 function generateOtpCode(): string {
@@ -142,11 +145,11 @@ export async function verifyOtpAndAuthenticate(
     }).sort({ createdAt: -1 });
 
     if (!challenge) {
-        throw new HttpError("Ma OTP khong hop le hoac da het han", 401);
+        throw new HttpError("Mã OTP không hợp lệ hoặc đã hết hạn", 401);
     }
     if (challenge.attempts >= challenge.maxAttempts) {
         throw new HttpError(
-            "Ban da nhap sai qua nhieu lan, vui long yeu cau ma moi",
+            "Bạn đã nhập sai quá nhiều lần, vui lòng yêu cầu mã mới",
             429,
         );
     }
@@ -155,7 +158,7 @@ export async function verifyOtpAndAuthenticate(
     if (!matches) {
         challenge.attempts += 1;
         await challenge.save();
-        throw new HttpError("Ma OTP khong dung", 401);
+        throw new HttpError("Mã OTP không đúng", 401);
     }
 
     challenge.consumedAt = new Date();
@@ -165,16 +168,16 @@ export async function verifyOtpAndAuthenticate(
     let user: IUser | null;
     if (purpose === "login") {
         user = await User.findOne({ phone: normalized });
-        if (!user) throw new HttpError("Khong tim thay tai khoan", 401);
+        if (!user) throw new HttpError("Không tìm thấy tài khoản", 401);
         if (user.status === "locked") {
-            throw new HttpError("Tai khoan da bi khoa", 401);
+            throw new HttpError("Tài khoản đã bị khóa", 401);
         }
         user.lastLoginAt = new Date();
         await user.save();
     } else {
         const existingUser = await User.findOne({ phone: normalized });
         if (existingUser) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         user = await User.create({
             phone: normalized,

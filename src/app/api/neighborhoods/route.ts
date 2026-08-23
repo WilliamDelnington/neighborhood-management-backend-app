@@ -54,7 +54,7 @@ export async function POST(req: Request) {
             throw new HttpError("Ban chi duoc tao To trong Phuong/Xa duoc phan cong", 403);
         }
         const neighborhood = await createNeighborhood(String(user._id), body);
-        return apiSuccess(neighborhood, "Tao to dan pho thanh cong", 201);
+        return apiSuccess(neighborhood, "Tạo tổ dân phố thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

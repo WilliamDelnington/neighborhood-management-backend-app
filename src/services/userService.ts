@@ -166,14 +166,14 @@ export async function createHouseOwnerByStaff(
     const role = input.role || "house_owner";
     if (role !== "house_owner" && !actorUser.roles.includes("admin")) {
         throw new HttpError(
-            "Chi quan tri vien moi duoc tao tai khoan voi vai tro nay",
+            "Chỉ quản trị viên mới được tạo tài khoản với vai trò này",
             403,
         );
     }
 
     const existing = await User.findOne({ phone: input.phone });
     if (existing) {
-        throw new HttpError("So dien thoai da duoc su dung", 409);
+        throw new HttpError("Số điện thoại đã được sử dụng", 409);
     }
 
     const passwordHash = input.password
@@ -186,6 +186,7 @@ export async function createHouseOwnerByStaff(
             phone: input.phone,
             displayName: input.displayName,
             address: input.address,
+            idNumber: input.idNumber,
             passwordHash,
             roles: [role],
             primaryRole: role,
@@ -194,7 +195,7 @@ export async function createHouseOwnerByStaff(
         });
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }
@@ -218,7 +219,7 @@ export async function createHouseOwnerByStaff(
  */
 export async function getUserById(actorUser: IUser, id: string) {
     const user = await User.findById(id);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
     if (!actorUser.roles.includes("admin")) {
         await assertUserInLeaderScope(actorUser, user);
     }
@@ -268,7 +269,7 @@ export async function lockUserStatus(
     input: LockUserStatusInput,
 ) {
     const target = await User.findById(targetId);
-    if (!target) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!target) throw new HttpError("Không tìm thấy người dùng", 404);
 
     if (!actorUser.roles.includes("admin")) {
         await assertUserInLeaderScope(actorUser, target);
@@ -299,7 +300,7 @@ export async function updateUserByAdmin(
     patch: UpdateUserInput,
 ) {
     const user = await User.findById(targetId);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
 
     if (
         patch.wardCode != null &&
@@ -307,7 +308,7 @@ export async function updateUserByAdmin(
         !user.roles.includes("people_committee_official")
     ) {
         throw new HttpError(
-            "Chi co the gan phuong/xa cho Bi thu hoac Can bo UBND",
+            "Chỉ có thể gán phường/xã cho Bí thư hoặc Cán bộ UBND",
             422,
         );
     }
@@ -335,7 +336,7 @@ export async function updateUserByAdmin(
     if (patch.primaryRole !== undefined) {
         if (!user.roles.includes(patch.primaryRole)) {
             throw new HttpError(
-                "Vai tro chinh phai la mot trong cac vai tro hien co cua nguoi dung",
+                "Vai trò chính phải là một trong các vai trò hiện có của người dùng",
                 422,
             );
         }
@@ -351,7 +352,7 @@ export async function updateUserByAdmin(
         await user.save();
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }
@@ -369,13 +370,13 @@ export async function updateUserByAdmin(
 
 export async function assignRole(actorId: string, input: AssignRoleInput) {
     const user = await User.findById(input.userId);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
 
     // Truoc day enum Mongoose tren User.roles dam bao role hop le - gio vai tro
     // la du lieu dong nen phai kiem tra ton tai + active tai day.
     const role = await RoleModel.findOne({ key: input.role });
     if (!role || !role.active) {
-        throw new HttpError("Vai tro khong ton tai hoac da bi vo hieu hoa", 422);
+        throw new HttpError("Vai trò không tồn tại hoặc đã bị vô hiệu hóa", 422);
     }
 
     if (!user.roles.includes(input.role)) {
@@ -409,7 +410,7 @@ export async function revokeRole(
     role: RoleType,
 ) {
     const user = await User.findById(userId);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
 
     user.roles = user.roles.filter(r => r !== role);
     if (user.roles.length === 0) user.roles = ["house_owner"];

@@ -29,7 +29,7 @@ export async function PUT(
             body.rejectionReason,
             body.approvalNote,
         );
-        return apiSuccess(businessDocument, "Cap nhat ket qua duyet thanh cong");
+        return apiSuccess(businessDocument, "Cập nhật kết quả duyệt thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

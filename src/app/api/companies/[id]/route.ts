@@ -37,7 +37,7 @@ export async function PATCH(
 
         const body = updateCompanySchema.parse(await req.json());
         const company = await updateCompany(user, params.id, body);
-        return apiSuccess(company, "Cap nhat cong ty thanh cong");
+        return apiSuccess(company, "Cập nhật công ty thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -53,7 +53,7 @@ export async function DELETE(
         await requirePermission(user, "companies.delete");
 
         await deleteCompany(user, params.id);
-        return apiSuccess(null, "Xoa cong ty thanh cong");
+        return apiSuccess(null, "Xóa công ty thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

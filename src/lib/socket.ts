@@ -32,7 +32,7 @@ async function authenticateSocket(socket: Socket): Promise<string> {
     await connectDB();
     const user = await UserModel.findById(session.userId);
     if (!user || user.status === "locked") {
-        throw new Error("Tai khoan khong hop le hoac da bi khoa");
+        throw new Error("Tài khoản không hợp lệ hoặc đã bị khóa");
     }
     if (user.sessionVersion !== session.sv) {
         throw new Error("Phien dang nhap da het hieu luc");

@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "residents.create");
         const body = createResidentRecordSchema.parse(await req.json());
         const record = await createResidentRecord(actorUser, body);
-        return apiSuccess(record, "Tao ho so cu tru thanh cong", 201);
+        return apiSuccess(record, "Tạo hồ sơ cư trú thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

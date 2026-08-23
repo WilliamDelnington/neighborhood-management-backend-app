@@ -15,24 +15,24 @@ export const addHouseOwnershipSchema = z
         ownerId: z.string().min(1).optional(),
         phone: z
             .string()
-            .refine(isValidVnPhone, "So dien thoai khong hop le")
+            .refine(isValidVnPhone, "Số điện thoại không hợp lệ")
             .optional(),
         // Chi dung khi tao tai khoan moi (phone chua co tai khoan) - bo qua
         // neu phone da co tai khoan san.
         displayName: z.string().min(1).optional(),
         password: z
             .string()
-            .min(6, "Mat khau phai co it nhat 6 ky tu")
+            .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
             .optional(),
         relationshipType: z.enum(HOUSE_OWNERSHIP_RELATIONSHIP_TYPES),
         reason: z.string().optional(),
     })
     .refine(data => !!data.ownerId || (data.ownerType === "user" && !!data.phone), {
-        message: "Thieu id chu so huu/to chuc (hoac so dien thoai voi ca nhan)",
+        message: "Thiếu id chủ sở hữu/tổ chức (hoặc số điện thoại với cá nhân)",
         path: ["ownerId"],
     })
     .refine(data => !data.password || !!data.displayName?.trim(), {
-        message: "Vui long nhap ten khi tao tai khoan moi",
+        message: "Vui lòng nhập tên khi tạo tài khoản mới",
         path: ["displayName"],
     });
 export type AddHouseOwnershipInput = z.infer<typeof addHouseOwnershipSchema>;
@@ -50,7 +50,7 @@ export const verifyHouseOwnershipSchema = z
         note: z.string().optional(),
     })
     .refine(data => data.decision === "verified" || !!data.note?.trim(), {
-        message: "Vui long nhap ly do khi tu choi",
+        message: "Vui lòng nhập lý do khi từ chối",
         path: ["note"],
     });
 export type VerifyHouseOwnershipInput = z.infer<

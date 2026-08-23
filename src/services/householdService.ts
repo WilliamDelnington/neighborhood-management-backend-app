@@ -59,16 +59,16 @@ function assertClusterAssignable(actorUser: IUser, cluster: string): void {
  */
 async function validateHeadOfHouseholdUser(userId: string): Promise<IUser> {
     const user = await User.findById(userId);
-    if (!user) throw new HttpError("Khong tim thay nguoi dung", 404);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
     if (user.status !== "active") {
         throw new HttpError(
-            "Chi co the gan tai khoan dang hoat dong lam chu ho",
+            "Chỉ có thể gán tài khoản đang hoạt động làm chủ hộ",
             422,
         );
     }
     if (!user.roles.includes("house_owner")) {
         throw new HttpError(
-            "Nguoi dung duoc chon phai co vai tro Chu so huu",
+            "Người dùng được chọn phải có vai trò Chủ sở hữu",
             422,
         );
     }
@@ -89,7 +89,7 @@ async function loadAccessibleHouseRecord(
 ) {
     if (!houseId) return null;
     const houseRecord = await HouseRecord.findById(houseId);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
     return houseRecord;
 }
@@ -156,8 +156,9 @@ export async function createHousehold(
             : input.headOfHousehold,
         headOfHouseholdUserId: headOfHouseholdUser?._id,
         phone: input.phone,
-        // memberCount KHONG duoc gan tu input - luon bat dau tu 0 (mac dinh
-        // schema) va chi duoc +1/-1 boi citizenService khi Citizen duoc them/
+        // memberCount KHONG duoc gan tu input - bat dau tu 0 (mac dinh schema),
+        // duoc dat lai thanh 1 ben duoi sau khi tu dong tao Citizen "Chủ hộ",
+        // va tu do chi duoc +1/-1 boi citizenService khi Citizen duoc them/
         // xoa/chuyen ho dan.
         ownershipType: input.ownershipType ?? "chinh_chu",
         needsSupport: input.needsSupport ?? false,
@@ -178,6 +179,41 @@ export async function createHousehold(
         await household.populate("headOfHouseholdUserId", "displayName phone");
     }
 
+    // headOfHousehold chi la text luu tren Household, tu no khong tao ra nhan
+    // khau nao - neu khong tu dong them, chu ho se khong xuat hien trong danh
+    // sach nhan khau cua ho dan (GET /households/:id/citizens chi doc tu
+    // Citizen). Tao mot Citizen toi thieu ("Chủ hộ") ngay khi tao ho dan de
+    // dong bo hai danh sach nay. Neu nguoi lien he (input.phone) khong phai
+    // chinh chu ho (contactIsHead=false), gan phone nay cho mot Citizen
+    // "Người liên hệ" rieng (input.contactName) thay vi gan nham cho chu ho.
+    const isContactHead = input.contactIsHead;
+    const headCitizen = await Citizen.create({
+        fullName: household.headOfHousehold,
+        phone: isContactHead ? input.phone : undefined,
+        relationToHead: "Chủ hộ",
+        householdId: household._id,
+        createdBy: actorUser._id,
+        updatedBy: actorUser._id,
+    });
+    const contactCitizen = isContactHead
+        ? null
+        : await Citizen.create({
+              fullName: input.contactName!.trim(),
+              phone: input.phone,
+              relationToHead: "Người liên hệ",
+              householdId: household._id,
+              createdBy: actorUser._id,
+              updatedBy: actorUser._id,
+          });
+    const createdCitizens = [headCitizen, contactCitizen].filter(
+        (c): c is NonNullable<typeof c> => c !== null,
+    );
+    household.memberCount = createdCitizens.length;
+    await Household.updateOne(
+        { _id: household._id },
+        { memberCount: createdCitizens.length },
+    );
+
     await writeAuditLog({
         actorId: String(actorUser._id),
         action: "household.create",
@@ -185,6 +221,17 @@ export async function createHousehold(
         targetId: household._id,
         metadata: { code: household.code },
     });
+    await Promise.all(
+        createdCitizens.map(citizen =>
+            writeAuditLog({
+                actorId: String(actorUser._id),
+                action: "citizen.create",
+                targetModel: "Citizen",
+                targetId: citizen._id,
+                metadata: { householdId: String(household._id) },
+            }),
+        ),
+    );
 
     return household;
 }
@@ -240,7 +287,7 @@ export async function listHouseholds(params: {
             allowedClusters?.length &&
             !allowedClusters.includes(targetCluster)
         ) {
-            throw new HttpError("Ban khong co quyen xem cum dan cu nay", 403);
+            throw new HttpError("Bạn không có quyền xem cụm dân cư này", 403);
         }
         if (params.streetId) {
             filter.streetId = params.streetId;
@@ -325,7 +372,7 @@ export async function getHouseholdById(id: string): Promise<IHousehold> {
         "headOfHouseholdUserId",
         "displayName phone",
     );
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
     return household;
 }
 
@@ -365,7 +412,7 @@ export async function assertHouseholdInScope(
             .map(String);
         if (!household.neighborhoodId || !ids.includes(String(household.neighborhoodId))) {
             throw new HttpError(
-                "Ban khong co quyen thao tac voi ho dan ngoai to dan pho duoc phan cong",
+                "Bạn không có quyền thao tác với hộ dân ngoài tổ dân phố được phân công",
                 403,
             );
         }
@@ -377,7 +424,7 @@ export async function assertHouseholdInScope(
         !user.assignedClusters.includes(household.cluster)
     ) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi ho dan ngoai cum duoc phan cong",
+            "Bạn không có quyền thao tác với hộ dân ngoài cụm được phân công",
             403,
         );
     }
@@ -401,7 +448,8 @@ export async function updateHousehold(
     patch: UpdateHouseholdInput,
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
+    const previousHeadOfHousehold = household.headOfHousehold;
 
     assertVerificationEditable(actorUser, household.status, "Hộ dân");
 
@@ -485,6 +533,17 @@ export async function updateHousehold(
         await household.populate("headOfHouseholdUserId", "displayName phone");
     }
 
+    // Giu Citizen "Chủ hộ" (tu dong tao luc createHousehold - xem o tren) dong
+    // bo ten voi headOfHousehold moi, neu ten nay thay doi. Bo qua neu khong
+    // tim thay (vd ho dan cu tu truoc khi co doan tu dong tao nay, hoac nhan
+    // vien da doi relationToHead cua nhan khau do sang gia tri khac).
+    if (household.headOfHousehold !== previousHeadOfHousehold) {
+        await Citizen.updateMany(
+            { householdId: household._id, relationToHead: "Chủ hộ" },
+            { fullName: household.headOfHousehold, updatedBy: actorUser._id },
+        );
+    }
+
     await writeAuditLog({
         actorId: String(actorUser._id),
         action: "household.update",
@@ -515,7 +574,7 @@ export async function transitionHouseholdStatus(
     note?: string,
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
 
     const isAdmin = actorUser.roles.includes("admin");
     const isOwner =
@@ -606,14 +665,14 @@ export async function deleteHousehold(
     id: string,
 ): Promise<IHousehold> {
     const household = await Household.findById(id);
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
 
     const linkedCitizenCount = await Citizen.countDocuments({
         householdId: id,
     });
     if (linkedCitizenCount > 0) {
         throw new HttpError(
-            "Khong the xoa ho dan vi van con nhan khau lien ket, vui long chuyen hoac xoa nhan khau truoc",
+            "Không thể xóa hộ dân vì vẫn còn nhân khẩu liên kết, vui lòng chuyển hoặc xóa nhân khẩu trước",
             409,
         );
     }

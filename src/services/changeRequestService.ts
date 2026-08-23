@@ -36,7 +36,7 @@ async function assertCanRequestChange(
     if (targetModel === "User") {
         if (targetId !== String(actorUser._id)) {
             throw new HttpError(
-                "Ban chi co the de nghi thay doi thong tin cua chinh minh",
+                "Bạn chỉ có thể đề nghị thay đổi thông tin của chính mình",
                 403,
             );
         }
@@ -46,21 +46,21 @@ async function assertCanRequestChange(
         const houseRecord = await HouseRecord.findById(targetId).select(
             "_id neighborhoodId",
         );
-        if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+        if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
         await assertHouseRecordInScope(actorUser, houseRecord);
         return;
     }
     // HouseOwnership: chi chinh nguoi dung sau quan he so huu do moi duoc de
     // nghi ket thuc no (khong phai bat ky chu so huu nao khac cua cung nha).
     const ownership = await HouseOwnership.findById(targetId);
-    if (!ownership) throw new HttpError("Khong tim thay quan he so huu", 404);
+    if (!ownership) throw new HttpError("Không tìm thấy quan hệ sở hữu", 404);
     const actingUserIds = await resolveActingUserIds(
         ownership.ownerType,
         ownership.ownerId,
     );
     if (!actingUserIds.some(id => String(id) === String(actorUser._id))) {
         throw new HttpError(
-            "Ban khong co quyen de nghi doi voi quan he so huu nay",
+            "Bạn không có quyền đề nghị đối với quan hệ sở hữu này",
             403,
         );
     }
@@ -98,7 +98,7 @@ export async function createChangeRequest(
         );
         if (invalidKeys.length > 0) {
             throw new HttpError(
-                `Khong the de nghi thay doi truong: ${invalidKeys.join(", ")}`,
+                `Không thể đề nghị thay đổi trường: ${invalidKeys.join(", ")}`,
                 400,
             );
         }
@@ -112,7 +112,7 @@ export async function createChangeRequest(
         const newNeighborhoodId = String(input.patch?.neighborhoodId);
         const newNeighborhood = await Neighborhood.findById(newNeighborhoodId);
         if (!newNeighborhood) {
-            throw new HttpError("Khong tim thay to dan pho muon chuyen den", 404);
+            throw new HttpError("Không tìm thấy tổ dân phố muốn chuyển đến", 404);
         }
         const houseRecord = await HouseRecord.findById(input.targetId).select(
             "neighborhoodId",
@@ -122,7 +122,7 @@ export async function createChangeRequest(
             String(houseRecord.neighborhoodId) === newNeighborhoodId
         ) {
             throw new HttpError(
-                "Nha so nay da thuoc to dan pho duoc chon",
+                "Nhà số này đã thuộc tổ dân phố được chọn",
                 400,
             );
         }
@@ -137,7 +137,7 @@ export async function createChangeRequest(
         );
         if (invalidKeys.length > 0) {
             throw new HttpError(
-                `Khong the de nghi thay doi truong: ${invalidKeys.join(", ")}`,
+                `Không thể đề nghị thay đổi trường: ${invalidKeys.join(", ")}`,
                 400,
             );
         }
@@ -223,21 +223,21 @@ export async function getChangeRequestById(id: string) {
     const changeRequest = await ChangeRequest.findById(id)
         .populate("requestedBy", "displayName phone")
         .populate("decidedBy", "displayName");
-    if (!changeRequest) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!changeRequest) throw new HttpError("Không tìm thấy yêu cầu", 404);
     return changeRequest;
 }
 
 function assertPending(changeRequest: IChangeRequest): void {
     if (changeRequest.status !== "pending") {
-        throw new HttpError("Yeu cau nay da duoc xu ly truoc do", 400);
+        throw new HttpError("Yêu cầu này đã được xử lý trước đó", 400);
     }
 }
 
 export async function cancelChangeRequest(actorUser: IUser, id: string) {
     const changeRequest = await ChangeRequest.findById(id);
-    if (!changeRequest) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!changeRequest) throw new HttpError("Không tìm thấy yêu cầu", 404);
     if (String(changeRequest.requestedBy) !== String(actorUser._id)) {
-        throw new HttpError("Ban khong co quyen huy yeu cau nay", 403);
+        throw new HttpError("Bạn không có quyền hủy yêu cầu này", 403);
     }
     assertPending(changeRequest);
     changeRequest.status = "cancelled";
@@ -254,7 +254,7 @@ async function applyApprovedChange(
         // truyen them cho endHouseOwnership (xem chu ky ham) - lay tu chinh
         // ban ghi HouseOwnership.
         const ownership = await HouseOwnership.findById(changeRequest.targetId);
-        if (!ownership) throw new HttpError("Khong tim thay quan he so huu", 404);
+        if (!ownership) throw new HttpError("Không tìm thấy quan hệ sở hữu", 404);
         await endHouseOwnership(
             actorUser,
             String(ownership.houseId),
@@ -312,7 +312,7 @@ async function assertCanDecideTransfer(
     }
 
     throw new HttpError(
-        "Chi can bo UBND, bi thu, hoac To truong/To pho cua to dan pho se nhan moi duoc quyet dinh yeu cau chuyen to",
+        "Chỉ cán bộ UBND, bí thư, hoặc Tổ trưởng/Tổ phó của tổ dân phố sẽ nhận mới được quyết định yêu cầu chuyển tổ",
         403,
     );
 }
@@ -332,7 +332,7 @@ async function assertCanDecideDiscrepancyStage(
 
     if (changeRequest.reviewStage === "ward_review") {
         throw new HttpError(
-            "Chi can bo UBND moi duoc xac nhan buoc cuoi cua yeu cau doi soat du lieu",
+            "Chỉ cán bộ UBND mới được xác nhận bước cuối của yêu cầu đối soát dữ liệu",
             403,
         );
     }
@@ -358,7 +358,7 @@ async function assertCanDecideDiscrepancyStage(
     }
 
     throw new HttpError(
-        "Chi can bo UBND hoac To truong/To pho cua to dan pho phu trach nha so nay moi duoc xac nhan",
+        "Chỉ cán bộ UBND hoặc Tổ trưởng/Tổ phó của tổ dân phố phụ trách nhà số này mới được xác nhận",
         403,
     );
 }
@@ -369,7 +369,7 @@ export async function decideChangeRequest(
     input: { approve: boolean; decisionNote?: string },
 ) {
     const changeRequest = await ChangeRequest.findById(id);
-    if (!changeRequest) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!changeRequest) throw new HttpError("Không tìm thấy yêu cầu", 404);
     assertPending(changeRequest);
     if (changeRequest.changeType === "transfer_neighborhood") {
         await assertCanDecideTransfer(actorUser, changeRequest);

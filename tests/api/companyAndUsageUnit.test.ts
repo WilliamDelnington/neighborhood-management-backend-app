@@ -69,6 +69,7 @@ async function createHouseholdFor(
                 cluster,
                 address: `Số 1, ${cluster}`,
                 headOfHousehold: "Nguyễn Văn A",
+                phone: "0912345678",
                 houseId,
             },
         }),

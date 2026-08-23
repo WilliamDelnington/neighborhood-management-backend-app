@@ -27,7 +27,7 @@ export async function PUT(
             body.note,
             { termId: body.termId, endAt: body.endAt },
         );
-        return apiSuccess(neighborhood, "Cap nhat to truong thanh cong");
+        return apiSuccess(neighborhood, "Cập nhật tổ trưởng thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

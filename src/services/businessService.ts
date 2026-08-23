@@ -35,7 +35,7 @@ async function assertBusinessTypeExists(businessType?: string | null): Promise<v
     if (!businessType) return;
     const exists = await BusinessType.exists({ _id: businessType });
     if (!exists) {
-        throw new HttpError("Khong tim thay loai hinh kinh doanh", 404);
+        throw new HttpError("Không tìm thấy loại hình kinh doanh", 404);
     }
 }
 
@@ -44,7 +44,7 @@ export async function createBusiness(
     input: CreateBusinessInput,
 ): Promise<IBusiness> {
     const houseRecord = await HouseRecord.findById(input.houseId);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
     // Chi chan khai bao ho kinh doanh khi ho so nha da bi tu choi hoac bi khoa -
     // giong dieu kien ap dung cho Household (xem householdService.createHousehold).
@@ -60,6 +60,7 @@ export async function createBusiness(
         neighborhoodId: houseRecord.neighborhoodId,
         businessType: input.businessType || undefined,
         ownerName: input.ownerName,
+        taxCode: input.taxCode,
         representativeUserId: input.representativeUserId || undefined,
         phone: input.phone,
         active: input.active ?? true,
@@ -100,14 +101,19 @@ export async function listBusinesses(params: {
     limit?: number;
     search?: string;
     status?: VerificationStatus;
+    businessType?: string;
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
     const filter: Record<string, unknown> = {};
 
     if (params.status) {
         filter.status = params.status;
+    }
+
+    if (params.businessType) {
+        filter.businessType = params.businessType;
     }
 
     if (params.houseId) {
@@ -163,7 +169,7 @@ export async function getBusinessById(id: string): Promise<IBusiness> {
         // chuc, khong phai id user, frontend phai tu goi fetchOrganizationById
         // de biet nguoi dai dien (xem HouseDetailPage.tsx cung lam vay).
         .populate("houseId", "code address cluster ownerId ownerType status");
-    if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
     return business;
 }
 
@@ -173,7 +179,7 @@ export async function updateBusiness(
     patch: UpdateBusinessInput,
 ): Promise<IBusiness> {
     const business = await Business.findById(id);
-    if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
 
     const houseRecord = await HouseRecord.findById(business.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
@@ -224,7 +230,7 @@ export async function transitionBusinessStatus(
     targetStatus: VerificationStatus,
 ): Promise<IBusiness> {
     const business = await Business.findById(id);
-    if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
 
     const isAdmin = actorUser.roles.includes("admin");
     if (!isAdmin) {
@@ -281,7 +287,7 @@ export async function deleteBusiness(
     id: string,
 ): Promise<IBusiness> {
     const business = await Business.findById(id);
-    if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
 
     const houseRecord = await HouseRecord.findById(business.houseId);
     if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);

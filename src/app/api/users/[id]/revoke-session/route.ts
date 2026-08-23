@@ -21,7 +21,7 @@ export async function POST(
             targetModel: "User",
             targetId: params.id,
         });
-        return apiSuccess(null, "Da thu hoi phien dang nhap");
+        return apiSuccess(null, "Đã thu hồi phiên đăng nhập");
     } catch (err) {
         return apiErrorFromException(err);
     }

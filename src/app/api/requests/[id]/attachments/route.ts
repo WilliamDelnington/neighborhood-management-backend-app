@@ -42,7 +42,7 @@ export async function POST(
             params.id,
             file,
         );
-        return apiSuccess(fileAsset, "Tai len file dinh kem thanh cong", 201);
+        return apiSuccess(fileAsset, "Tải lên file đính kèm thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

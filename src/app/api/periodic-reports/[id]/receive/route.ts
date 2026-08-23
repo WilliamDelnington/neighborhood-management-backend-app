@@ -10,7 +10,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "reports.receive");
-        return apiSuccess(await receivePeriodicReport(actorUser, params.id), "Da tiep nhan bao cao");
+        return apiSuccess(await receivePeriodicReport(actorUser, params.id), "Đã tiếp nhận báo cáo");
     } catch (err) {
         return apiErrorFromException(err);
     }

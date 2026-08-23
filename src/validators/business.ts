@@ -2,11 +2,14 @@ import { z } from "zod";
 import { VERIFICATION_STATUS } from "@/types";
 
 export const createBusinessSchema = z.object({
-    name: z.string().min(1, "Ten ho kinh doanh khong duoc de trong"),
-    houseId: z.string().min(1, "Thieu nha so"),
+    name: z.string().min(1, "Tên hộ kinh doanh không được để trống"),
+    houseId: z.string().min(1, "Thiếu nhà số"),
     // null = khong gan loai hinh kinh doanh, undefined = khong doi.
     businessType: z.string().nullable().optional(),
     ownerName: z.string().optional(),
+    // Khong bat buoc - khong phai ho kinh doanh nao cung da dang ky ma so
+    // thue (xem models/Business.ts).
+    taxCode: z.string().trim().min(1).optional(),
     representativeUserId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),

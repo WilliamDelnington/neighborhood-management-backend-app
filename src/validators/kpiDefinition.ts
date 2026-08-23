@@ -12,7 +12,7 @@ export const createKpiDefinitionSchema = z.object({
         .trim()
         .min(2)
         .max(80)
-        .regex(/^[a-z][a-z0-9_]*$/, "Ma KPI chi gom chu thuong, so va dau gach duoi"),
+        .regex(/^[a-z][a-z0-9_]*$/, "Mã KPI chỉ gồm chữ thường, số và dấu gạch dưới"),
     name: z.string().trim().min(2).max(200),
     description: z.string().trim().max(2_000).optional(),
     formulaType: z.enum(KPI_FORMULA_TYPES),

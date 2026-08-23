@@ -23,7 +23,7 @@ export async function PATCH(
 
         const body = lockUserStatusSchema.parse(await req.json());
         const user = await lockUserStatus(actorUser, params.id, body);
-        return apiSuccess(user, "Cap nhat trang thai tai khoan thanh cong");
+        return apiSuccess(user, "Cập nhật trạng thái tài khoản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -64,7 +64,7 @@ export async function createCitizen(
     input: CreateCitizenInput,
 ): Promise<ICitizen> {
     const household = await Household.findById(input.householdId);
-    if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
     await assertHouseholdInScope(actorUser, household);
     await assertHouseholdHouseAllowsDeclaration(actorUser, household);
 
@@ -78,6 +78,9 @@ export async function createCitizen(
         relationToHead: input.relationToHead,
         householdId: input.householdId,
         residenceType: input.residenceType ?? "thuong_tru",
+        temporaryResidenceExpiresAt: input.temporaryResidenceExpiresAt
+            ? new Date(input.temporaryResidenceExpiresAt)
+            : undefined,
         isElderly: input.isElderly ?? false,
         isChild: input.isChild ?? false,
         isDisabledOrSupportNeeded: input.isDisabledOrSupportNeeded ?? false,
@@ -115,7 +118,7 @@ export async function listCitizens(params: {
     if (params.householdId) {
         if (!isAdminUser) {
             const household = await Household.findById(params.householdId);
-            if (!household) throw new HttpError("Khong tim thay ho dan", 404);
+            if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
             await assertHouseholdInScope(params.actorUser, household);
         }
         filter.householdId = params.householdId;
@@ -175,7 +178,7 @@ export async function getCitizenById(id: string): Promise<ICitizen> {
         "householdId",
         "code address cluster houseId",
     );
-    if (!citizen) throw new HttpError("Khong tim thay nhan khau", 404);
+    if (!citizen) throw new HttpError("Không tìm thấy nhân khẩu", 404);
     return citizen;
 }
 
@@ -185,7 +188,7 @@ export async function updateCitizen(
     patch: UpdateCitizenInput,
 ): Promise<ICitizen> {
     const citizen = await Citizen.findById(id);
-    if (!citizen) throw new HttpError("Khong tim thay nhan khau", 404);
+    if (!citizen) throw new HttpError("Không tìm thấy nhân khẩu", 404);
 
     const oldHouseholdId = String(citizen.householdId);
     let newHouseholdId = oldHouseholdId;
@@ -193,7 +196,7 @@ export async function updateCitizen(
     if (patch.householdId && patch.householdId !== oldHouseholdId) {
         const newHousehold = await Household.findById(patch.householdId);
         if (!newHousehold)
-            throw new HttpError("Khong tim thay ho dan moi", 404);
+            throw new HttpError("Không tìm thấy hộ dân mới", 404);
         await assertHouseholdInScope(actorUser, newHousehold);
         await assertHouseholdHouseAllowsDeclaration(actorUser, newHousehold);
         newHouseholdId = patch.householdId;
@@ -201,7 +204,7 @@ export async function updateCitizen(
 
     // Chi gan cac truong thuc su co mat trong patch (partial schema van tra ve
     // day du key voi gia tri undefined cho truong khong duoc gui len).
-    const { birthDate, ...rest } = patch;
+    const { birthDate, temporaryResidenceExpiresAt, ...rest } = patch;
     for (const [key, value] of Object.entries(rest)) {
         if (value !== undefined) {
             (citizen as unknown as Record<string, unknown>)[key] = value;
@@ -209,6 +212,11 @@ export async function updateCitizen(
     }
     if (birthDate !== undefined) {
         citizen.birthDate = birthDate ? new Date(birthDate) : undefined;
+    }
+    if (temporaryResidenceExpiresAt !== undefined) {
+        citizen.temporaryResidenceExpiresAt = temporaryResidenceExpiresAt
+            ? new Date(temporaryResidenceExpiresAt)
+            : undefined;
     }
     const actorId = String(actorUser._id);
     citizen.updatedBy = actorId as any;
@@ -235,7 +243,7 @@ export async function deleteCitizen(
     id: string,
 ): Promise<ICitizen> {
     const citizen = await Citizen.findById(id);
-    if (!citizen) throw new HttpError("Khong tim thay nhan khau", 404);
+    if (!citizen) throw new HttpError("Không tìm thấy nhân khẩu", 404);
 
     const householdId = citizen.householdId;
     await citizen.deleteOne();

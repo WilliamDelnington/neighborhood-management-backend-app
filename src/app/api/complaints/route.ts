@@ -22,7 +22,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "complaints.create");
         const body = createComplaintSchema.parse(await req.json());
         const complaint = await createComplaint(actorUser, body);
-        return apiSuccess(complaint, "Gui phan anh thanh cong", 201);
+        return apiSuccess(complaint, "Gửi phản ánh thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

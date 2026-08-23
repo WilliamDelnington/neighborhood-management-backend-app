@@ -20,7 +20,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(complaint, "Phan cong xu ly thanh cong");
+        return apiSuccess(complaint, "Phân công xử lý thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

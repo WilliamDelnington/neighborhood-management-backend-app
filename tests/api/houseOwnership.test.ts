@@ -4,10 +4,7 @@ import {
     POST as createHouseholdRoute,
     GET as listHouseholdsRoute,
 } from "@/app/api/households/route";
-import {
-    POST as createCitizenRoute,
-    GET as listCitizensRoute,
-} from "@/app/api/citizens/route";
+import { GET as listCitizensRoute } from "@/app/api/citizens/route";
 import { GET as listHouseholdCitizensRoute } from "@/app/api/households/[id]/citizens/route";
 import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
@@ -35,20 +32,23 @@ async function setupOwnerWithHouseholdAndCitizen(clusterName: string) {
                 cluster: clusterName,
                 address: `Số 1, ${clusterName}`,
                 headOfHousehold: owner.displayName,
+                phone: "0912345678",
                 houseId: house._id,
             },
         }),
     );
     const household = (await readJson(householdRes)).data;
 
-    const citizenRes = await createCitizenRoute(
-        makeRequest("/api/citizens", {
-            method: "POST",
+    // createHousehold tu dong tao san mot Citizen "Chủ hộ" cho chinh chu ho -
+    // lay lai ban ghi do thay vi tao them mot Citizen trung ten thu cong (tao
+    // trung se sinh ra 2 nhan khau cho cung mot ho dan).
+    const citizensRes = await listHouseholdCitizensRoute(
+        makeRequest(`/api/households/${household._id}/citizens`, {
             headers,
-            body: { fullName: owner.displayName, householdId: household._id },
         }),
+        { params: { id: household._id } },
     );
-    const citizen = (await readJson(citizenRes)).data;
+    const citizen = (await readJson(citizensRes)).data.items[0];
 
     return { owner, headers, house, household, citizen };
 }

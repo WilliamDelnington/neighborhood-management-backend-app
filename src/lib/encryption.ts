@@ -99,3 +99,9 @@ export function maskCccd(cccd: string): string {
     if (cccd.length <= 4) return "*".repeat(cccd.length);
     return "*".repeat(cccd.length - 4) + cccd.slice(-4);
 }
+
+// So CMND/CCCD cua User (tai khoan do nhan vien tao) - cung dinh dang du lieu
+// voi Citizen.cccd nen tai su dung nguyen logic chuan hoa/che, chi doi ten cho
+// dung ngu canh (User khong co khai niem "cong dan").
+export const normalizeIdNumber = normalizeCccd;
+export const maskIdNumber = maskCccd;

@@ -29,7 +29,7 @@ export async function PATCH(
             body.status,
             body.note,
         );
-        return apiSuccess(household, "Cap nhat trang thai ho dan thanh cong");
+        return apiSuccess(household, "Cập nhật trạng thái hộ dân thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

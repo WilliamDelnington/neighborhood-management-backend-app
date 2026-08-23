@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
         const body = createBusinessSchema.parse(await req.json());
         const business = await createBusiness(user, body);
-        return apiSuccess(business, "Tao ho kinh doanh thanh cong", 201);
+        return apiSuccess(business, "Tạo hộ kinh doanh thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -51,6 +51,7 @@ export async function GET(req: Request) {
             limit,
             search: searchParams.get("search") || undefined,
             status,
+            businessType: searchParams.get("businessType") || undefined,
             actorUser: user,
         });
         return apiSuccess(result);

@@ -30,7 +30,7 @@ export async function PATCH(
             params.id,
             body.status,
         );
-        return apiSuccess(business, "Cap nhat trang thai ho kinh doanh thanh cong");
+        return apiSuccess(business, "Cập nhật trạng thái hộ kinh doanh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

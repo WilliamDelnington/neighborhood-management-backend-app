@@ -22,7 +22,7 @@ export async function PATCH(req: Request) {
         const user = await requireUser(req);
         const body = updateProfileSchema.parse(await req.json());
         const updated = await updateOwnProfile(String(user._id), body);
-        return apiSuccess(updated, "Cap nhat tai khoan thanh cong");
+        return apiSuccess(updated, "Cập nhật tài khoản thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

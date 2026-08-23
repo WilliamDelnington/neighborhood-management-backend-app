@@ -227,6 +227,14 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "complaints.assign", label: "Gán người xử lý" },
             { key: "complaints.update_status", label: "Cập nhật trạng thái" },
             { key: "complaints.delete", label: "Xóa phản ánh" },
+            {
+                key: "complaint_types.read",
+                label: "Xem cấu hình loại phản ánh",
+            },
+            {
+                key: "complaint_types.manage",
+                label: "Tạo/sửa loại phản ánh và định tuyến người nhận",
+            },
         ],
     },
     {
@@ -288,6 +296,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "requests.read", label: "Xem danh sách yêu cầu đã gửi" },
             { key: "requests.update", label: "Cập nhật / hủy yêu cầu" },
             {
+                key: "requests.read_all",
+                label:
+                    "Xem TOÀN BỘ yêu cầu công việc (không chỉ yêu cầu đã gửi/được giao) - chỉ xem, không được sửa/hủy yêu cầu của người khác",
+            },
+            {
                 key: "request_types.read",
                 label: "Xem cấu hình loại nhiệm vụ",
             },
@@ -333,6 +346,16 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
             { key: "announcements.create", label: "Tạo thông báo" },
             { key: "announcements.update", label: "Cập nhật thông báo" },
             { key: "announcements.publish", label: "Đăng thông báo" },
+        ],
+    },
+    {
+        key: "news",
+        label: "Tin tức",
+        permissions: [
+            { key: "news.read", label: "Xem tin tức" },
+            { key: "news.create", label: "Tạo tin tức" },
+            { key: "news.update", label: "Cập nhật tin tức" },
+            { key: "news.publish", label: "Đăng tin tức" },
         ],
     },
     {
@@ -450,6 +473,30 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         key: "audit",
         label: "Nhật ký hệ thống",
         permissions: [{ key: "audit.read", label: "Xem nhật ký hệ thống" }],
+    },
+    {
+        key: "utility_apps",
+        label: "Nhóm tiện ích",
+        permissions: [
+            { key: "utility_apps.manage", label: "Quản trị Nhóm tiện ích" },
+        ],
+    },
+    {
+        key: "appointments",
+        label: "Đặt lịch hẹn",
+        permissions: [
+            { key: "appointments.read", label: "Xem lịch hẹn" },
+            { key: "appointments.create", label: "Đặt lịch hẹn" },
+            {
+                key: "appointments.checkin",
+                label:
+                    "Check-in / hoàn thành lịch hẹn (chỉ với dịch vụ được phân công phụ trách)",
+            },
+            {
+                key: "appointments.manage",
+                label: "Quản trị dịch vụ đặt lịch hẹn (tạo/sửa dịch vụ, khung giờ, phân công cán bộ)",
+            },
+        ],
     },
 ];
 

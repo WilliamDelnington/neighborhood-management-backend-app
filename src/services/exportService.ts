@@ -6,6 +6,7 @@ import {
     LOAI_CU_TRU_LABEL,
     NHOM_PHAN_ANH_LABEL,
     TRANG_THAI_PHAN_ANH_LABEL,
+    type NhomPhanAnh,
 } from "@/types";
 
 function yesNo(value: boolean): string {
@@ -142,7 +143,11 @@ export async function exportComplaintsToExcel(params: {
     for (const c of complaints) {
         worksheet.addRow({
             code: c.code,
-            category: NHOM_PHAN_ANH_LABEL[c.category],
+            // category gio la key cua ComplaintTypeDefinition (khong con la
+            // NhomPhanAnh dong - xem models/Complaint.ts) - NHOM_PHAN_ANH_LABEL
+            // chi con phu cho cac danh muc cu, fallback ve chinh key khi
+            // khong khop (danh muc tuy chinh do admin tao).
+            category: NHOM_PHAN_ANH_LABEL[c.category as NhomPhanAnh] ?? c.category,
             title: c.title,
             status: TRANG_THAI_PHAN_ANH_LABEL[c.status],
             createdAt: formatDate(c.createdAt),

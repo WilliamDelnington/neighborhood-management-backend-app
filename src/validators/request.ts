@@ -7,14 +7,14 @@ import {
 
 const requestTypeKeySchema = z
     .string()
-    .min(1, "Thieu loai yeu cau")
+    .min(1, "Thiếu loại yêu cầu")
     .max(50)
-    .regex(/^[a-z][a-z0-9_]*$/, "Loai yeu cau khong hop le");
+    .regex(/^[a-z][a-z0-9_]*$/, "Loại yêu cầu không hợp lệ");
 
 export const createRequestSchema = z
     .object({
         type: requestTypeKeySchema,
-        title: z.string().min(1, "Thieu tieu de yeu cau"),
+        title: z.string().min(1, "Thiếu tiêu đề yêu cầu"),
         description: z.string().optional(),
         priority: z.enum(REQUEST_PRIORITIES).default("normal"),
         relatedModel: z.string().optional(),
@@ -39,7 +39,7 @@ export const createRequestSchema = z
             data.targetRoles.length > 0 ||
             (!!data.houseId && !!data.houseRole) ||
             (!!data.houseId && !!data.targetHouseNeighborhoodLeader),
-        { message: "Can chon it nhat mot nguoi nhan hoac mot loai nguoi dung" },
+        { message: "Cần chọn ít nhất một người nhận hoặc một loại người dùng" },
     );
 export type CreateRequestInput = z.infer<typeof createRequestSchema>;
 
@@ -67,7 +67,7 @@ export const updateMyRequestStatusSchema = z
         note: z.string().optional(),
     })
     .refine(data => data.status !== "needs_info" || !!data.note?.trim(), {
-        message: "Vui long mo ta thong tin can bo sung",
+        message: "Vui lòng mô tả thông tin cần bổ sung",
         path: ["note"],
     });
 export type UpdateMyRequestStatusInput = z.infer<
@@ -80,4 +80,19 @@ export const confirmRequestRecipientSchema = z.object({
 });
 export type ConfirmRequestRecipientInput = z.infer<
     typeof confirmRequestRecipientSchema
+>;
+
+export const initiateRequestTransferSchema = z.object({
+    toUserId: z.string().min(1, "Thiếu người được chuyển"),
+    reason: z.string().trim().min(1, "Vui lòng nhập lý do chuyển tiếp"),
+});
+export type InitiateRequestTransferInput = z.infer<
+    typeof initiateRequestTransferSchema
+>;
+
+export const respondToRequestTransferSchema = z.object({
+    decision: z.enum(["accept", "reject"]),
+});
+export type RespondToRequestTransferInput = z.infer<
+    typeof respondToRequestTransferSchema
 >;

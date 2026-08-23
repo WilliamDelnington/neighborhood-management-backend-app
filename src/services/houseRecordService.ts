@@ -224,7 +224,7 @@ export async function assertHouseRecordInScope(
     }
     if (isLeaderOrColeader) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi nha so ngoai to dan pho duoc phan cong",
+            "Bạn không có quyền thao tác với nhà số ngoài tổ dân phố được phân công",
             403,
         );
     }
@@ -233,7 +233,7 @@ export async function assertHouseRecordInScope(
         !user.assignedClusters.includes(houseRecord.cluster)
     ) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi nha so ngoai cum duoc phan cong",
+            "Bạn không có quyền thao tác với nhà số ngoài cụm được phân công",
             403,
         );
     }
@@ -321,6 +321,28 @@ export function assertVerificationEditable(
 }
 
 /**
+ * Nem HttpError(403) neu nha so da "verified" VA actor dang thao tac thay chu
+ * nha (xem isHouseOwnerActor o houseOwnershipService.ts) - dung truoc khi cap
+ * token/luu tep dinh kem moi cho HouseRecord, de chu nha khong the tu y them
+ * tep sau khi ho so da duoc xac thuc (phai lien he nhan vien/gui yeu cau thay
+ * doi thong tin thay vi tu them). Nhan vien giu quyen "houses.update"/
+ * "houses.verify" (khong phai chu nha) KHONG bi anh huong boi kiem tra nay -
+ * ho van duoc them tep dinh kem sau khi xac thuc nhu binh thuong.
+ */
+export async function assertHouseOwnerAttachmentUploadAllowed(
+    actorUser: IUser,
+    houseRecord: IHouseRecord,
+): Promise<void> {
+    if (houseRecord.status !== "verified") return;
+    if (await isHouseOwnerActor(houseRecord._id, actorUser._id)) {
+        throw new HttpError(
+            "Nhà đã được xác thực, chủ nhà không thể thêm tệp đính kèm",
+            403,
+        );
+    }
+}
+
+/**
  * Dieu kien loc danh sach nha so theo pham vi cua actor:
  * - admin: xem tat ca.
  * - house_owner: chi xem nha so ma minh dang thao tac thay chu nha - truc
@@ -358,7 +380,7 @@ async function resolveNeighborhoodForHouse(
     if (!neighborhoodId) return undefined;
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) {
-        throw new HttpError("Khong tim thay to dan pho", 404);
+        throw new HttpError("Không tìm thấy tổ dân phố", 404);
     }
     return neighborhood;
 }
@@ -473,7 +495,7 @@ async function resolveOrCreateHouseOwner(
         });
     } catch (err: any) {
         if (err?.code === 11000) {
-            throw new HttpError("So dien thoai da duoc su dung", 409);
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
         }
         throw err;
     }
@@ -655,7 +677,11 @@ export async function createHouseRecord(
         action: "house.create",
         targetModel: "HouseRecord",
         targetId: houseRecord._id,
-        metadata: { code: houseRecord.code },
+        metadata: {
+            code: houseRecord.code,
+            gisSource: houseRecord.gisSource,
+            geoConsentAccepted: input.geoConsentAccepted ?? null,
+        },
     });
 
     // Doc lai tu DB (thay vi populate truc tiep tren doc trong bo nho) vi
@@ -730,7 +756,7 @@ export async function listHouseRecords(params: {
             allowedClusters?.length &&
             !allowedClusters.includes(targetCluster)
         ) {
-            throw new HttpError("Ban khong co quyen xem cum dan cu nay", 403);
+            throw new HttpError("Bạn không có quyền xem cụm dân cư này", 403);
         }
         if (params.streetId) {
             filter.streetId = params.streetId;
@@ -809,7 +835,7 @@ export async function searchHousesForComplaintTarget(
 export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
     const houseRecord =
         await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     return withInferredUsageTypes(houseRecord);
 }
 
@@ -825,7 +851,7 @@ export async function updateHouseRecord(
     opts: { bypassVerifiedGate?: boolean } = {},
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
 
     if (houseRecord.status === "locked" && !actorUser.roles.includes("admin")) {
         throw new HttpError(
@@ -940,7 +966,7 @@ export async function updateHouseRecordGis(
     input: HouseGisInput,
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
     await assertHouseRecordInScope(actorUser, houseRecord);
 
     const gis = normalizeHouseGis(input);
@@ -994,7 +1020,7 @@ export async function transitionHouseRecordStatus(
     note?: string,
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
 
     const isAdmin = actorUser.roles.includes("admin");
     const isOwner = await isHouseOwnerActor(houseRecord._id, actorUser._id);
@@ -1124,14 +1150,14 @@ export async function deleteHouseRecord(
     id: string,
 ): Promise<IHouseRecord> {
     const houseRecord = await HouseRecord.findById(id);
-    if (!houseRecord) throw new HttpError("Khong tim thay nha so", 404);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
 
     const linkedHouseholdCount = await Household.countDocuments({
         houseId: id,
     });
     if (linkedHouseholdCount > 0) {
         throw new HttpError(
-            "Khong the xoa nha so vi van con ho dan lien ket, vui long chuyen hoac go lien ket ho dan truoc",
+            "Không thể xóa nhà số vì vẫn còn hộ dân liên kết, vui lòng chuyển hoặc gỡ liên kết hộ dân trước",
             409,
         );
     }
@@ -1141,7 +1167,7 @@ export async function deleteHouseRecord(
     });
     if (linkedBusinessCount > 0) {
         throw new HttpError(
-            "Khong the xoa nha so vi van con ho kinh doanh lien ket, vui long xoa ho kinh doanh truoc",
+            "Không thể xóa nhà số vì vẫn còn hộ kinh doanh liên kết, vui lòng xóa hộ kinh doanh trước",
             409,
         );
     }

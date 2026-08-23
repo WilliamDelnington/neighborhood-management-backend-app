@@ -42,7 +42,7 @@ export async function requireUser(req: Request): Promise<IUser> {
     const session = requireSession(req);
     let user = await UserModel.findById(session.userId);
     if (!user || user.status === "locked") {
-        throw new HttpError("Tai khoan khong hop le hoac da bi khoa", 401);
+        throw new HttpError("Tài khoản không hợp lệ hoặc đã bị khóa", 401);
     }
     if (user.sessionVersion !== session.sv) {
         throw new HttpError(
@@ -65,7 +65,7 @@ export async function requireUser(req: Request): Promise<IUser> {
         if (expired > 0) {
             user = await UserModel.findById(session.userId);
             if (!user) {
-                throw new HttpError("Tai khoan khong hop le hoac da bi khoa", 401);
+                throw new HttpError("Tài khoản không hợp lệ hoặc đã bị khóa", 401);
             }
         }
     }

@@ -19,7 +19,7 @@ export async function PUT(
         const job = await applyStreetImportMapping(params.jobId, body);
         return apiSuccess(
             job,
-            "Da ap dung cau hinh cot, vui long xem truoc ket qua truoc khi commit",
+            "Đã áp dụng cấu hình cột, vui lòng xem trước kết quả trước khi commit",
         );
     } catch (err) {
         return apiErrorFromException(err);

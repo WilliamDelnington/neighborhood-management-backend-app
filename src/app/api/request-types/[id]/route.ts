@@ -20,7 +20,7 @@ export async function PATCH(
         const input = updateRequestTypeDefinitionSchema.parse(await req.json());
         return apiSuccess(
             await updateRequestTypeDefinition(actorUser, params.id, input),
-            "Cap nhat loai nhiem vu thanh cong",
+            "Cập nhật loại nhiệm vụ thành công",
         );
     } catch (err) {
         return apiErrorFromException(err);
@@ -37,7 +37,7 @@ export async function DELETE(
         await requirePermission(actorUser, "request_types.manage");
         return apiSuccess(
             await archiveRequestTypeDefinition(actorUser, params.id),
-            "Da ngung su dung loai nhiem vu",
+            "Đã ngừng sử dụng loại nhiệm vụ",
         );
     } catch (err) {
         return apiErrorFromException(err);

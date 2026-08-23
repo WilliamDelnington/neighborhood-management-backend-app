@@ -3,6 +3,9 @@ import {
     POST as createHouseholdRoute,
 } from "@/app/api/households/route";
 import {
+    GET as listHouseholdCitizensRoute,
+} from "@/app/api/households/[id]/citizens/route";
+import {
     POST as createCitizenRoute,
 } from "@/app/api/citizens/route";
 import {
@@ -12,7 +15,10 @@ import {
 import { Household } from "@/models";
 import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
-async function createHousehold(headers: Record<string, string>) {
+async function createHousehold(
+    headers: Record<string, string>,
+    headOfHousehold = "Nguyễn Văn Test",
+) {
     return readJson(
         await createHouseholdRoute(
             makeRequest("/api/households", {
@@ -21,7 +27,8 @@ async function createHousehold(headers: Record<string, string>) {
                 body: {
                     cluster: "Cụm Test",
                     address: "Số 1, Cụm Test",
-                    headOfHousehold: "Nguyễn Văn Test",
+                    headOfHousehold,
+                    phone: "0912345678",
                     // Gui kem memberCount thu xem co bi bo qua khong.
                     memberCount: 999,
                 },
@@ -47,27 +54,90 @@ async function createCitizen(
 }
 
 describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen ho dan", () => {
-    it("memberCount luon bat dau tu 0, bo qua gia tri client gui len khi tao ho dan", async () => {
+    it("tao ho dan tu dong tao Citizen 'Chủ hộ' va memberCount bat dau tu 1, bo qua gia tri client gui len", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
-        const created = await createHousehold(await authHeaders(admin));
-        expect(created.data.memberCount).toBe(0);
+        const headers = await authHeaders(admin);
+        const created = await createHousehold(headers, "Nguyễn Văn Test");
+        expect(created.data.memberCount).toBe(1);
+
+        const citizens = await readJson(
+            await listHouseholdCitizensRoute(
+                makeRequest(
+                    `/api/households/${created.data._id}/citizens`,
+                    { method: "GET", headers },
+                ),
+                { params: { id: created.data._id } },
+            ),
+        );
+        expect(citizens.data.items).toHaveLength(1);
+        expect(citizens.data.items[0].fullName).toBe("Nguyễn Văn Test");
+        expect(citizens.data.items[0].relationToHead).toBe("Chủ hộ");
+        // contactIsHead mac dinh true (khong truyen len) - Citizen "Chủ hộ"
+        // duoc gan luon phone cua nguoi lien he.
+        expect(citizens.data.items[0].phone).toBe("*******678");
     });
 
-    it("them nhan khau +1, xoa nhan khau -1", async () => {
+    it("contactIsHead=false: tao them Citizen 'Người liên hệ' rieng mang phone, chu ho khong co phone", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const headers = await authHeaders(admin);
+        const created = await readJson(
+            await createHouseholdRoute(
+                makeRequest("/api/households", {
+                    method: "POST",
+                    headers,
+                    body: {
+                        cluster: "Cụm Test",
+                        address: "Số 1, Cụm Test",
+                        headOfHousehold: "Nguyễn Văn Test",
+                        phone: "0912345678",
+                        contactIsHead: false,
+                        contactName: "Trần Thị Liên Hệ",
+                    },
+                }),
+            ),
+        );
+        expect(created.data.memberCount).toBe(2);
+
+        const citizens = await readJson(
+            await listHouseholdCitizensRoute(
+                makeRequest(
+                    `/api/households/${created.data._id}/citizens`,
+                    { method: "GET", headers },
+                ),
+                { params: { id: created.data._id } },
+            ),
+        );
+        expect(citizens.data.items).toHaveLength(2);
+        const head = citizens.data.items.find(
+            (c: any) => c.relationToHead === "Chủ hộ",
+        );
+        const contact = citizens.data.items.find(
+            (c: any) => c.relationToHead === "Người liên hệ",
+        );
+        expect(head.fullName).toBe("Nguyễn Văn Test");
+        expect(head.phone).toBeUndefined();
+        expect(contact.fullName).toBe("Trần Thị Liên Hệ");
+        expect(contact.phone).toBe("*******678");
+    });
+
+    it("them nhan khau +1, xoa nhan khau -1 (chua tinh Citizen 'Chủ hộ' co san)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const household = await createHousehold(headers);
         const householdId = household.data._id;
-
-        const citizenA = await createCitizen(headers, householdId, "Nguyễn Văn A");
         expect(
             (await Household.findById(householdId))!.memberCount,
         ).toBe(1);
 
-        const citizenB = await createCitizen(headers, householdId, "Nguyễn Văn B");
+        const citizenA = await createCitizen(headers, householdId, "Nguyễn Văn A");
         expect(
             (await Household.findById(householdId))!.memberCount,
         ).toBe(2);
+
+        const citizenB = await createCitizen(headers, householdId, "Nguyễn Văn B");
+        expect(
+            (await Household.findById(householdId))!.memberCount,
+        ).toBe(3);
 
         await deleteCitizenRoute(
             makeRequest(`/api/citizens/${citizenA.data._id}`, {
@@ -78,7 +148,7 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         );
         expect(
             (await Household.findById(householdId))!.memberCount,
-        ).toBe(1);
+        ).toBe(2);
 
         await deleteCitizenRoute(
             makeRequest(`/api/citizens/${citizenB.data._id}`, {
@@ -89,7 +159,7 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         );
         expect(
             (await Household.findById(householdId))!.memberCount,
-        ).toBe(0);
+        ).toBe(1);
     });
 
     it("chuyen nhan khau sang ho dan khac: -1 o ho cu, +1 o ho moi", async () => {
@@ -105,10 +175,10 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         );
         expect(
             (await Household.findById(householdA.data._id))!.memberCount,
-        ).toBe(1);
+        ).toBe(2);
         expect(
             (await Household.findById(householdB.data._id))!.memberCount,
-        ).toBe(0);
+        ).toBe(1);
 
         await updateCitizenRoute(
             makeRequest(`/api/citizens/${citizen.data._id}`, {
@@ -121,9 +191,9 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
 
         expect(
             (await Household.findById(householdA.data._id))!.memberCount,
-        ).toBe(0);
+        ).toBe(1);
         expect(
             (await Household.findById(householdB.data._id))!.memberCount,
-        ).toBe(1);
+        ).toBe(2);
     });
 });

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
         const body = revokeRoleSchema.parse(await req.json());
         const user = await revokeRole(String(actorUser._id), body.userId, body.role);
-        return apiSuccess(user, "Thu hoi vai tro thanh cong");
+        return apiSuccess(user, "Thu hồi vai trò thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

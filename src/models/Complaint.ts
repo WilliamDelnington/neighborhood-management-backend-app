@@ -1,14 +1,16 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import {
-    NHOM_PHAN_ANH,
-    TRANG_THAI_PHAN_ANH,
-    type NhomPhanAnh,
-    type TrangThaiPhanAnh,
-} from "@/types";
+import { TRANG_THAI_PHAN_ANH, type TrangThaiPhanAnh } from "@/types";
 
 export interface IComplaint extends Document {
     code: string;
-    category: NhomPhanAnh;
+    // Truoc la NhomPhanAnh (enum tinh, xem NHOM_PHAN_ANH trong @/types) - nay
+    // la key cua ComplaintTypeDefinition (danh muc quan tri duoc, xem
+    // complaintTypeDefinitionService.ts). Khong con gioi han bang mongoose
+    // enum (xem schema ben duoi) - gia tri thuc te duoc kiem tra o service
+    // layer (assertValidComplaintCategory trong complaintService.ts), van
+    // chap nhan cac gia tri NHOM_PHAN_ANH cu lam fallback trong giai doan
+    // migrate truoc khi chay scripts/seed-complaint-types.ts.
+    category: string;
     title: string;
     content: string;
     area?: string;
@@ -43,7 +45,7 @@ export interface IComplaint extends Document {
 const ComplaintSchema = new Schema<IComplaint>(
     {
         code: { type: String, required: true, unique: true, index: true },
-        category: { type: String, enum: NHOM_PHAN_ANH, required: true },
+        category: { type: String, required: true, trim: true },
         title: { type: String, required: true, trim: true },
         content: { type: String, required: true },
         area: { type: String },

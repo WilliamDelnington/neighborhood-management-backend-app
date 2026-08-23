@@ -79,7 +79,7 @@ cp .env.example .env.local
 | `MONGODB_URI` | ✅ | Chuỗi kết nối MongoDB, ví dụ `mongodb://127.0.0.1:27017/hoa-binh-mini-app` |
 | `MONGODB_DNS_SERVERS` | tuỳ chọn | Danh sách DNS server (phân cách bởi dấu phẩy), dùng khi kết nối `mongodb+srv://` bị lỗi `querySrv ECONNREFUSED` |
 | `JWT_SECRET` | ✅ | Khoá ký JWT — **phải đổi giá trị thật khi lên production** |
-| `JWT_EXPIRES_IN` | tuỳ chọn | Thời hạn token, mặc định `30d` |
+| `JWT_EXPIRES_IN` | tuỳ chọn | Thời hạn token, mặc định `180d` |
 | `ENCRYPTION_KEY` | ✅ | Khoá AES-256-GCM (base64, 32 byte) để mã hoá SĐT/CCCD của công dân. Tạo bằng `openssl rand -base64 32`. **Không đổi khoá này sau khi đã có dữ liệu mã hoá trong DB** — dữ liệu cũ sẽ không giải mã được nữa |
 | `ZALO_ENV` | tuỳ chọn | `sandbox` (mặc định, không cần Zalo App thật để dev/test) hoặc `production` (bắt buộc `ZALO_APP_ID`/`ZALO_APP_SECRET` để xác thực accessToken thật qua Zalo Graph API) |
 | `ZALO_APP_ID` / `ZALO_APP_SECRET` | khi `ZALO_ENV=production` | Thông tin Zalo Mini App |

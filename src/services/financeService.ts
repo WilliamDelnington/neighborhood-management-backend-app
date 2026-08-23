@@ -80,7 +80,7 @@ export async function getTransactionById(id: string) {
     const transaction = await FinanceTransaction.findById(id)
         .populate("createdBy", "displayName")
         .populate("updatedBy", "displayName");
-    if (!transaction) throw new HttpError("Khong tim thay giao dich", 404);
+    if (!transaction) throw new HttpError("Không tìm thấy giao dịch", 404);
     return transaction;
 }
 
@@ -94,7 +94,7 @@ export async function updateTransaction(
     patch: UpdateFinanceTransactionInput,
 ): Promise<IFinanceTransaction> {
     const transaction = await FinanceTransaction.findById(id);
-    if (!transaction) throw new HttpError("Khong tim thay giao dich", 404);
+    if (!transaction) throw new HttpError("Không tìm thấy giao dịch", 404);
 
     const beforeAmount = transaction.amount;
 
@@ -135,7 +135,7 @@ export async function cancelTransaction(
     id: string,
 ): Promise<IFinanceTransaction> {
     const transaction = await FinanceTransaction.findById(id);
-    if (!transaction) throw new HttpError("Khong tim thay giao dich", 404);
+    if (!transaction) throw new HttpError("Không tìm thấy giao dịch", 404);
 
     transaction.status = "da_huy";
     transaction.updatedBy = actorId as any;
@@ -162,7 +162,7 @@ export async function deleteTransaction(
     id: string,
 ): Promise<void> {
     const transaction = await FinanceTransaction.findById(id);
-    if (!transaction) throw new HttpError("Khong tim thay giao dich", 404);
+    if (!transaction) throw new HttpError("Không tìm thấy giao dịch", 404);
 
     await transaction.deleteOne();
 

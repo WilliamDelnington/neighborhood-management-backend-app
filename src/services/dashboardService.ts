@@ -157,6 +157,59 @@ async function dashboardAreaContext(actorUser: IUser): Promise<DashboardAreaCont
     };
 }
 
+export type HouseGisOverview = {
+    scopeLabel: string;
+    totalHouses: number;
+    housesWithCoordinates: number;
+    points: Array<{
+        houseId: string;
+        code: string;
+        address: string;
+        latitude: number;
+        longitude: number;
+        accuracyMeters: number | null;
+    }>;
+};
+
+/**
+ * Ban do tong hop cho nhan vien (secretary/to truong/pho/can bo UBND) - dung
+ * chung logic pham vi voi getDashboardSummary (dashboardAreaContext) nhung
+ * chi doc dung cac truong can cho ban do, KHONG keo theo cac truong lam giau
+ * (citizenCount/PCCC/an ninh) ma getDashboardSummary.gisOverview dang co, vi
+ * endpoint nay duoc goi rieng le luc bam nut "Xem ban do" (xem
+ * app/api/houses/gis-overview/route.ts) - can giu truy van gon nhe.
+ */
+export async function getHouseGisOverview(
+    actorUser: IUser,
+): Promise<HouseGisOverview> {
+    const context = await dashboardAreaContext(actorUser);
+    const houses = await HouseRecord.find(context.areaFilter).select(
+        "_id code address gisLatitude gisLongitude gisAccuracyMeters",
+    );
+    const points = houses
+        .filter(
+            house =>
+                house.gisLatitude &&
+                house.gisLongitude &&
+                Number.isFinite(house.gisLatitude) &&
+                Number.isFinite(house.gisLongitude),
+        )
+        .map(house => ({
+            houseId: String(house._id),
+            code: house.code,
+            address: house.address,
+            latitude: Number(house.gisLatitude),
+            longitude: Number(house.gisLongitude),
+            accuracyMeters: house.gisAccuracyMeters ?? null,
+        }));
+    return {
+        scopeLabel: context.scopeLabel,
+        totalHouses: houses.length,
+        housesWithCoordinates: points.length,
+        points,
+    };
+}
+
 /**
  * Dashboard dieu hanh co hai lop bao ve: permission quyet dinh nhom so lieu
  * nao duoc tinh; Phuong/To/cum duoc gan quyet dinh ban ghi nao duoc tinh.

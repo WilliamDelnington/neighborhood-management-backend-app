@@ -30,8 +30,8 @@ export async function PATCH(
         return apiSuccess(
             recipient,
             body.decision === "resolved"
-                ? "Da xac nhan hoan thanh"
-                : "Da yeu cau xu ly lai",
+                ? "Đã xác nhận hoàn thành"
+                : "Đã yêu cầu xử lý lại",
         );
     } catch (err) {
         return apiErrorFromException(err);

@@ -39,7 +39,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(transaction, "Cap nhat giao dich thanh cong");
+        return apiSuccess(transaction, "Cập nhật giao dịch thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -54,7 +54,7 @@ export async function DELETE(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "finance.delete");
         await deleteTransaction(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa giao dich thanh cong");
+        return apiSuccess(null, "Xóa giao dịch thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

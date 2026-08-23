@@ -26,7 +26,7 @@ export async function POST(
             params.id,
             body,
         );
-        return apiSuccess(complaint, "Da xac nhan hoan thanh phan anh");
+        return apiSuccess(complaint, "Đã xác nhận hoàn thành phản ánh");
     } catch (err) {
         return apiErrorFromException(err);
     }
