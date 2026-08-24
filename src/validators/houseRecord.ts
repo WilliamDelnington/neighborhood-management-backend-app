@@ -108,7 +108,6 @@ const houseRecordBaseSchema = z.object({
     representative: personInfoSchema.optional(),
 });
 
-<<<<<<< HEAD
 // gisSource nhay cam ("address_lookup"/"device_gps" - vi tri xac dinh qua dich
 // vu dinh vi, thuoc du lieu ca nhan nhay cam theo Dieu 2 Luat BVDLCN so
 // 91/2025/QH15) bat buoc phai co geoConsentAccepted=true kem theo - day la lop
@@ -134,15 +133,10 @@ const GEO_CONSENT_ISSUE = {
     path: ["geoConsentAccepted"],
 };
 
-export const createHouseRecordSchema = houseRecordBaseSchema
-    .refine(data => !!data.cluster || !!data.streetId, {
-        message: "Vui long chon duong/pho hoac nhap cum dan cu",
-=======
 export const createHouseRecordSchema = houseRecordBaseSchema.refine(
     data => !!data.cluster || !!data.streetId,
     {
         message: "Vui lòng chọn đường/phố hoặc nhập cụm dân cư",
->>>>>>> e3c66c4cfdc8eb1e20be82063e8195db47719f12
         path: ["cluster"],
     })
     .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);

@@ -557,34 +557,8 @@ export async function createAppointment(
         );
     }
 
-<<<<<<< HEAD
     // Dat cho nguyen tu (xem AppointmentSlotCounter.ts).
     await reserveSlotCounter(service._id, slot._id, appointedDate, slot.maxCapacity);
-=======
-    // Dat cho nguyen tu (xem AppointmentSlotCounter.ts): dam bao doc counter
-    // ton tai truoc, roi $inc co dieu kien bookedCount < maxCapacity.
-    await AppointmentSlotCounter.findOneAndUpdate(
-        { serviceId: service._id, timeSlotId: slot._id, appointedDate },
-        { $setOnInsert: { bookedCount: 0 } },
-        { upsert: true },
-    );
-    const reserved = await AppointmentSlotCounter.findOneAndUpdate(
-        {
-            serviceId: service._id,
-            timeSlotId: slot._id,
-            appointedDate,
-            bookedCount: { $lt: slot.maxCapacity },
-        },
-        { $inc: { bookedCount: 1 } },
-        { new: true },
-    );
-    if (!reserved) {
-        throw new HttpError(
-            "Khung giờ này đã hết chỗ, vui lòng chọn khung giờ khác",
-            409,
-        );
-    }
->>>>>>> e3c66c4cfdc8eb1e20be82063e8195db47719f12
 
     let appointment: IAppointment;
     try {
@@ -769,11 +743,7 @@ export async function cancelAppointment(
         const hoursUntil = (appointedAt.getTime() - Date.now()) / 3_600_000;
         if (hoursUntil < SELF_SERVICE_MIN_HOURS_BEFORE) {
             throw new HttpError(
-<<<<<<< HEAD
-                `Chi duoc huy lich hen truoc gio hen it nhat ${SELF_SERVICE_MIN_HOURS_BEFORE} tieng`,
-=======
-                `Chỉ được hủy lịch hẹn trước giờ hẹn ít nhất ${CANCEL_MIN_HOURS_BEFORE} tiếng`,
->>>>>>> e3c66c4cfdc8eb1e20be82063e8195db47719f12
+                `Chỉ được hủy lịch hẹn trước giờ hẹn ít nhất ${SELF_SERVICE_MIN_HOURS_BEFORE} tiếng`,
                 409,
             );
         }

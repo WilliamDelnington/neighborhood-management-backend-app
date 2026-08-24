@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 
         const actorUser = await User.findById(payload.userId);
         if (!actorUser || actorUser.status === "locked") {
-            return zaloError("Tai khoan khong hop le hoac da bi khoa");
+            return zaloError("Tài khoản không hợp lệ hoặc đã bị khóa");
         }
 
         // Kiem tra lai quyen tai thoi diem upload (khong chi tin token da cap
