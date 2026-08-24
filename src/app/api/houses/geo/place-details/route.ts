@@ -2,14 +2,15 @@ import { connectDB } from "@/lib/mongodb";
 import { requireAnyPermission, requireUser } from "@/lib/rbac";
 import { apiErrorFromException, apiSuccess } from "@/lib/response";
 import { getPlaceDetails } from "@/lib/integrations/goong";
-import { geoPlaceDetailsSchema } from "@/validators/googleMapsGeo";
+import { geoPlaceDetailsSchema } from "@/validators/housesGeo";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/houses/geo/place-details
- * Phai truyen chung sessionToken voi lan goi /autocomplete tuong ung de
- * Google tinh phi ca chuoi nhu MOT session (xem googleMaps.ts).
+ * Nen truyen chung sessionToken voi lan goi /autocomplete tuong ung (xem
+ * goong.ts) - Goong khong tinh phi theo session nhu Google truoc day, nhung
+ * van giu de khong phai doi hop dong API voi client.
  */
 export async function POST(req: Request) {
     try {

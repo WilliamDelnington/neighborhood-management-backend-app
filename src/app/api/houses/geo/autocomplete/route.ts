@@ -2,15 +2,15 @@ import { connectDB } from "@/lib/mongodb";
 import { requireAnyPermission, requireUser } from "@/lib/rbac";
 import { apiErrorFromException, apiSuccess } from "@/lib/response";
 import { autocompletePlaces } from "@/lib/integrations/goong";
-import { geoAutocompleteSchema } from "@/validators/googleMapsGeo";
+import { geoAutocompleteSchema } from "@/validators/housesGeo";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/houses/geo/autocomplete
- * Proxy Places Autocomplete (New) - khoa API luon o server, khong tra ve
- * client. Gioi han quyen theo dung nhom duoc phep tao/sua nha so (khong mo
- * cho nguoi chi co houses.read) de tranh bi lam dung goi Google ton phi.
+ * Proxy Place Autocomplete cua Goong (xem goong.ts) - khoa API luon o server,
+ * khong tra ve client. Gioi han quyen theo dung nhom duoc phep tao/sua nha so
+ * (khong mo cho nguoi chi co houses.read) de tranh bi lam dung goi ton phi.
  */
 export async function POST(req: Request) {
     try {

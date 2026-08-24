@@ -7,10 +7,12 @@ import { HttpError } from "@/lib/response";
  * doc server-side, KHONG BAO GIO tra ve cho client - frontend chi goi qua 2
  * route trong app/api/houses/geo/{autocomplete,place-details}.
  *
- * Static Map van dung Google (xem googleMaps.ts) - Goong REST API chi co
- * /staticmap/route (ve duong di giua 2 diem xuat phat/den), khong co endpoint
- * anh tinh theo center+zoom+kich thuoc nhu Google Static Maps ma
- * StaticMapPinConfirm.tsx can.
+ * Khong con proxy Static Map o day - Goong REST API chi co /staticmap/route
+ * (ve duong di giua 2 diem xuat phat/den), khong co endpoint anh tinh theo
+ * center+zoom+kich thuoc nhu Google Static Maps truoc day. Buoc xac nhan pin
+ * (StaticMapPinConfirm.tsx o resident-web-app) da chuyen sang goi thang Goong
+ * Map Tiles tu client bang MapLibre (can VITE_GOONG_MAP_KEY - mot Map Key
+ * rieng, khac GOONG_API_KEY o day).
  *
  * Ham doc process.env moi lan goi (khong phai hang so top-level), giong quy
  * uoc trong lib/config.ts, de test co the doi env giua cac test case.
