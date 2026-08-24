@@ -26,11 +26,11 @@ async function loadBusinessContext(
     businessId: string,
 ): Promise<{ business: IBusiness; houseRecord: IHouseRecord }> {
     const business = await Business.findById(businessId);
-    if (!business) throw new HttpError("Khong tim thay ho kinh doanh", 404);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
 
     const houseRecord = await HouseRecord.findById(business.houseId);
     if (!houseRecord) {
-        throw new HttpError("Khong tim thay nha so cua ho kinh doanh nay", 404);
+        throw new HttpError("Không tìm thấy nhà số của hộ kinh doanh này", 404);
     }
     return { business, houseRecord };
 }

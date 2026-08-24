@@ -33,7 +33,7 @@ export async function PATCH(
         await requirePermission(actorUser, "reports.author");
         const body = updatePeriodicReportSchema.parse(await req.json());
         const report = await updatePeriodicReport(actorUser, params.id, body);
-        return apiSuccess(report, "Da cap nhat bao cao");
+        return apiSuccess(report, "Đã cập nhật báo cáo");
     } catch (err) {
         return apiErrorFromException(err);
     }

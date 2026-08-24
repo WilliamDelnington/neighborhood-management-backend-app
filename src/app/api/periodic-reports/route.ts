@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
         const body = createPeriodicReportSchema.parse(await req.json());
         const report = await createPeriodicReport(actorUser, body);
-        return apiSuccess(report, "Da tao bao cao", 201);
+        return apiSuccess(report, "Đã tạo báo cáo", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

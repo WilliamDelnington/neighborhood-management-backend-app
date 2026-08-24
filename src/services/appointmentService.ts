@@ -65,7 +65,7 @@ const UNFINISHED_APPOINTMENT_STATUSES = [
  */
 function parseDateOnly(dateStr: string): Date {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
-    if (!match) throw new HttpError("Ngay khong hop le (YYYY-MM-DD)", 422);
+    if (!match) throw new HttpError("Ngày không hợp lệ (YYYY-MM-DD)", 422);
     const [, y, m, d] = match;
     return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
 }
@@ -202,7 +202,7 @@ function assertOfficerForService(
 ): void {
     if (!isOfficerForService(actorUser, service)) {
         throw new HttpError(
-            "Ban khong duoc phan cong phu trach dich vu nay",
+            "Bạn không được phân công phụ trách dịch vụ này",
             403,
         );
     }
@@ -232,7 +232,7 @@ export async function assertAppointmentAttachmentAccess(
     if (service && isOfficerForService(actorUser, service)) return;
 
     throw new HttpError(
-        "Ban khong co quyen truy cap tai lieu dinh kem cua lich hen nay",
+        "Bạn không có quyền truy cập tài liệu đính kèm của lịch hẹn này",
         403,
     );
 }
@@ -272,7 +272,7 @@ export function assertAppointmentInScope(actorUser: IUser, appointment: IAppoint
         const appointmentNeighborhoodId = refIdToString(appointment.neighborhoodId);
         if (!appointmentNeighborhoodId || !ids.includes(appointmentNeighborhoodId)) {
             throw new HttpError(
-                "Ban khong co quyen xem lich hen nay (ngoai pham vi phu trach)",
+                "Bạn không có quyền xem lịch hẹn này (ngoài phạm vi phụ trách)",
                 403,
             );
         }
@@ -280,7 +280,7 @@ export function assertAppointmentInScope(actorUser: IUser, appointment: IAppoint
     }
     if (!actorUser.wardCode || appointment.wardCode !== actorUser.wardCode) {
         throw new HttpError(
-            "Ban khong co quyen xem lich hen nay (ngoai pham vi phu trach)",
+            "Bạn không có quyền xem lịch hẹn này (ngoài phạm vi phụ trách)",
             403,
         );
     }
@@ -298,7 +298,7 @@ export async function getAppointmentById(id: string): Promise<IAppointment> {
     const appointment = await Appointment.findById(id).populate(
         APPOINTMENT_POPULATE,
     );
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     return appointment;
 }
 
@@ -323,7 +323,7 @@ export async function getAppointmentDetailForRequester(
         refIdToString(appointment.citizenUserId) === requester.userId ||
         refIdToString(appointment.bookedByUserId) === requester.userId;
     if (!requester.isStaff && !isOwner) {
-        throw new HttpError("Ban khong co quyen xem lich hen nay", 403);
+        throw new HttpError("Bạn không có quyền xem lịch hẹn này", 403);
     }
     if (requester.isStaff && !isOwner && requester.actorUser) {
         assertAppointmentInScope(requester.actorUser, appointment);
@@ -334,7 +334,7 @@ export async function getAppointmentDetailForRequester(
 export async function getAppointmentByCode(code: string): Promise<IAppointment> {
     const appointment = await Appointment.findOne({ code });
     if (!appointment) {
-        throw new HttpError("Khong tim thay lich hen voi ma nay", 404);
+        throw new HttpError("Không tìm thấy lịch hẹn với mã này", 404);
     }
     return getAppointmentById(String(appointment._id));
 }
@@ -346,9 +346,9 @@ export async function getAppointmentByCode(code: string): Promise<IAppointment> 
  */
 export async function getAvailableSlots(serviceId: string, dateStr: string) {
     const service = await AppointmentService.findById(serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     if (!service.active) {
-        throw new HttpError("Dich vu nay da ngung hoat dong", 400);
+        throw new HttpError("Dịch vụ này đã ngừng hoạt động", 400);
     }
 
     const date = parseDateOnly(dateStr);
@@ -418,7 +418,7 @@ async function resolveBookingSubject(
     if (isProxyBooking) {
         if (!isActorProxyEligible) {
             throw new HttpError(
-                "Chi to truong/to pho moi duoc dat lich ho cu dan khong co tai khoan",
+                "Chỉ tổ trưởng/tổ phó mới được đặt lịch hộ cư dân không có tài khoản",
                 403,
             );
         }
@@ -432,7 +432,7 @@ async function resolveBookingSubject(
     if (isSelf) {
         if (house.status !== "verified" && !actorUser.roles.includes("admin")) {
             throw new HttpError(
-                "Nha so chua duoc xac thuc, chua the dat lich hen",
+                "Nhà số chưa được xác thực, chưa thể đặt lịch hẹn",
                 422,
             );
         }
@@ -447,7 +447,7 @@ async function resolveBookingSubject(
         }
         if (!isOwner && !isHouseholdHead && !actorUser.roles.includes("admin")) {
             throw new HttpError(
-                "Ban khong so huu/khong dai dien ho dan tai nha so nay",
+                "Bạn không sở hữu/không đại diện hộ dân tại nhà số này",
                 403,
             );
         }
@@ -455,12 +455,12 @@ async function resolveBookingSubject(
     }
 
     if (!isActorProxyEligible) {
-        throw new HttpError("Ban khong co quyen dat lich ho nguoi khac", 403);
+        throw new HttpError("Bạn không có quyền đặt lịch hộ người khác", 403);
     }
     await assertHouseRecordInScope(actorUser, house);
     const citizen = await User.findById(citizenUserId).select("status");
     if (!citizen || citizen.status !== "active") {
-        throw new HttpError("Tai khoan nguoi dan duoc chon khong hop le", 422);
+        throw new HttpError("Tài khoản người dân được chọn không hợp lệ", 422);
     }
     return { citizenUserId };
 }
@@ -470,11 +470,11 @@ export async function createAppointment(
     input: CreateAppointmentInput,
 ): Promise<IAppointment> {
     const service = await AppointmentService.findById(input.serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
-    if (!service.active) throw new HttpError("Dich vu nay da ngung hoat dong", 400);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
+    if (!service.active) throw new HttpError("Dịch vụ này đã ngừng hoạt động", 400);
 
     const house = await HouseRecord.findById(input.houseId);
-    if (!house) throw new HttpError("Khong tim thay nha so", 404);
+    if (!house) throw new HttpError("Không tìm thấy nhà số", 404);
 
     const subject = await resolveBookingSubject(actorUser, house, input);
 
@@ -488,7 +488,7 @@ export async function createAppointment(
         actorUser.appointmentBookingLockedUntil.getTime() > Date.now()
     ) {
         throw new HttpError(
-            `Tai khoan cua ban dang bi tam khoa dat lich hen do vang mat nhieu lan, den ${actorUser.appointmentBookingLockedUntil.toLocaleDateString("vi-VN")}`,
+            `Tài khoản của bạn đang bị tạm khóa đặt lịch hẹn do vắng mặt nhiều lần, đến ${actorUser.appointmentBookingLockedUntil.toLocaleDateString("vi-VN")}`,
             403,
         );
     }
@@ -518,7 +518,7 @@ export async function createAppointment(
     );
     if (diffDays < MIN_BOOKING_DAYS_AHEAD || diffDays > MAX_BOOKING_DAYS_AHEAD) {
         throw new HttpError(
-            `Chi duoc dat lich hen tu ${MIN_BOOKING_DAYS_AHEAD} den ${MAX_BOOKING_DAYS_AHEAD} ngay ke tu hom nay`,
+            `Chỉ được đặt lịch hẹn từ ${MIN_BOOKING_DAYS_AHEAD} đến ${MAX_BOOKING_DAYS_AHEAD} ngày kể từ hôm nay`,
             422,
         );
     }
@@ -536,9 +536,9 @@ export async function createAppointment(
     }
 
     const slot = service.timeSlots.find(s => String(s._id) === input.timeSlotId);
-    if (!slot || !slot.active) throw new HttpError("Khung gio khong hop le", 422);
+    if (!slot || !slot.active) throw new HttpError("Khung giờ không hợp lệ", 422);
     if (slot.dayOfWeek !== toIsoDayOfWeek(appointedDate)) {
-        throw new HttpError("Khung gio khong ap dung cho ngay da chon", 422);
+        throw new HttpError("Khung giờ không áp dụng cho ngày đã chọn", 422);
     }
 
     // BR-02: khong cho dat trung (cung nha + dich vu + khung gio + ngay) khi
@@ -552,13 +552,39 @@ export async function createAppointment(
     });
     if (duplicate) {
         throw new HttpError(
-            "Nha so nay da co lich hen cho khung gio/ngay nay, khong the dat trung",
+            "Nhà số này đã có lịch hẹn cho khung giờ/ngày này, không thể đặt trùng",
             409,
         );
     }
 
+<<<<<<< HEAD
     // Dat cho nguyen tu (xem AppointmentSlotCounter.ts).
     await reserveSlotCounter(service._id, slot._id, appointedDate, slot.maxCapacity);
+=======
+    // Dat cho nguyen tu (xem AppointmentSlotCounter.ts): dam bao doc counter
+    // ton tai truoc, roi $inc co dieu kien bookedCount < maxCapacity.
+    await AppointmentSlotCounter.findOneAndUpdate(
+        { serviceId: service._id, timeSlotId: slot._id, appointedDate },
+        { $setOnInsert: { bookedCount: 0 } },
+        { upsert: true },
+    );
+    const reserved = await AppointmentSlotCounter.findOneAndUpdate(
+        {
+            serviceId: service._id,
+            timeSlotId: slot._id,
+            appointedDate,
+            bookedCount: { $lt: slot.maxCapacity },
+        },
+        { $inc: { bookedCount: 1 } },
+        { new: true },
+    );
+    if (!reserved) {
+        throw new HttpError(
+            "Khung giờ này đã hết chỗ, vui lòng chọn khung giờ khác",
+            409,
+        );
+    }
+>>>>>>> e3c66c4cfdc8eb1e20be82063e8195db47719f12
 
     let appointment: IAppointment;
     try {
@@ -716,9 +742,9 @@ export async function cancelAppointment(
     reason: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     if (!ACTIVE_APPOINTMENT_STATUSES.includes(appointment.status)) {
-        throw new HttpError("Lich hen nay khong the huy o trang thai hien tai", 409);
+        throw new HttpError("Lịch hẹn này không thể hủy ở trạng thái hiện tại", 409);
     }
 
     const service = await AppointmentService.findById(appointment.serviceId);
@@ -734,7 +760,7 @@ export async function cancelAppointment(
             refIdToString(appointment.citizenUserId) === String(actorUser._id) ||
             refIdToString(appointment.bookedByUserId) === String(actorUser._id);
         if (!isCitizenOrBooker) {
-            throw new HttpError("Ban khong co quyen huy lich hen nay", 403);
+            throw new HttpError("Bạn không có quyền hủy lịch hẹn này", 403);
         }
         const appointedAt = combineDateAndTime(
             appointment.appointedDate,
@@ -743,7 +769,11 @@ export async function cancelAppointment(
         const hoursUntil = (appointedAt.getTime() - Date.now()) / 3_600_000;
         if (hoursUntil < SELF_SERVICE_MIN_HOURS_BEFORE) {
             throw new HttpError(
+<<<<<<< HEAD
                 `Chi duoc huy lich hen truoc gio hen it nhat ${SELF_SERVICE_MIN_HOURS_BEFORE} tieng`,
+=======
+                `Chỉ được hủy lịch hẹn trước giờ hẹn ít nhất ${CANCEL_MIN_HOURS_BEFORE} tiếng`,
+>>>>>>> e3c66c4cfdc8eb1e20be82063e8195db47719f12
                 409,
             );
         }
@@ -1004,12 +1034,12 @@ export async function confirmAppointment(
     id: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     const service = await AppointmentService.findById(appointment.serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     assertOfficerForService(actorUser, service);
     if (appointment.status !== "cho_xac_nhan") {
-        throw new HttpError("Chi xac nhan duoc lich hen dang cho xac nhan", 409);
+        throw new HttpError("Chỉ xác nhận được lịch hẹn đang chờ xác nhận", 409);
     }
 
     appointment.status = "da_xac_nhan";
@@ -1047,12 +1077,12 @@ export async function rejectAppointment(
     reason: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     const service = await AppointmentService.findById(appointment.serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     assertOfficerForService(actorUser, service);
     if (appointment.status !== "cho_xac_nhan") {
-        throw new HttpError("Chi tu choi duoc lich hen dang cho xac nhan", 409);
+        throw new HttpError("Chỉ từ chối được lịch hẹn đang chờ xác nhận", 409);
     }
 
     appointment.status = "tu_choi";
@@ -1092,12 +1122,12 @@ export async function checkInAppointment(
     id: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     const service = await AppointmentService.findById(appointment.serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     assertOfficerForService(actorUser, service);
     if (appointment.status !== "da_xac_nhan") {
-        throw new HttpError("Chi check-in duoc lich hen da xac nhan", 409);
+        throw new HttpError("Chỉ check-in được lịch hẹn đã xác nhận", 409);
     }
 
     appointment.status = "da_check_in";
@@ -1120,12 +1150,12 @@ export async function completeAppointment(
     id: string,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
     const service = await AppointmentService.findById(appointment.serviceId);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     assertOfficerForService(actorUser, service);
     if (appointment.status !== "da_check_in") {
-        throw new HttpError("Chi hoan thanh duoc lich hen da check-in", 409);
+        throw new HttpError("Chỉ hoàn thành được lịch hẹn đã check-in", 409);
     }
 
     appointment.status = "hoan_thanh";
@@ -1168,19 +1198,19 @@ export async function rateAppointment(
     input: RateAppointmentInput,
 ): Promise<IAppointment> {
     const appointment = await Appointment.findById(id);
-    if (!appointment) throw new HttpError("Khong tim thay lich hen", 404);
+    if (!appointment) throw new HttpError("Không tìm thấy lịch hẹn", 404);
 
     const isCitizenOrBooker =
         refIdToString(appointment.citizenUserId) === String(actorUser._id) ||
         refIdToString(appointment.bookedByUserId) === String(actorUser._id);
     if (!isCitizenOrBooker) {
-        throw new HttpError("Chi nguoi dat lich hen nay moi duoc danh gia", 403);
+        throw new HttpError("Chỉ người đặt lịch hẹn này mới được đánh giá", 403);
     }
     if (appointment.status !== "hoan_thanh") {
-        throw new HttpError("Chi danh gia duoc lich hen da hoan thanh", 400);
+        throw new HttpError("Chỉ đánh giá được lịch hẹn đã hoàn thành", 400);
     }
     if (appointment.rating !== undefined && appointment.rating !== null) {
-        throw new HttpError("Lich hen nay da duoc danh gia truoc do", 400);
+        throw new HttpError("Lịch hẹn này đã được đánh giá trước đó", 400);
     }
 
     appointment.rating = input.rating;

@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
         const body = createUtilityAppSchema.parse(await req.json());
         const app = await createUtilityApp(String(actorUser._id), body);
-        return apiSuccess(app, "Them tien ich thanh cong", 201);
+        return apiSuccess(app, "Thêm tiện ích thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

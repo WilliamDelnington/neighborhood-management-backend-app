@@ -27,7 +27,7 @@ export async function POST(
         }
         const body = cancelAppointmentSchema.parse(raw);
         const appointment = await cancelAppointment(actorUser, params.id, body.reason);
-        return apiSuccess(appointment, "Da huy lich hen");
+        return apiSuccess(appointment, "Đã hủy lịch hẹn");
     } catch (err) {
         return apiErrorFromException(err);
     }

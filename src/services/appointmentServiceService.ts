@@ -22,7 +22,7 @@ async function assertOfficerUserIdsValid(userIds: string[]): Promise<void> {
     });
     if (count !== unique.length) {
         throw new HttpError(
-            "Danh sach can bo phu trach co tai khoan khong hop le/da bi khoa",
+            "Danh sách cán bộ phụ trách có tài khoản không hợp lệ/đã bị khóa",
             422,
         );
     }
@@ -38,13 +38,44 @@ async function resolveNeighborhoodWard(neighborhoodId: string) {
     const neighborhood = await Neighborhood.findById(neighborhoodId).select(
         "wardCode wardName",
     );
-    if (!neighborhood) throw new HttpError("Khong tim thay to dan pho", 404);
+    if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
     return neighborhood;
 }
 
-export async function listAppointmentServices(params: { activeOnly?: boolean }) {
+/**
+ * page/limit la tuy chon: khong truyen (dung cho cac noi can toan bo danh
+ * sach de xay dropdown chon dich vu - vd AppointmentListPage/ReportPage) tra
+ * ve mang day du nhu truoc; co truyen (dung cho man quan tri
+ * AppointmentServiceListPage) tra ve dang phan trang { items, page,
+ * totalPages, total, limit }.
+ */
+export async function listAppointmentServices(params: {
+    activeOnly?: boolean;
+    page?: number;
+    limit?: number;
+}) {
     const filter: Record<string, unknown> = {};
     if (params.activeOnly) filter.active = true;
+
+    if (params.page && params.limit) {
+        const { page, limit } = params;
+        const [items, total] = await Promise.all([
+            AppointmentService.find(filter)
+                .sort({ name: 1 })
+                .populate("assignedOfficerUserIds", "displayName")
+                .skip((page - 1) * limit)
+                .limit(limit),
+            AppointmentService.countDocuments(filter),
+        ]);
+        return {
+            items,
+            page,
+            limit,
+            total,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+        };
+    }
+
     return AppointmentService.find(filter)
         .sort({ name: 1 })
         .populate("assignedOfficerUserIds", "displayName");
@@ -55,7 +86,7 @@ export async function getAppointmentServiceById(id: string) {
         "assignedOfficerUserIds",
         "displayName",
     );
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     return service;
 }
 
@@ -65,7 +96,7 @@ export async function createAppointmentService(
 ): Promise<IAppointmentService> {
     const key = input.key.trim().toLowerCase();
     if (await AppointmentService.exists({ key })) {
-        throw new HttpError("Ma dich vu da ton tai", 409);
+        throw new HttpError("Mã dịch vụ đã tồn tại", 409);
     }
     await assertOfficerUserIdsValid(input.assignedOfficerUserIds);
 
@@ -121,7 +152,7 @@ export async function updateAppointmentService(
     input: UpdateAppointmentServiceInput,
 ): Promise<IAppointmentService> {
     const service = await AppointmentService.findById(id);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
 
     if (input.assignedOfficerUserIds) {
         await assertOfficerUserIdsValid(input.assignedOfficerUserIds);
@@ -139,7 +170,7 @@ export async function updateAppointmentService(
         const neighborhoodId =
             input.neighborhoodId ?? String(service.neighborhoodId || "");
         if (!neighborhoodId) {
-            throw new HttpError("Thieu to dan pho khi pham vi la to dan pho", 422);
+            throw new HttpError("Thiếu tổ dân phố khi phạm vi là tổ dân phố", 422);
         }
         const neighborhood = await resolveNeighborhoodWard(neighborhoodId);
         resolvedNeighborhoodId = neighborhoodId;
@@ -185,7 +216,7 @@ export async function archiveAppointmentService(
     id: string,
 ): Promise<null> {
     const service = await AppointmentService.findById(id);
-    if (!service) throw new HttpError("Khong tim thay dich vu dat lich hen", 404);
+    if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
 
     service.active = false;
     service.updatedBy = actorUser._id as any;

@@ -3,7 +3,7 @@ import { APPOINTMENT_SERVICE_SCOPES } from "@/models";
 
 const timeSlotTimeSchema = z
     .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Gio khong hop le (HH:mm)");
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ không hợp lệ (HH:mm)");
 
 const timeSlotSchema = z
     .object({
@@ -14,7 +14,7 @@ const timeSlotSchema = z
         active: z.boolean().default(true),
     })
     .refine(data => data.startTime < data.endTime, {
-        message: "Gio ket thuc phai sau gio bat dau",
+        message: "Giờ kết thúc phải sau giờ bắt đầu",
         path: ["endTime"],
     });
 
@@ -22,12 +22,12 @@ const appointmentServiceBaseSchema = z.object({
     key: z
         .string()
         .trim()
-        .min(2, "Ma dich vu qua ngan")
+        .min(2, "Mã dịch vụ quá ngắn")
         .max(50)
-        .regex(/^[a-z][a-z0-9_]*$/, "Ma chi gom chu thuong, so va gach duoi"),
-    name: z.string().trim().min(1, "Thieu ten dich vu").max(150),
+        .regex(/^[a-z][a-z0-9_]*$/, "Mã chỉ gồm chữ thường, số và gạch dưới"),
+    name: z.string().trim().min(1, "Thiếu tên dịch vụ").max(150),
     description: z.string().trim().max(1000).optional(),
-    locationAddress: z.string().trim().min(1, "Thieu dia diem tiep dan"),
+    locationAddress: z.string().trim().min(1, "Thiếu địa điểm tiếp dân"),
     scope: z.enum(APPOINTMENT_SERVICE_SCOPES),
     // wardCode: chi dung khi can ghi de wardCode mac dinh (thuong tu dong lay
     // theo actorUser.wardCode - xem appointmentServiceService.ts), khong bat
@@ -45,7 +45,7 @@ const appointmentServiceBaseSchema = z.object({
 export const createAppointmentServiceSchema = appointmentServiceBaseSchema.refine(
     data => data.scope !== "neighborhood" || !!data.neighborhoodId,
     {
-        message: "Thieu to dan pho khi pham vi la to dan pho",
+        message: "Thiếu tổ dân phố khi phạm vi là tổ dân phố",
         path: ["neighborhoodId"],
     },
 );

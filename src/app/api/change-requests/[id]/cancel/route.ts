@@ -14,7 +14,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "change_requests.create");
         const changeRequest = await cancelChangeRequest(actorUser, params.id);
-        return apiSuccess(changeRequest, "Da huy yeu cau");
+        return apiSuccess(changeRequest, "Đã hủy yêu cầu");
     } catch (err) {
         return apiErrorFromException(err);
     }

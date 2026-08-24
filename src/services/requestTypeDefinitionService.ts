@@ -19,7 +19,7 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     const unique = [...new Set(roleKeys)];
     const count = await Role.countDocuments({ key: { $in: unique }, active: true });
     if (count !== unique.length) {
-        throw new HttpError("Danh sach vai tro co gia tri khong ton tai/da khoa", 422);
+        throw new HttpError("Danh sách vai trò có giá trị không tồn tại/đã khóa", 422);
     }
 }
 
@@ -32,7 +32,7 @@ function definitionScope(actorUser: IUser): Record<string, unknown> {
 function assertDefinitionInScope(actorUser: IUser, definition: IRequestTypeDefinition) {
     if (actorUser.roles.includes("admin")) return;
     if (!actorUser.wardCode || definition.wardCode !== actorUser.wardCode) {
-        throw new HttpError("Loai nhiem vu khong thuoc phuong/xa ban phu trach", 403);
+        throw new HttpError("Loại nhiệm vụ không thuộc phường/xã bạn phụ trách", 403);
     }
 }
 
@@ -44,7 +44,7 @@ export async function listRequestTypeDefinitions(params: {
     limit?: number;
 }) {
     const page = params.page || 1;
-    const limit = params.limit || 50;
+    const limit = params.limit || 10;
     const filter: Record<string, unknown> = definitionScope(params.actorUser);
     if (params.active !== undefined) filter.active = params.active;
     if (params.search) {
@@ -76,10 +76,10 @@ export async function createRequestTypeDefinition(
 ) {
     const key = input.key.trim().toLowerCase();
     if (BUILT_IN_KEYS.has(key)) {
-        throw new HttpError("Ma nay da duoc su dung boi loai nhiem vu he thong", 409);
+        throw new HttpError("Mã này đã được sử dụng bởi loại nhiệm vụ hệ thống", 409);
     }
     if (await RequestTypeDefinition.exists({ key })) {
-        throw new HttpError("Ma loai nhiem vu da ton tai", 409);
+        throw new HttpError("Mã loại nhiệm vụ đã tồn tại", 409);
     }
     await assertRoleKeysExist([
         ...input.allowedSenderRoles,
@@ -111,7 +111,7 @@ export async function updateRequestTypeDefinition(
     input: UpdateRequestTypeDefinitionInput,
 ) {
     const definition = await RequestTypeDefinition.findById(id);
-    if (!definition) throw new HttpError("Khong tim thay loai nhiem vu", 404);
+    if (!definition) throw new HttpError("Không tìm thấy loại nhiệm vụ", 404);
     assertDefinitionInScope(actorUser, definition);
     if (input.allowedSenderRoles || input.allowedReceiverRoles) {
         await assertRoleKeysExist([
@@ -146,7 +146,7 @@ export async function updateRequestTypeDefinition(
 
 export async function archiveRequestTypeDefinition(actorUser: IUser, id: string) {
     const definition = await RequestTypeDefinition.findById(id);
-    if (!definition) throw new HttpError("Khong tim thay loai nhiem vu", 404);
+    if (!definition) throw new HttpError("Không tìm thấy loại nhiệm vụ", 404);
     assertDefinitionInScope(actorUser, definition);
     definition.active = false;
     definition.updatedBy = actorUser._id as any;
@@ -165,7 +165,7 @@ export async function archiveRequestTypeDefinition(actorUser: IUser, id: string)
 export async function findRequestTypeForActor(actorUser: IUser, key: string) {
     if (BUILT_IN_KEYS.has(key)) return null;
     const definition = await RequestTypeDefinition.findOne({ key, active: true });
-    if (!definition) throw new HttpError("Loai nhiem vu khong ton tai/da khoa", 422);
+    if (!definition) throw new HttpError("Loại nhiệm vụ không tồn tại/đã khóa", 422);
     assertDefinitionInScope(actorUser, definition);
     return definition;
 }

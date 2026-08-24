@@ -39,7 +39,7 @@ export async function PATCH(
         assertPcccCheckInScope(actorUser, existing);
         const body = updatePcccCheckSchema.parse(await req.json());
         const check = await updatePcccCheck(actorUser, params.id, body);
-        return apiSuccess(check, "Cap nhat bien ban kiem tra PCCC thanh cong");
+        return apiSuccess(check, "Cập nhật biên bản kiểm tra PCCC thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -56,7 +56,7 @@ export async function DELETE(
         const existing = await getPcccCheckById(params.id);
         assertPcccCheckInScope(actorUser, existing);
         await deletePcccCheck(String(actorUser._id), params.id);
-        return apiSuccess(null, "Xoa bien ban kiem tra PCCC thanh cong");
+        return apiSuccess(null, "Xóa biên bản kiểm tra PCCC thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

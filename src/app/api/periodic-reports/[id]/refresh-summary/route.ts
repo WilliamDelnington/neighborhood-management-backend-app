@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         await requirePermission(actorUser, "reports.author");
         return apiSuccess(
             await refreshPeriodicReportSummary(actorUser, params.id),
-            "Da cap nhat so lieu tu dong",
+            "Đã cập nhật số liệu tự động",
         );
     } catch (err) {
         return apiErrorFromException(err);

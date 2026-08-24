@@ -28,7 +28,7 @@ export async function POST(
             body,
             companyDocumentAdapter,
         );
-        return apiSuccess(companyDocument, "Nop giay to thanh cong", 201);
+        return apiSuccess(companyDocument, "Nộp giấy tờ thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

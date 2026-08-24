@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         await requirePermission(actorUser, "appointments.create");
         const body = createAppointmentSchema.parse(await req.json());
         const appointment = await createAppointment(actorUser, body);
-        return apiSuccess(appointment, "Dat lich hen thanh cong", 201);
+        return apiSuccess(appointment, "Đặt lịch hẹn thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -19,7 +19,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "appointments.checkin");
         const appointment = await confirmAppointment(actorUser, params.id);
-        return apiSuccess(appointment, "Da xac nhan lich hen");
+        return apiSuccess(appointment, "Đã xác nhận lịch hẹn");
     } catch (err) {
         return apiErrorFromException(err);
     }

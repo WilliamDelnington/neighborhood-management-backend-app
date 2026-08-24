@@ -13,7 +13,7 @@ export async function POST(
         await connectDB();
         const actorUser = await requireUser(req);
         const delivery = await markAsRead(String(actorUser._id), params.id);
-        return apiSuccess(delivery, "Da danh dau thong bao la da doc");
+        return apiSuccess(delivery, "Đã đánh dấu thông báo là đã đọc");
     } catch (err) {
         return apiErrorFromException(err);
     }

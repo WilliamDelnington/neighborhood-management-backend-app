@@ -90,7 +90,7 @@ async function readWorksheetRows(
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-        throw new HttpError("File Excel khong co sheet du lieu nao", 400);
+        throw new HttpError("File Excel không có sheet dữ liệu nào", 400);
     }
 
     const headerRow = worksheet.getRow(1);
@@ -101,7 +101,7 @@ async function readWorksheetRows(
 
     if (headers.filter(Boolean).length === 0) {
         throw new HttpError(
-            "Khong doc duoc dong tieu de (header) trong file Excel",
+            "Không đọc được dòng tiêu đề (header) trong file Excel",
             400,
         );
     }
@@ -275,16 +275,16 @@ export async function commitHouseholdImport(
     importJobId: string,
 ): Promise<IImportJob> {
     const job = await ImportJob.findById(importJobId);
-    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
     if (job.type !== "household") {
-        throw new HttpError("Import job nay khong phai loai ho dan", 400);
+        throw new HttpError("Import job này không phải loại hộ dân", 400);
     }
     if (job.status === "committed") {
-        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+        throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.rowErrors.length > 0) {
         throw new HttpError(
-            "Du lieu con loi, vui long sua va tao lai preview truoc khi commit",
+            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
             400,
         );
     }
@@ -448,16 +448,16 @@ export async function commitCitizenImport(
     importJobId: string,
 ): Promise<IImportJob> {
     const job = await ImportJob.findById(importJobId);
-    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
     if (job.type !== "citizen") {
-        throw new HttpError("Import job nay khong phai loai nhan khau", 400);
+        throw new HttpError("Import job này không phải loại nhân khẩu", 400);
     }
     if (job.status === "committed") {
-        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+        throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.rowErrors.length > 0) {
         throw new HttpError(
-            "Du lieu con loi, vui long sua va tao lai preview truoc khi commit",
+            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
             400,
         );
     }
@@ -535,6 +535,33 @@ export type StreetColumnMapping = {
 };
 
 /**
+ * File mau de nguoi dung dien du lieu truoc khi tai len (buoc upload van
+ * chap nhan bat ky ten cot nao - file nay chi la goi y, dung dung 3 nhan cot
+ * trong STREET_COLUMNS de he thong tu gan mapping ngay, khong can chon lai).
+ */
+export function buildStreetImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Đường phố");
+    worksheet.columns = [
+        { header: STREET_COLUMNS.name, key: "name", width: 30 },
+        { header: STREET_COLUMNS.code, key: "code", width: 18 },
+        { header: STREET_COLUMNS.active, key: "active", width: 20 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        name: "Nguyễn Trãi",
+        code: "",
+        active: "Đang hoạt động",
+    });
+    worksheet.addRow({
+        name: "Lê Lợi",
+        code: "LELOI",
+        active: "Ngừng hoạt động",
+    });
+    return workbook;
+}
+
+/**
  * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
  * STREET_COLUMNS co dinh - nguoi dung se chon cot ung voi tung truong o buoc
  * sau (xem applyStreetImportMapping), vi nhan cot trong file thuc te khong
@@ -600,12 +627,12 @@ export async function applyStreetImportMapping(
     mapping: StreetColumnMapping,
 ): Promise<IImportJob> {
     const job = await ImportJob.findById(importJobId);
-    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
     if (job.type !== "street") {
-        throw new HttpError("Import job nay khong phai loai duong/pho", 400);
+        throw new HttpError("Import job này không phải loại đường/phố", 400);
     }
     if (job.status === "committed") {
-        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+        throw new HttpError("Import job này đã được commit trước đó", 400);
     }
 
     const headers = job.headers;
@@ -725,22 +752,22 @@ export async function commitStreetImport(
     importJobId: string,
 ): Promise<IImportJob> {
     const job = await ImportJob.findById(importJobId);
-    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
     if (job.type !== "street") {
-        throw new HttpError("Import job nay khong phai loai duong/pho", 400);
+        throw new HttpError("Import job này không phải loại đường/phố", 400);
     }
     if (job.status === "committed") {
-        throw new HttpError("Import job nay da duoc commit truoc do", 400);
+        throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.status === "awaiting_mapping") {
         throw new HttpError(
-            "Vui long chon cot du lieu (mapping) truoc khi commit",
+            "Vui lòng chọn cột dữ liệu (mapping) trước khi commit",
             400,
         );
     }
     if (job.rowErrors.length > 0) {
         throw new HttpError(
-            "Du lieu con loi, vui long sua va tao lai preview truoc khi commit",
+            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
             400,
         );
     }
@@ -779,6 +806,6 @@ export async function commitStreetImport(
 
 export async function getImportJobById(id: string): Promise<IImportJob> {
     const job = await ImportJob.findById(id);
-    if (!job) throw new HttpError("Khong tim thay import job", 404);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
     return job;
 }

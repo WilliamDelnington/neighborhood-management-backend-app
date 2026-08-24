@@ -10,7 +10,7 @@ async function assertCanViewRequestComments(
     requestId: string,
 ): Promise<void> {
     const request = await RequestModel.findById(requestId);
-    if (!request) throw new HttpError("Khong tim thay yeu cau", 404);
+    if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
     await assertCanViewRequest(actorUser, request);
 }
 

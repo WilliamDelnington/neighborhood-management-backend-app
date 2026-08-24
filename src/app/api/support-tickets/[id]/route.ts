@@ -45,7 +45,7 @@ export async function PATCH(
         const actorUser = await requireUser(req);
         const body = updateSupportTicketSchema.parse(await req.json());
         const ticket = await updateSupportTicket(actorUser, params.id, body);
-        return apiSuccess(ticket, "Da cap nhat yeu cau ho tro");
+        return apiSuccess(ticket, "Đã cập nhật yêu cầu hỗ trợ");
     } catch (err) {
         return apiErrorFromException(err);
     }

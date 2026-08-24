@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const createDocumentTypeSchema = z.object({
-    name: z.string().min(1, "Ten loai giay to khong duoc de trong"),
-    code: z.string().min(1, "Ma loai giay to khong duoc de trong"),
+    name: z.string().min(1, "Tên loại giấy tờ không được để trống"),
+    code: z.string().min(1, "Mã loại giấy tờ không được để trống"),
     description: z.string().optional(),
     hasIssueDate: z.boolean().default(false),
     hasExpiryDate: z.boolean().default(false),

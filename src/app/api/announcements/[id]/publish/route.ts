@@ -22,7 +22,7 @@ export async function POST(
             String(actorUser._id),
             params.id,
         );
-        return apiSuccess(announcement, "Dang thong bao thanh cong");
+        return apiSuccess(announcement, "Đăng thông báo thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

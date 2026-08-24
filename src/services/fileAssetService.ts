@@ -61,14 +61,14 @@ export async function createFileAssetFromUpload(
 ) {
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
         throw new HttpError(
-            "File vuot qua dung luong cho phep (toi da 10MB)",
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
             400,
         );
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_UPLOAD_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_UPLOAD_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -149,15 +149,15 @@ export async function getFileAssetById(
         "uploadedBy",
         "displayName",
     );
-    if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file", 404);
     if (publicOnly && !fileAsset.isPublic) {
-        throw new HttpError("Khong tim thay file", 404);
+        throw new HttpError("Không tìm thấy file", 404);
     }
     if (viewerRoles !== undefined && viewerRoles !== null) {
         const allowed =
             fileAsset.audienceAll ||
             fileAsset.targetRoles.some(role => viewerRoles.includes(role));
-        if (!allowed) throw new HttpError("Khong tim thay file", 404);
+        if (!allowed) throw new HttpError("Không tìm thấy file", 404);
     }
     return fileAsset;
 }
@@ -168,7 +168,7 @@ export async function updateFileAsset(
     patch: UpdateFileAssetInput,
 ): Promise<IFileAsset> {
     const fileAsset = await FileAsset.findById(id);
-    if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file", 404);
 
     Object.assign(fileAsset, patch);
     await fileAsset.save();
@@ -189,7 +189,7 @@ export async function deleteFileAsset(
     id: string,
 ): Promise<void> {
     const fileAsset = await FileAsset.findById(id);
-    if (!fileAsset) throw new HttpError("Khong tim thay file", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file", 404);
     await fileAsset.deleteOne();
     // Chi xoa file vat ly neu la file da tai len (url dang "/uploads/...");
     // deleteUploadedFile tu bo qua cac url ben ngoai (vd Google Drive).

@@ -21,7 +21,7 @@ export async function listBusinessTypes(
         filter.name = { $regex: params.search, $options: "i" };
     }
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
 
     const [items, total] = await Promise.all([
         BusinessType.find(filter)
@@ -43,7 +43,7 @@ export async function listBusinessTypes(
 export async function getBusinessTypeById(id: string): Promise<IBusinessType> {
     const businessType = await BusinessType.findById(id);
     if (!businessType) {
-        throw new HttpError("Khong tim thay loai hinh kinh doanh", 404);
+        throw new HttpError("Không tìm thấy loại hình kinh doanh", 404);
     }
     return businessType;
 }
@@ -54,7 +54,7 @@ export async function createBusinessType(
 ) {
     const existing = await BusinessType.findOne({ name: input.name });
     if (existing) {
-        throw new HttpError("Ten loai hinh kinh doanh da ton tai", 409);
+        throw new HttpError("Tên loại hình kinh doanh đã tồn tại", 409);
     }
 
     const businessType = await BusinessType.create({
@@ -87,7 +87,7 @@ export async function updateBusinessType(
             _id: { $ne: id },
         });
         if (existing) {
-            throw new HttpError("Ten loai hinh kinh doanh da ton tai", 409);
+            throw new HttpError("Tên loại hình kinh doanh đã tồn tại", 409);
         }
         businessType.name = input.name;
     }
@@ -130,7 +130,7 @@ export async function putDocumentRules(
         });
         if (validCount !== new Set(documentTypeIds.map(String)).size) {
             throw new HttpError(
-                "Mot hoac nhieu loai giay to khong ton tai hoac da bi vo hieu hoa",
+                "Một hoặc nhiều loại giấy tờ không tồn tại hoặc đã bị vô hiệu hóa",
                 400,
             );
         }
@@ -163,7 +163,7 @@ export async function deleteBusinessType(actorId: string, id: string) {
     });
     if (assignedBusinessCount > 0) {
         throw new HttpError(
-            "Loai hinh kinh doanh dang duoc ho kinh doanh su dung, vui long chuyen sang loai khac truoc khi xoa",
+            "Loại hình kinh doanh đang được hộ kinh doanh sử dụng, vui lòng chuyển sang loại khác trước khi xóa",
             409,
         );
     }

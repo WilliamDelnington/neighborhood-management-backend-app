@@ -42,7 +42,7 @@ export async function createPcccCheck(
     const house = await HouseRecord.findById(input.houseId).select(
         "_id code address",
     );
-    if (!house) throw new HttpError("Khong tim thay nha", 404);
+    if (!house) throw new HttpError("Không tìm thấy nhà", 404);
 
     const inspectorId =
         input.inspectorId && actorUser.roles.includes("admin")
@@ -128,7 +128,7 @@ export async function getPcccCheckById(id: string) {
         .populate("inspectorId", "displayName")
         .populate("assigneeId", "displayName");
     if (!check)
-        throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
+        throw new HttpError("Không tìm thấy biên bản kiểm tra PCCC", 404);
     return check;
 }
 
@@ -157,7 +157,7 @@ export function assertPcccCheckInScope(
             house && typeof house === "object" ? house.neighborhoodId : undefined;
         if (!neighborhoodId || !ids.includes(String(neighborhoodId))) {
             throw new HttpError(
-                "Ban khong co quyen thao tac voi bien ban ngoai to dan pho duoc phan cong",
+                "Bạn không có quyền thao tác với biên bản ngoài tổ dân phố được phân công",
                 403,
             );
         }
@@ -168,7 +168,7 @@ export function assertPcccCheckInScope(
     const cluster = house && typeof house === "object" ? house.cluster : undefined;
     if (cluster && !user.assignedClusters.includes(cluster)) {
         throw new HttpError(
-            "Ban khong co quyen thao tac voi bien ban ngoai cum duoc phan cong",
+            "Bạn không có quyền thao tác với biên bản ngoài cụm được phân công",
             403,
         );
     }
@@ -181,13 +181,13 @@ export async function updatePcccCheck(
 ) {
     const check = await PcccCheck.findById(id);
     if (!check)
-        throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
+        throw new HttpError("Không tìm thấy biên bản kiểm tra PCCC", 404);
 
     const previousRiskLevel = check.riskLevel;
 
     if (patch.houseId !== undefined) {
         const house = await HouseRecord.findById(patch.houseId).select("_id");
-        if (!house) throw new HttpError("Khong tim thay nha", 404);
+        if (!house) throw new HttpError("Không tìm thấy nhà", 404);
         check.houseId = patch.houseId as unknown as typeof check.houseId;
     }
 
@@ -270,7 +270,7 @@ export async function checkPcccDeadlinesAndNotify(): Promise<number> {
 export async function deletePcccCheck(actorId: string, id: string) {
     const check = await PcccCheck.findByIdAndDelete(id);
     if (!check)
-        throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
+        throw new HttpError("Không tìm thấy biên bản kiểm tra PCCC", 404);
 
     const attachments = await FileAsset.find({
         relatedModel: "PcccCheck",
@@ -318,15 +318,15 @@ export async function uploadPcccAttachment(
 ) {
     const check = await PcccCheck.findById(pcccCheckId).select("_id");
     if (!check)
-        throw new HttpError("Khong tim thay bien ban kiem tra PCCC", 404);
+        throw new HttpError("Không tìm thấy biên bản kiểm tra PCCC", 404);
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-        throw new HttpError("File vuot qua dung luong cho phep (toi da 10MB)", 400);
+        throw new HttpError("File vượt quá dung lượng cho phép (tối đa 10MB)", 400);
     }
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
         throw new HttpError(
-            `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
             400,
         );
     }
@@ -373,7 +373,7 @@ export async function deletePcccAttachment(
         relatedModel: "PcccCheck",
         relatedId: pcccCheckId,
     });
-    if (!fileAsset) throw new HttpError("Khong tim thay file dinh kem", 404);
+    if (!fileAsset) throw new HttpError("Không tìm thấy file đính kèm", 404);
 
     await deleteUploadedFile(fileAsset.url);
     await fileAsset.deleteOne();

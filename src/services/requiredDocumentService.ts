@@ -140,7 +140,7 @@ export async function putRequiredDocuments(
         });
         if (validCount !== new Set(documentTypeIds.map(String)).size) {
             throw new HttpError(
-                "Mot hoac nhieu loai giay to khong ton tai hoac da bi vo hieu hoa",
+                "Một hoặc nhiều loại giấy tờ không tồn tại hoặc đã bị vô hiệu hóa",
                 400,
             );
         }

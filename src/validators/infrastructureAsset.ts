@@ -5,9 +5,9 @@ import {
 } from "@/types";
 
 export const createInfrastructureAssetSchema = z.object({
-    name: z.string().min(1, "Thieu ten tai san"),
+    name: z.string().min(1, "Thiếu tên tài sản"),
     type: z.enum(INFRASTRUCTURE_ASSET_TYPES),
-    neighborhoodId: z.string().min(1, "Thieu to dan pho"),
+    neighborhoodId: z.string().min(1, "Thiếu tổ dân phố"),
     location: z.string().optional(),
     condition: z.enum(INFRASTRUCTURE_ASSET_CONDITIONS).default("binh_thuong"),
     note: z.string().optional(),

@@ -22,7 +22,7 @@ export async function POST(
             params.id,
             body.note,
         );
-        return apiSuccess(report, "Da gui yeu cau bo sung");
+        return apiSuccess(report, "Đã gửi yêu cầu bổ sung");
     } catch (err) {
         return apiErrorFromException(err);
     }

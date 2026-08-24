@@ -12,7 +12,7 @@ export async function POST(req: Request) {
         const user = await requireUser(req);
         const body = setPasswordSchema.parse(await req.json());
         const result = await setPassword(String(user._id), body);
-        return apiSuccess(result, "Da dat mat khau dang nhap");
+        return apiSuccess(result, "Đã đặt mật khẩu đăng nhập");
     } catch (err) {
         return apiErrorFromException(err);
     }

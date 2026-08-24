@@ -18,7 +18,7 @@ export async function POST(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "appointments.checkin");
         const appointment = await completeAppointment(actorUser, params.id);
-        return apiSuccess(appointment, "Da hoan thanh lich hen");
+        return apiSuccess(appointment, "Đã hoàn thành lịch hẹn");
     } catch (err) {
         return apiErrorFromException(err);
     }

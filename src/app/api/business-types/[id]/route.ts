@@ -41,7 +41,7 @@ export async function PATCH(
             params.id,
             body,
         );
-        return apiSuccess(businessType, "Cap nhat loai hinh kinh doanh thanh cong");
+        return apiSuccess(businessType, "Cập nhật loại hình kinh doanh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }
@@ -60,7 +60,7 @@ export async function DELETE(
             String(actorUser._id),
             params.id,
         );
-        return apiSuccess(result, "Xoa loai hinh kinh doanh thanh cong");
+        return apiSuccess(result, "Xóa loại hình kinh doanh thành công");
     } catch (err) {
         return apiErrorFromException(err);
     }

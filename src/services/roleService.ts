@@ -47,7 +47,7 @@ export async function listRoles(params: {
         ];
     }
     const page = params.page || 1;
-    const limit = params.limit || 20;
+    const limit = params.limit || 10;
 
     const [roles, total, counts] = await Promise.all([
         Role.find(filter)

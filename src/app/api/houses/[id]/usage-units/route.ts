@@ -48,7 +48,7 @@ export async function POST(
             houseId: params.id,
         });
         const unit = await createHouseUsageUnit(user, body);
-        return apiSuccess(unit, "Tao don vi su dung thanh cong", 201);
+        return apiSuccess(unit, "Tạo đơn vị sử dụng thành công", 201);
     } catch (err) {
         return apiErrorFromException(err);
     }

@@ -10,10 +10,10 @@ export const FILE_ASSET_CATEGORIES = [
 ] as const;
 
 export const createFileAssetSchema = z.object({
-    name: z.string().min(1, "Ten file la bat buoc"),
+    name: z.string().min(1, "Tên file là bắt buộc"),
     // Giai doan dau chi ho tro file dang lien ket (vd Google Drive, link storage co san).
     // TODO: khi co storage adapter cho upload nhi phan, cho phep tao FileAsset tu ket qua upload.
-    url: z.string().url("Duong dan file khong hop le"),
+    url: z.string().url("Đường dẫn file không hợp lệ"),
     description: z.string().optional(),
     mimeType: z.string().optional(),
     sizeBytes: z.number().nonnegative().optional(),
