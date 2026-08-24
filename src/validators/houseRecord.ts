@@ -133,9 +133,10 @@ const GEO_CONSENT_ISSUE = {
     path: ["geoConsentAccepted"],
 };
 
-export const createHouseRecordSchema = houseRecordBaseSchema
-    .refine(data => !!data.cluster || !!data.streetId, {
-        message: "Vui long chon duong/pho hoac nhap cum dan cu",
+export const createHouseRecordSchema = houseRecordBaseSchema.refine(
+    data => !!data.cluster || !!data.streetId,
+    {
+        message: "Vui lòng chọn đường/phố hoặc nhập cụm dân cư",
         path: ["cluster"],
     })
     .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);

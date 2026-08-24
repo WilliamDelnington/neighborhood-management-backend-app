@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { requireAnyPermission, requireUser } from "@/lib/rbac";
 import { apiErrorFromException, apiSuccess } from "@/lib/response";
-import { autocompletePlaces } from "@/lib/integrations/googleMaps";
+import { autocompletePlaces } from "@/lib/integrations/goong";
 import { geoAutocompleteSchema } from "@/validators/googleMapsGeo";
 
 export const dynamic = "force-dynamic";

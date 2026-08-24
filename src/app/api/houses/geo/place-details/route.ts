@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { requireAnyPermission, requireUser } from "@/lib/rbac";
 import { apiErrorFromException, apiSuccess } from "@/lib/response";
-import { getPlaceDetails } from "@/lib/integrations/googleMaps";
+import { getPlaceDetails } from "@/lib/integrations/goong";
 import { geoPlaceDetailsSchema } from "@/validators/googleMapsGeo";
 
 export const dynamic = "force-dynamic";

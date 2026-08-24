@@ -1,11 +1,17 @@
 import { HttpError } from "@/lib/response";
 
 /**
- * Wrapper server-side cho Google Maps Platform (Places Autocomplete/Details
- * moi + Static Maps). KHONG implement IntegrationAdapter (contracts.ts) - do
- * la contract danh cho adapter chinh phu (vneid/lgsp/ndxp...), con day chi la
- * mot proxy REST don gian. Khoa API luon doc server-side, KHONG BAO GIO tra ve
- * cho client - frontend chi goi qua 3 route trong app/api/houses/geo/*.
+ * Wrapper server-side cho Google Maps Static API. KHONG implement
+ * IntegrationAdapter (contracts.ts) - do la contract danh cho adapter chinh
+ * phu (vneid/lgsp/ndxp...), con day chi la mot proxy REST don gian. Khoa API
+ * luon doc server-side, KHONG BAO GIO tra ve cho client - frontend chi goi
+ * qua route app/api/houses/geo/static-map.
+ *
+ * Places Autocomplete/Detail da chuyen sang Goong (xem goong.ts) vi khong ton
+ * phi va sai lech toa do rat nho voi dia chi Viet Nam. Rieng Static Map van
+ * giu Google vi Goong REST API khong co endpoint anh tinh theo center+zoom
+ * ma StaticMapPinConfirm.tsx can (Goong chi co /staticmap/route ve duong di
+ * giua 2 diem).
  *
  * Ham doc process.env moi lan goi (khong phai hang so top-level), giong quy
  * uoc trong lib/config.ts, de test co the doi env giua cac test case.
@@ -19,92 +25,6 @@ export function getGoogleMapsServerApiKey(): string {
         );
     }
     return key;
-}
-
-export interface PlaceAutocompletePrediction {
-    placeId: string;
-    text: string;
-}
-
-/**
- * Places Autocomplete (New). sessionToken duoc client sinh mot lan cho ca
- * chuoi "go tim -> chon ket qua" (xem HouseLocationPicker) - Google chi tinh
- * phi Place Details khi dung chung sessionToken voi Autocomplete, ban than
- * Autocomplete la mien phi. Xem
- * https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
- */
-export async function autocompletePlaces(
-    input: string,
-    sessionToken: string,
-): Promise<PlaceAutocompletePrediction[]> {
-    const apiKey = getGoogleMapsServerApiKey();
-    const res = await fetch(
-        "https://places.googleapis.com/v1/places:autocomplete",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": apiKey,
-                "X-Goog-FieldMask":
-                    "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
-            },
-            body: JSON.stringify({
-                input,
-                sessionToken,
-                regionCode: "VN",
-                languageCode: "vi",
-            }),
-        },
-    );
-    if (!res.ok) {
-        throw new HttpError("Khong the tra cuu dia chi luc nay", 502);
-    }
-    const data = (await res.json()) as {
-        suggestions?: Array<{
-            placePrediction?: { placeId: string; text?: { text: string } };
-        }>;
-    };
-    return (data.suggestions || [])
-        .map(s => s.placePrediction)
-        .filter((p): p is { placeId: string; text?: { text: string } } => !!p)
-        .map(p => ({ placeId: p.placeId, text: p.text?.text || "" }));
-}
-
-export interface PlaceDetailsResult {
-    lat: number;
-    lng: number;
-    formattedAddress: string;
-}
-
-/** Place Details (New) - dung chung sessionToken voi lan Autocomplete tuong ung. */
-export async function getPlaceDetails(
-    placeId: string,
-    sessionToken: string,
-): Promise<PlaceDetailsResult> {
-    const apiKey = getGoogleMapsServerApiKey();
-    const url = new URL(`https://places.googleapis.com/v1/places/${placeId}`);
-    url.searchParams.set("sessionToken", sessionToken);
-    const res = await fetch(url, {
-        headers: {
-            "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask": "location,formattedAddress",
-        },
-    });
-    if (!res.ok) {
-        throw new HttpError("Khong the lay chi tiet dia chi luc nay", 502);
-    }
-    const data = (await res.json()) as {
-        location?: { latitude: number; longitude: number };
-        formattedAddress?: string;
-    };
-    if (!data.location) {
-        throw new HttpError("Dia chi khong co toa do", 502);
-    }
-    return {
-        lat: data.location.latitude,
-        lng: data.location.longitude,
-        formattedAddress: data.formattedAddress || "",
-    };
 }
 
 export interface StaticMapImage {
