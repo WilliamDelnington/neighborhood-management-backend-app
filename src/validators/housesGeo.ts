@@ -11,3 +11,8 @@ export const geoPlaceDetailsSchema = z.object({
     sessionToken: z.string().min(1, "Thieu sessionToken"),
 });
 export type GeoPlaceDetailsInput = z.infer<typeof geoPlaceDetailsSchema>;
+
+export const geoGeocodeSchema = z.object({
+    address: z.string().min(1, "Thieu dia chi"),
+});
+export type GeoGeocodeInput = z.infer<typeof geoGeocodeSchema>;

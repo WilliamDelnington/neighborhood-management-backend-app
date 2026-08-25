@@ -2,10 +2,10 @@ import { HttpError } from "@/lib/response";
 
 /**
  * Wrapper server-side cho Goong Maps Platform (Place Autocomplete + Place
- * Detail) - thay the Google Places API (New) vi Goong cho ket qua dia chi
- * Viet Nam sai lech rat nho so voi Google nhung khong ton phi. Khoa API luon
- * doc server-side, KHONG BAO GIO tra ve cho client - frontend chi goi qua 2
- * route trong app/api/houses/geo/{autocomplete,place-details}.
+ * Detail + Geocode) - thay the Google Places API (New) vi Goong cho ket qua
+ * dia chi Viet Nam sai lech rat nho so voi Google nhung khong ton phi. Khoa
+ * API luon doc server-side, KHONG BAO GIO tra ve cho client - frontend chi
+ * goi qua 3 route trong app/api/houses/geo/{autocomplete,place-details,geocode}.
  *
  * Khong con proxy Static Map o day - Goong REST API chi co /staticmap/route
  * (ve duong di giua 2 diem xuat phat/den), khong co endpoint anh tinh theo
@@ -92,5 +92,42 @@ export async function getPlaceDetails(
         lat: data.result.geometry.location.lat,
         lng: data.result.geometry.location.lng,
         formattedAddress: data.result.formatted_address || "",
+    };
+}
+
+/**
+ * Geocode mot lan (dia chi day du -> toa do), KHONG qua Autocomplete/Place
+ * Detail - dung khi da co san dia chi day du, khong mo hon (so nha + duong +
+ * phuong/xa + tinh/thanh, xem HouseForm.tsx ghep tu Street + Neighborhood da
+ * chon), nen khong can nguoi dung go va chon tu danh sach goi y. Tra ve KET
+ * QUA DAU TIEN trong results - Goong khong co status rieng cho "khong tim
+ * thay", chi tra ve results rong (xem
+ * https://help.goong.io/kb/rest-api/geocode/geocodeding-ma-hoa-dia-ly/).
+ */
+export async function geocodeAddress(
+    address: string,
+): Promise<PlaceDetailsResult> {
+    const apiKey = getGoongServerApiKey();
+    const url = new URL("https://rsapi.goong.io/geocode");
+    url.searchParams.set("address", address);
+    url.searchParams.set("api_key", apiKey);
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new HttpError("Khong the xac dinh toa do luc nay", 502);
+    }
+    const data = (await res.json()) as {
+        results?: Array<{
+            geometry?: { location?: { lat: number; lng: number } };
+            formatted_address?: string;
+        }>;
+    };
+    const first = data.results?.[0];
+    if (!first?.geometry?.location) {
+        throw new HttpError("Khong tim thay toa do cho dia chi nay", 404);
+    }
+    return {
+        lat: first.geometry.location.lat,
+        lng: first.geometry.location.lng,
+        formattedAddress: first.formatted_address || "",
     };
 }
