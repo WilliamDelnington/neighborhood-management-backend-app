@@ -20,10 +20,18 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     }
 }
 
+/**
+ * Loai phan anh isBuiltIn=true (seed san, khong gan wardCode - xem
+ * scripts/seed-complaint-types.ts) phai luon hien voi MOI actor, ke ca cong
+ * dan khong co wardCode (house_owner tu tao phan anh) - truoc day dieu kien
+ * {wardCode: actorUser.wardCode} loai bo ca isBuiltIn (vi wardCode undefined
+ * != actorUser.wardCode), va !actorUser.wardCode tra ve rong hoan toan, khien
+ * cong dan khong chon duoc loai phan anh nao (xem ComplaintCreatePage.tsx).
+ */
 function definitionScope(actorUser: IUser): Record<string, unknown> {
     if (actorUser.roles.includes("admin")) return {};
-    if (!actorUser.wardCode) return { _id: { $in: [] } };
-    return { wardCode: actorUser.wardCode };
+    if (!actorUser.wardCode) return { isBuiltIn: true };
+    return { $or: [{ isBuiltIn: true }, { wardCode: actorUser.wardCode }] };
 }
 
 function assertDefinitionInScope(
@@ -45,14 +53,20 @@ export async function listComplaintTypeDefinitions(params: {
 }) {
     const page = params.page || 1;
     const limit = params.limit || 10;
-    const filter: Record<string, unknown> = definitionScope(params.actorUser);
-    if (params.active !== undefined) filter.active = params.active;
+    // Ket hop bang $and (khong gan truc tiep vao filter.$or) - definitionScope
+    // co the tra ve chinh mot dieu kien $or (isBuiltIn/wardCode), neu gan de
+    // "filter.$or = [...tim kiem]" ben duoi se de ghi de mat scope.
+    const conditions: Record<string, unknown>[] = [definitionScope(params.actorUser)];
+    if (params.active !== undefined) conditions.push({ active: params.active });
     if (params.search) {
-        filter.$or = [
-            { key: { $regex: params.search, $options: "i" } },
-            { name: { $regex: params.search, $options: "i" } },
-        ];
+        conditions.push({
+            $or: [
+                { key: { $regex: params.search, $options: "i" } },
+                { name: { $regex: params.search, $options: "i" } },
+            ],
+        });
     }
+    const filter: Record<string, unknown> = { $and: conditions };
 
     const [items, total] = await Promise.all([
         ComplaintTypeDefinition.find(filter)
