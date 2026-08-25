@@ -1,9 +1,19 @@
 import ExcelJS from "exceljs";
-import { Household, Citizen, Street, ImportJob, type IImportJob } from "@/models";
+import {
+    Household,
+    Citizen,
+    Street,
+    HouseRecord,
+    ImportJob,
+    type IImportJob,
+    type IUser,
+} from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { generateStreetCode } from "@/lib/streetSync";
+import { isValidVnPhone } from "@/lib/phone";
 import { writeAuditLog } from "@/services/auditService";
+import { createHouseRecord } from "@/services/houseRecordService";
 import {
     GIOI_TINH,
     LOAI_CU_TRU,
@@ -14,6 +24,39 @@ import {
 
 // ---------------------------------------------------------------------------
 // Dinh dang cot Excel mong doi (hang dau tien cua sheet dau tien la header).
+//
+// Import nha so:
+//   Mã căn/hộ | Phân khu/dãy | Chủ sở hữu đứng tên | SĐT chủ sở hữu |
+//   Chủ hộ/người đang sử dụng | SĐT/Zalo liên hệ | Loại hình sử dụng |
+//   Tình trạng cư trú | Có kinh doanh | Số nhân khẩu | Trạng thái đất |
+//   Đối chiếu mã lô | Ghi chú
+//   - Dua theo dinh dang "Phieu thu thap thong tin ho gia dinh/can ho/co so
+//     kinh doanh" da dung o mot so to dan pho (vd TDP Hoa Binh) - khac han
+//     HOUSEHOLD_COLUMNS o duoi (danh cho import ho dan don gian, dinh dang
+//     rieng cua he thong).
+//   - "Mã căn/hộ" la BAT BUOC va duoc dung y NGUYEN lam House.code (KHONG tu
+//     sinh qua generateSequentialCode nhu luong tao nha so binh thuong tren
+//     UI) - vi mot so dia ban da co san ma nha rieng (vd "H01-L19") tu truoc
+//     khi dung he thong nay, khong theo dinh dang tuan tu NSxxx. Phai duy
+//     nhat (ca trong file va trong he thong) - xem createHouseRecord input.code.
+//   - "Phân khu/dãy" duoc dung lam cluster (cum dan cu) cua dong do; neu de
+//     trong, dung "cum mac dinh cho ca file" duoc nhap luc tai len (xem
+//     defaultCluster o previewHouseImport). Neu ca hai deu trong, dong bi bao
+//     loi (House bat buoc phai co cluster hoac streetId).
+//   - "Chủ sở hữu đứng tên" + "SĐT chủ sở hữu": CHI tao tai khoan chu nha
+//     (User, role house_owner) khi CA HAI co gia tri hop le (ten khong rong,
+//     SDT dung dinh dang VN qua isValidVnPhone) - thieu mot trong hai thi nha
+//     van duoc tao, chi la chua co chu nha (giong ownerKind="none"). SDT
+//     khong hop le KHONG chan ca dong - chi bo qua viec tao tai khoan, gia
+//     tri goc van duoc giu lai trong Ghi chu de nhan vien doi chieu sau.
+//     KHONG co cot CCCD/CMND - truong nay khong bat buoc cho tai khoan chu
+//     nha tao qua luong nay (xem resolveOrCreateHouseOwner).
+//   - Cac cot con lai (Chủ hộ/người đang sử dụng, SĐT/Zalo liên hệ, Loại hình
+//     sử dụng, Tình trạng cư trú, Có kinh doanh, Số nhân khẩu, Trạng thái đất,
+//     Đối chiếu mã lô, Ghi chú) KHONG co truong rieng tren House - duoc gop
+//     lai thanh MOT doan ghi chu duy nhat luu vao House.note (xem
+//     buildHouseImportNote) de khong mat du lieu, thay vi tao them Household
+//     (import nay CHI tao House + tai khoan chu nha, khong tao Household).
 //
 // Import ho dan:
 //   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
@@ -43,6 +86,22 @@ import {
 //     duoc doc/luu - chi 3 cot duoc khai bao trong STREET_COLUMNS moi anh
 //     huong den du lieu import.
 // ---------------------------------------------------------------------------
+
+const HOUSE_COLUMNS = {
+    code: "Mã căn/hộ",
+    subZone: "Phân khu/dãy",
+    ownerName: "Chủ sở hữu đứng tên",
+    ownerPhone: "SĐT chủ sở hữu",
+    headOfHousehold: "Chủ hộ/người đang sử dụng",
+    contactPhone: "SĐT/Zalo liên hệ",
+    usageType: "Loại hình sử dụng",
+    residenceStatus: "Tình trạng cư trú",
+    hasBusiness: "Có kinh doanh",
+    memberCount: "Số nhân khẩu",
+    landStatus: "Trạng thái đất",
+    lotCodeCrossCheck: "Đối chiếu mã lô",
+    note: "Ghi chú",
+} as const;
 
 const HOUSEHOLD_COLUMNS = {
     cluster: "Cụm dân cư",
@@ -194,6 +253,190 @@ function parseDateCell(value: unknown): Date | undefined {
 
     const parsed = new Date(str);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+// ---------------------------------------------------------------------------
+// Import nha so
+// ---------------------------------------------------------------------------
+
+/**
+ * Cac cot "phu" cua Phieu thu thap (khong co truong rieng tren House) duoc
+ * gop lai thanh MOT doan ghi chu duy nhat (chi in nhan co gia tri, tranh o
+ * trong lam nhieu House.note) - xem ghi chu dau file.
+ */
+function buildHouseImportNote(v: Record<string, unknown>): string | undefined {
+    const parts: [string, string][] = [
+        [
+            "Chủ hộ/người đang sử dụng",
+            cellToString(v[HOUSE_COLUMNS.headOfHousehold]).trim(),
+        ],
+        [
+            "SĐT/Zalo liên hệ",
+            cellToString(v[HOUSE_COLUMNS.contactPhone]).trim(),
+        ],
+        ["Loại hình sử dụng", cellToString(v[HOUSE_COLUMNS.usageType]).trim()],
+        [
+            "Tình trạng cư trú",
+            cellToString(v[HOUSE_COLUMNS.residenceStatus]).trim(),
+        ],
+        ["Có kinh doanh", cellToString(v[HOUSE_COLUMNS.hasBusiness]).trim()],
+        ["Số nhân khẩu", cellToString(v[HOUSE_COLUMNS.memberCount]).trim()],
+        ["Trạng thái đất", cellToString(v[HOUSE_COLUMNS.landStatus]).trim()],
+        [
+            "Đối chiếu mã lô",
+            cellToString(v[HOUSE_COLUMNS.lotCodeCrossCheck]).trim(),
+        ],
+        ["Ghi chú", cellToString(v[HOUSE_COLUMNS.note]).trim()],
+    ];
+    const filled = parts.filter(([, value]) => !!value);
+    if (filled.length === 0) return undefined;
+    return filled.map(([label, value]) => `${label}: ${value}`).join("; ");
+}
+
+export async function previewHouseImport(
+    actorId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    options: { defaultCluster?: string; neighborhoodId?: string } = {},
+): Promise<IImportJob> {
+    const { rows } = await readWorksheetRows(fileBuffer);
+    const defaultCluster = options.defaultCluster?.trim() || undefined;
+    const neighborhoodId = options.neighborhoodId || undefined;
+
+    // Doi chieu ma nha trung lap voi DB TRUOC (mot lan, giong ky thuat cua
+    // previewCitizenImport/applyStreetImportMapping) - tranh N truy van rieng
+    // le cho tung dong.
+    const codesInFile = new Set<string>();
+    for (const row of rows) {
+        const code = cellToString(row.values[HOUSE_COLUMNS.code]).trim();
+        if (code) codesInFile.add(code);
+    }
+    const existingHouses = await HouseRecord.find({
+        code: { $in: Array.from(codesInFile) },
+    }).select("code");
+    const existingCodes = new Set(existingHouses.map(h => h.code));
+    const seenCodes = new Set<string>();
+
+    const errors: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    for (const row of rows) {
+        const v = row.values;
+        const code = cellToString(v[HOUSE_COLUMNS.code]).trim();
+        const subZone = cellToString(v[HOUSE_COLUMNS.subZone]).trim();
+        const ownerName = cellToString(v[HOUSE_COLUMNS.ownerName]).trim();
+        const ownerPhone = cellToString(v[HOUSE_COLUMNS.ownerPhone]).trim();
+
+        const rowErrors: string[] = [];
+        if (!code) rowErrors.push("Thiếu 'Mã căn/hộ'");
+        if (code) {
+            if (existingCodes.has(code) || seenCodes.has(code)) {
+                rowErrors.push(`Mã "${code}" đã tồn tại`);
+            } else {
+                seenCodes.add(code);
+            }
+        }
+
+        const cluster = subZone || defaultCluster;
+        if (!cluster) {
+            rowErrors.push(
+                "Thiếu 'Phân khu/dãy' và chưa nhập cụm dân cư mặc định cho cả file",
+            );
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        // Chi tao tai khoan chu nha khi CA ten VA sdt hop le - thieu mot
+        // trong hai thi van tao House, chi la chua co chu nha (xem ghi chu
+        // dau file). SDT khong hop le khong chan dong, chi bi bo qua (gia tri
+        // goc van con trong buildHouseImportNote qua cot SĐT/Zalo lien he neu
+        // trung, nhung rieng SDT chu so huu khong hop le se khong xuat hien o
+        // dau ca - chap nhan duoc vi day chi la du lieu phu, khong bat buoc).
+        const hasValidOwner = !!ownerName && isValidVnPhone(ownerPhone);
+
+        previewData.push({
+            code,
+            cluster,
+            address: subZone ? `${subZone} - ${code}` : code,
+            neighborhoodId,
+            ownerName: hasValidOwner ? ownerName : undefined,
+            ownerPhone: hasValidOwner ? ownerPhone : undefined,
+            note: buildHouseImportNote(v),
+        });
+    }
+
+    const job = await ImportJob.create({
+        type: "house",
+        status: errors.length === 0 ? "validated" : "previewing",
+        fileName,
+        totalRows: rows.length,
+        validRows: previewData.length,
+        rowErrors: errors,
+        previewData,
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+export async function commitHouseImport(
+    actorUser: IUser,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "house") {
+        throw new HttpError("Import job này không phải loại nhà số", 400);
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.rowErrors.length > 0) {
+        throw new HttpError(
+            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
+            400,
+        );
+    }
+
+    let committedCount = 0;
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        const hasOwner = !!row.ownerName && !!row.ownerPhone;
+        // eslint-disable-next-line no-await-in-loop
+        await createHouseRecord(actorUser, {
+            code: row.code as string,
+            cluster: row.cluster as string,
+            address: row.address as string,
+            note: row.note as string | undefined,
+            neighborhoodId: (row.neighborhoodId as string | undefined) || undefined,
+            ownerKind: hasOwner ? "individual" : "none",
+            createOwnerAccount: hasOwner,
+            owner: hasOwner
+                ? {
+                      displayName: row.ownerName as string,
+                      phone: row.ownerPhone as string,
+                  }
+                : undefined,
+        });
+        committedCount += 1;
+    }
+
+    job.status = "committed";
+    job.committedCount = committedCount;
+    await job.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: job._id,
+        metadata: { type: "house", count: committedCount },
+    });
+
+    return job;
 }
 
 // ---------------------------------------------------------------------------

@@ -606,7 +606,13 @@ async function resolveOrCreateOrganizationOwner(
 
 export async function createHouseRecord(
     actorUser: IUser,
-    input: CreateHouseRecordInput,
+    // "code": KHONG thuoc createHouseRecordSchema/HouseForm (luon tu sinh qua
+    // generateSequentialCode cho luong tao nha so thong thuong) - chi duoc
+    // truyen thu cong tu importService khi commit "Nhap Excel nha so", vi mot
+    // so dia ban dung ma nha rieng (vd "H01-L19") khong theo dinh dang tuan tu
+    // NSxxx. Khong them vao zod schema de nguoi dung thuong (qua API/HouseForm)
+    // khong the tu dat ma tuy y.
+    input: CreateHouseRecordInput & { code?: string },
 ): Promise<IHouseRecord> {
     const { cluster, streetId } = await resolveStreetClusterPair(input);
     assertClusterAssignable(actorUser, cluster);
@@ -644,24 +650,35 @@ export async function createHouseRecord(
         ownerId = actorUser._id;
     }
 
-    const code = await generateSequentialCode(HouseRecord, "NS", 3);
+    const code =
+        input.code || (await generateSequentialCode(HouseRecord, "NS", 3));
     const gis = normalizeHouseGis(input);
-    const houseRecord = await HouseRecord.create({
-        code,
-        cluster,
-        streetId,
-        neighborhoodId: input.neighborhoodId || undefined,
-        address: input.address,
-        ...administrativeDivisions,
-        physicalStatus: input.physicalStatus,
-        usageTypes: input.usageTypes?.length ? input.usageTypes : ["household"],
-        otherUsageNote: input.otherUsageNote,
-        note: input.note,
-        residenceDeclarationNumber: input.residenceDeclarationNumber,
-        ...gis,
-        createdBy: actorUser._id,
-        updatedBy: actorUser._id,
-    });
+    let houseRecord: IHouseRecord;
+    try {
+        houseRecord = await HouseRecord.create({
+            code,
+            cluster,
+            streetId,
+            neighborhoodId: input.neighborhoodId || undefined,
+            address: input.address,
+            ...administrativeDivisions,
+            physicalStatus: input.physicalStatus,
+            usageTypes: input.usageTypes?.length
+                ? input.usageTypes
+                : ["household"],
+            otherUsageNote: input.otherUsageNote,
+            note: input.note,
+            residenceDeclarationNumber: input.residenceDeclarationNumber,
+            ...gis,
+            createdBy: actorUser._id,
+            updatedBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError(`Mã nhà "${code}" đã tồn tại`, 409);
+        }
+        throw err;
+    }
 
     // Tao quan he primary_owner ban dau trong HouseOwnership (nguon "su that"
     // cho quan he nhieu-nhieu House<->chu nha) - ham nay tu dong dong bo lai

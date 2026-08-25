@@ -184,7 +184,7 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
     },
     {
         key: "organizations",
-        label: "Tổ chức (chủ nhà)",
+        label: "Tổ chức (chủ sở hữu)",
         permissions: [
             { key: "organizations.read", label: "Xem tổ chức" },
             { key: "organizations.create", label: "Tạo tổ chức" },

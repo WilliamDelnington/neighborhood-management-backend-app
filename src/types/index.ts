@@ -782,6 +782,7 @@ export type NotificationStatus = typeof NOTIFICATION_STATUS[number];
 // Import job
 // ---------------------------------------------------------------------------
 export const IMPORT_JOB_TYPE = [
+    "house",
     "household",
     "citizen",
     "party_member",

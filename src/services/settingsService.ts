@@ -23,6 +23,11 @@ const PUBLIC_SETTING_KEYS = [
     // dang nhap - xem uploadAppLogo/removeAppLogo. An toan cong khai vi chi la
     // duong dan anh, khong phai du lieu noi bo.
     APP_LOGO_SETTING_KEY,
+    // Mo ta tuy chinh cho tung muc menu sidebar (de admin sua qua UI thay vi
+    // sua code) - xem constants/modules.ts (mac dinh) va man Cai dat o admin
+    // web app. Chi la chuoi mo ta hien thi, khong nhay cam nen an toan cong
+    // khai cho moi vai tro dang nhap.
+    "section_descriptions",
 ] as const;
 
 // Luu y: co tinh khong lam endpoint reset/wipe du lieu he thong o day. Day la
