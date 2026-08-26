@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { previewHouseImport } from "@/services/importService";
+import { uploadHouseImportFile } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
 
@@ -22,27 +22,15 @@ export async function POST(req: Request) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
         const fileName = file instanceof File ? file.name : "import-nha-so.xlsx";
-        const defaultCluster = formData.get("defaultCluster");
-        const neighborhoodId = formData.get("neighborhoodId");
 
-        const job = await previewHouseImport(
+        const job = await uploadHouseImportFile(
             String(actorUser._id),
             buffer,
             fileName,
-            {
-                defaultCluster:
-                    typeof defaultCluster === "string"
-                        ? defaultCluster
-                        : undefined,
-                neighborhoodId:
-                    typeof neighborhoodId === "string"
-                        ? neighborhoodId
-                        : undefined,
-            },
         );
         return apiSuccess(
             job,
-            "Đã đọc và kiểm tra dữ liệu, vui lòng xem trước kết quả trước khi commit",
+            "Đã đọc dữ liệu, vui lòng chọn cột tương ứng cho từng trường",
             201,
         );
     } catch (err) {

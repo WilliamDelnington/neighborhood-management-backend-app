@@ -31,3 +31,32 @@ export const streetImportMappingSchema = z.object({
 export type StreetImportMappingInput = z.infer<
     typeof streetImportMappingSchema
 >;
+
+/**
+ * Mapping cot Excel -> truong du lieu House, do nguoi dung xac nhan o buoc
+ * "chon cot" sau khi upload (xem uploadHouseImportFile/applyHouseImportMapping
+ * trong importService.ts). Chi "code" bat buoc phai chon cot; cac truong con
+ * lai deu tuy chon (bo trong nghia la khong dung cot nao). defaultCluster/
+ * neighborhoodId KHONG phai cot trong file - la gia tri admin nhap/chon mot
+ * lan cho ca file.
+ */
+export const houseImportMappingSchema = z.object({
+    code: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Mã căn/hộ'"),
+    subZone: z.string().optional(),
+    ownerName: z.string().optional(),
+    ownerPhone: z.string().optional(),
+    headOfHousehold: z.string().optional(),
+    contactPhone: z.string().optional(),
+    usageType: z.string().optional(),
+    residenceStatus: z.string().optional(),
+    hasBusiness: z.string().optional(),
+    memberCount: z.string().optional(),
+    landStatus: z.string().optional(),
+    lotCodeCrossCheck: z.string().optional(),
+    note: z.string().optional(),
+    defaultCluster: z.string().optional(),
+    neighborhoodId: z.string().optional(),
+});
+export type HouseImportMappingInput = z.infer<
+    typeof houseImportMappingSchema
+>;
