@@ -33,10 +33,11 @@ async function createNeighborhood(
     );
 }
 
-// Gan to truong/to pho gio bat buoc phai kem mot nhiem ky dang ACTIVE (xem
-// assignLeaderSchema/assignNeighborhoodLeader) - helper tao san nhiem ky nay
-// cho cac test chi quan tam den hanh vi gan/huy gan, khong phai ban than
-// nhiem ky.
+// Gan to truong/to pho gio bat buoc phai kem mot nhiem ky dang IN_PROGRESS
+// (xem assignLeaderSchema/assignNeighborhoodLeader) - helper tao san nhiem ky
+// nay cho cac test chi quan tam den hanh vi gan/huy gan, khong phai ban than
+// nhiem ky. startAt o qua khu -> tu dong IN_PROGRESS (xem
+// resolveTermStatusByDate), khong con truyen status truc tiep nua.
 async function createActiveTerm(
     headers: Record<string, string>,
     neighborhoodId: string,
@@ -49,7 +50,6 @@ async function createActiveTerm(
                 name: `Nhiệm kỳ ${neighborhoodId}`,
                 startAt: "2026-01-01",
                 endAt: "2028-12-31",
-                status: "ACTIVE",
             },
         }),
         { params: { id: neighborhoodId } },
@@ -115,7 +115,7 @@ describe("Neighborhood: tao va gan to truong", () => {
         expect(res.status).toBe(422);
     });
 
-    it("tu choi gan to truong khi chua chon nhiem ky dang ACTIVE", async () => {
+    it("tu choi gan to truong khi chua chon nhiem ky dang IN_PROGRESS", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-02B", 21);

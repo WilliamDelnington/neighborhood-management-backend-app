@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { POST as createNeighborhoodRoute } from "@/app/api/neighborhoods/route";
 import { POST as createTermRoute } from "@/app/api/neighborhoods/[id]/terms/route";
-import { PATCH as updateTermRoute } from "@/app/api/neighborhoods/[id]/terms/[termId]/route";
+import { POST as endTermEarlyRoute } from "@/app/api/neighborhoods/[id]/terms/[termId]/end-early/route";
 import {
     POST as assignColeaderRoute,
     DELETE as unassignColeaderRoute,
@@ -33,6 +33,8 @@ async function createNeighborhood(
     );
 }
 
+// startAt o qua khu -> tu dong IN_PROGRESS (xem resolveTermStatusByDate),
+// khong con truyen status truc tiep nua.
 async function createActiveTerm(
     headers: Record<string, string>,
     neighborhoodId: string,
@@ -45,7 +47,6 @@ async function createActiveTerm(
                 name: `Nhiệm kỳ ${neighborhoodId}`,
                 startAt: "2026-01-01",
                 endAt: "2028-12-31",
-                status: "ACTIVE",
             },
         }),
         { params: { id: neighborhoodId } },
@@ -54,7 +55,7 @@ async function createActiveTerm(
 }
 
 describe("Neighborhood: gan/huy gan to pho (coleader), bat buoc nhiem ky", () => {
-    it("tu choi gan to pho khi chua chon nhiem ky dang ACTIVE (422)", async () => {
+    it("tu choi gan to pho khi chua chon nhiem ky dang IN_PROGRESS (422)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-CL01", 501);
@@ -134,10 +135,14 @@ describe("Neighborhood: gan/huy gan to pho (coleader), bat buoc nhiem ky", () =>
             { params: { id: created.data._id } },
         );
 
-        const endRes = await updateTermRoute(
+        const endRes = await endTermEarlyRoute(
             makeRequest(
-                `/api/neighborhoods/${created.data._id}/terms/${term.data._id}`,
-                { method: "PATCH", headers, body: { status: "ENDED" } },
+                `/api/neighborhoods/${created.data._id}/terms/${term.data._id}/end-early`,
+                {
+                    method: "POST",
+                    headers,
+                    body: { reason: "Kết thúc kiểm thử" },
+                },
             ),
             { params: { id: created.data._id, termId: term.data._id } },
         );

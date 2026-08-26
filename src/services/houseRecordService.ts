@@ -1162,6 +1162,76 @@ export async function transitionHouseRecordStatus(
     return withInferredUsageTypes(houseRecord);
 }
 
+export interface BulkHouseActionResult {
+    succeededIds: string[];
+    failed: { id: string; message: string }[];
+}
+
+/**
+ * Gan mot to dan pho cho NHIEU nha so cung luc (vd nha nhap tu Excel con
+ * thieu to dan pho) - danh cho man "Danh sach nha so" chon nhieu dong roi
+ * thao tac hang loat. Goi lai updateHouseRecord() TUNG nha mot (khong tu
+ * viet lai logic) de tan dung nguyen ven cac rang buoc da co: nha "verified"
+ * se bi tu choi (403, phai di qua ChangeRequest chuyen to dan pho), nha
+ * ngoai pham vi cua actor se bi tu choi... Loi cua tung nha KHONG lam dung
+ * ca lo - duoc gom lai va tra ve trong "failed" de UI hien thi ro nha nao
+ * thanh cong/that bai va vi sao.
+ */
+export async function bulkAssignHouseNeighborhood(
+    actorUser: IUser,
+    ids: string[],
+    neighborhoodId: string,
+): Promise<BulkHouseActionResult> {
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+    for (const id of ids) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await updateHouseRecord(actorUser, id, { neighborhoodId });
+            succeededIds.push(id);
+        } catch (err) {
+            failed.push({
+                id,
+                message:
+                    err instanceof HttpError ? err.message : "Có lỗi xảy ra",
+            });
+        }
+    }
+    return { succeededIds, failed };
+}
+
+/**
+ * Chuyen trang thai xac thuc cho NHIEU nha so cung luc (vd duyet hang loat
+ * cac nha dang "Chờ duyệt") - goi lai transitionHouseRecordStatus() TUNG nha
+ * mot, cung ly do voi bulkAssignHouseNeighborhood o tren (tai su dung nguyen
+ * rang buoc chuyen trang thai hop le, gom loi rieng tung nha thay vi chan ca
+ * lo). Nha khong o dung trang thai nguon (vd da "verified" tu truoc) se rot
+ * vao "failed" voi thong bao loi co san, khong lam dung nhung nha con lai.
+ */
+export async function bulkTransitionHouseRecordStatus(
+    actorUser: IUser,
+    ids: string[],
+    targetStatus: HouseRecordStatus,
+    note?: string,
+): Promise<BulkHouseActionResult> {
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+    for (const id of ids) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await transitionHouseRecordStatus(actorUser, id, targetStatus, note);
+            succeededIds.push(id);
+        } catch (err) {
+            failed.push({
+                id,
+                message:
+                    err instanceof HttpError ? err.message : "Có lỗi xảy ra",
+            });
+        }
+    }
+    return { succeededIds, failed };
+}
+
 export async function deleteHouseRecord(
     actorId: string,
     id: string,

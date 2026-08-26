@@ -3,7 +3,6 @@ import {
     NEIGHBORHOOD_BOUNDARY_TYPES,
     NEIGHBORHOOD_STATUSES,
 } from "@/models/Neighborhood";
-import { NEIGHBORHOOD_TERM_STATUSES } from "@/models/NeighborhoodTerm";
 import { NEIGHBORHOOD_COLLABORATOR_SCOPES } from "@/models/NeighborhoodCollaboratorAssignment";
 
 const optionalDate = z.coerce.date().optional();
@@ -96,13 +95,17 @@ export const unassignColeaderSchema = z.object({
 });
 export type UnassignColeaderInput = z.infer<typeof unassignColeaderSchema>;
 
+// "saveAsDraft" la lua chon giua 2 nut o man tao nhiem ky - KHONG phai
+// status truc tiep: true -> luon DRAFT; false/khong gui -> he thong tu tinh
+// NOT_STARTED/IN_PROGRESS (hoac ENDED neu ca khoang thoi gian da qua) dua
+// theo startAt/endAt, xem resolveTermStatusByDate trong neighborhoodService.ts.
 export const createNeighborhoodTermSchema = z
     .object({
         name: z.string().trim().min(1, "Tên nhiệm kỳ là bắt buộc"),
         startAt: z.coerce.date(),
         endAt: z.coerce.date(),
-        status: z.enum(NEIGHBORHOOD_TERM_STATUSES).default("PLANNED"),
         notes: z.string().trim().optional(),
+        saveAsDraft: z.boolean().default(false),
     })
     .refine(value => value.endAt >= value.startAt, {
         path: ["endAt"],
@@ -112,16 +115,30 @@ export type CreateNeighborhoodTermInput = z.infer<
     typeof createNeighborhoodTermSchema
 >;
 
+// Chi sua duoc thong tin khi nhiem ky dang DRAFT hoac NOT_STARTED (kiem tra o
+// service, khong the bieu dat bang zod don thuan) - cac chuyen trang thai
+// (huy/ket thuc/xoa) dung endpoint rieng, KHONG con truong "status" o day nua
+// (khac ban cu: cho phep PATCH status tuy y, khong co state machine).
+// "finalize": CHI co y nghia khi nhiem ky dang DRAFT - true = luu thong tin
+// VA chuyen luon sang NOT_STARTED/IN_PROGRESS (nut "Tạo" khi sua mot ban
+// nhap); false/khong gui = chi luu thong tin, van la DRAFT (nut "Lưu nháp").
 export const updateNeighborhoodTermSchema = z
     .object({
         name: z.string().trim().min(1).optional(),
         startAt: optionalDate,
         endAt: optionalDate,
-        status: z.enum(NEIGHBORHOOD_TERM_STATUSES).optional(),
         notes: z.string().trim().optional(),
+        finalize: z.boolean().optional(),
     });
 export type UpdateNeighborhoodTermInput = z.infer<
     typeof updateNeighborhoodTermSchema
+>;
+
+export const endNeighborhoodTermEarlySchema = z.object({
+    reason: z.string().trim().min(1, "Vui lòng nhập lý do kết thúc sớm"),
+});
+export type EndNeighborhoodTermEarlyInput = z.infer<
+    typeof endNeighborhoodTermEarlySchema
 >;
 
 export const assignNeighborhoodCollaboratorSchema = z
