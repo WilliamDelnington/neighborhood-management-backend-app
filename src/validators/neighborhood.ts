@@ -64,18 +64,29 @@ export const updateNeighborhoodSchema = createNeighborhoodSchema
     .partial();
 export type UpdateNeighborhoodInput = z.infer<typeof updateNeighborhoodSchema>;
 
-export const assignLeaderSchema = z.object({
-    leaderUserId: z.string().nullable(),
-    note: z.string().optional(),
-    termId: z.string().optional(),
-    endAt: optionalDate,
-});
+// leaderUserId: null = huy gan (khong can chon nhiem ky, chi go lien ket).
+// leaderUserId co gia tri = gan moi, BAT BUOC phai kem termId - to truong
+// khong con la mot phan cong "doc lap" voi nhiem ky nua (xem
+// neighborhoodService.assignNeighborhoodLeader).
+export const assignLeaderSchema = z
+    .object({
+        leaderUserId: z.string().nullable(),
+        note: z.string().optional(),
+        termId: z.string().optional(),
+        endAt: optionalDate,
+    })
+    .refine(data => data.leaderUserId === null || !!data.termId, {
+        message: "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ trưởng",
+        path: ["termId"],
+    });
 export type AssignLeaderInput = z.infer<typeof assignLeaderSchema>;
 
+// Khac assignLeaderSchema: schema nay CHI dung cho gan moi (huy gan to pho
+// dung unassignColeaderSchema rieng ben duoi), nen termId luon bat buoc.
 export const assignColeaderSchema = z.object({
     coleaderUserId: z.string(),
     note: z.string().optional(),
-    termId: z.string().optional(),
+    termId: z.string().min(1, "Vui lòng chọn nhiệm kỳ đang áp dụng"),
     endAt: optionalDate,
 });
 export type AssignColeaderInput = z.infer<typeof assignColeaderSchema>;

@@ -444,6 +444,17 @@ export async function assignNeighborhoodLeader(
     let newLeader: IUser | null = null;
     let assignmentEndAt = options?.endAt;
     let termId = options?.termId;
+    // Phan cong to truong PHAI gan voi mot nhiem ky dang ACTIVE - to truong
+    // khong con la mot "quan he doc lap" voi nhiem ky nua (xem
+    // assignLeaderSchema o validator, day la lop chan thu hai o service phong
+    // truong hop goi thang service, bo qua validator). Khong ap dung cho
+    // nhanh HUY gan (leaderUserId null) - go lien ket khong can chon nhiem ky.
+    if (leaderUserId && !termId) {
+        throw new HttpError(
+            "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ trưởng",
+            422,
+        );
+    }
     if (termId) {
         const term = await NeighborhoodTerm.findOne({
             _id: termId,
@@ -629,15 +640,23 @@ export async function assignNeighborhoodColeader(
 
     let assignmentEndAt = options?.endAt;
     const termId = options?.termId;
-    if (termId) {
-        const term = await NeighborhoodTerm.findOne({
-            _id: termId,
-            neighborhoodId,
-            status: "ACTIVE",
-        });
-        if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
-        assignmentEndAt = term.endAt;
+    // Phan cong to pho PHAI gan voi mot nhiem ky dang ACTIVE - cung quy tac
+    // voi assignNeighborhoodLeader (xem ghi chu tren do), khong co nhanh huy
+    // gan rieng trong ham nay (unassignNeighborhoodColeader o duoi khong can
+    // nhiem ky).
+    if (!termId) {
+        throw new HttpError(
+            "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ phó",
+            422,
+        );
     }
+    const term = await NeighborhoodTerm.findOne({
+        _id: termId,
+        neighborhoodId,
+        status: "ACTIVE",
+    });
+    if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
+    assignmentEndAt = term.endAt;
     if (assignmentEndAt && assignmentEndAt <= new Date()) {
         throw new HttpError("Ngày kết thúc phân công phải ở tương lai", 422);
     }

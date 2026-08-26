@@ -11,6 +11,10 @@ export const createCompanySchema = z.object({
     // Lien ket tuy chon toi mot Organization co san (khong tao moi) - xem
     // ghi chu tren models/Company.ts.
     organizationId: z.string().nullable().optional(),
+    // Nhieu loai hinh kinh doanh cung luc (khac Business - mot gia tri duy
+    // nhat) - mang rong = khong gan loai hinh nao, undefined (update) =
+    // khong doi.
+    businessTypeIds: z.array(z.string()).optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),

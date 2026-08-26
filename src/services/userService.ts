@@ -15,6 +15,7 @@ import type {
     AssignRoleInput,
     CreateHouseOwnerInput,
     LockUserStatusInput,
+    ResetUserPasswordInput,
     UpdateUserInput,
 } from "@/validators/user";
 import type { Role as RoleType } from "@/types";
@@ -289,6 +290,46 @@ export async function lockUserStatus(
         targetModel: "User",
         targetId: target._id,
         metadata: { status: input.status, statusReason: input.statusReason },
+    });
+
+    return await sanitizeUser(target);
+}
+
+/**
+ * Dat lai mat khau cho MOT tai khoan bat ky (khac setPassword trong
+ * authService.ts - tu doi mat khau cua chinh minh, co xac nhan mat khau cu).
+ * Dung cho: (1) tai khoan chu nha duoc tao qua Nhap Excel/tao thay khong co
+ * mat khau (xem resolveOrCreateHouseOwner) nen khong the tu dang nhap lan
+ * dau; (2) ho tro "Quen mat khau" - LoginPage.tsx (resident-web-app) huong
+ * nguoi dung lien he to truong/UBND phuong, day chinh la thao tac ho thuc
+ * hien. Admin dat duoc cho bat ky ai; to truong gioi han qua
+ * assertUserInLeaderScope giong lockUserStatus (chi chu nha thuoc to dan pho
+ * minh phu trach). LUON tang sessionVersion de vo hieu hoa phien dang nhap cu
+ * (giong huong khoa tai khoan) - tranh token cu (vd may bi mat) con dung duoc
+ * sau khi mat khau da bi nguoi khac dat lai.
+ */
+export async function resetUserPasswordByAdmin(
+    actorUser: IUser,
+    targetId: string,
+    input: ResetUserPasswordInput,
+) {
+    const target = await User.findById(targetId);
+    if (!target) throw new HttpError("Không tìm thấy người dùng", 404);
+
+    if (!actorUser.roles.includes("admin")) {
+        await assertUserInLeaderScope(actorUser, target);
+    }
+
+    target.passwordHash = await hashPassword(input.password);
+    target.sessionVersion += 1;
+    target.updatedBy = actorUser._id as any;
+    await target.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.reset_password",
+        targetModel: "User",
+        targetId: target._id,
     });
 
     return await sanitizeUser(target);
