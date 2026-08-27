@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { LOAI_TIN_TUC } from "@/types";
+import { sanitizeRichContent } from "@/lib/richContent";
 
 export const createNewsSchema = z.object({
     title: z.string().min(3, "Tieu de qua ngan"),
-    content: z.string().min(10, "Noi dung qua ngan"),
+    content: z
+        .string()
+        .min(10, "Noi dung qua ngan")
+        .transform(sanitizeRichContent),
     category: z.enum(LOAI_TIN_TUC).default("chung"),
     pinned: z.boolean().default(false),
 });
