@@ -41,6 +41,8 @@ async function createNeighborhood(
 async function createActiveTerm(
     headers: Record<string, string>,
     neighborhoodId: string,
+    startAt = "2026-01-01",
+    endAt = "2028-12-31",
 ) {
     const res = await createTermRoute(
         makeRequest(`/api/neighborhoods/${neighborhoodId}/terms`, {
@@ -48,8 +50,8 @@ async function createActiveTerm(
             headers,
             body: {
                 name: `Nhiệm kỳ ${neighborhoodId}`,
-                startAt: "2026-01-01",
-                endAt: "2028-12-31",
+                startAt,
+                endAt,
             },
         }),
         { params: { id: neighborhoodId } },
@@ -172,7 +174,7 @@ describe("Neighborhood: tao va gan to truong", () => {
         expect(String(activeAssignment!.leaderUserId)).toBe(String(leader._id));
     });
 
-    it("chuyen to truong sang to dan pho khac: dong phan cong cu, mo phan cong moi, xoa lien ket to cu", async () => {
+    it("to truong dang co nhiem ky active o to khac, trung thoi gian -> tu choi gan (409), khong tu dong chuyen", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const neighborhoodA = await createNeighborhood(headers, "TDP-04", 4);
@@ -193,7 +195,7 @@ describe("Neighborhood: tao va gan to truong", () => {
             { params: { id: neighborhoodA.data._id } },
         );
 
-        await assignLeaderRoute(
+        const res = await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodB.data._id}/leader`, {
                 method: "PUT",
                 headers,
@@ -204,24 +206,23 @@ describe("Neighborhood: tao va gan to truong", () => {
             }),
             { params: { id: neighborhoodB.data._id } },
         );
+        expect(res.status).toBe(409);
 
         const oldNeighborhood = await Neighborhood.findById(neighborhoodA.data._id);
-        expect(oldNeighborhood!.leaderUserId).toBeUndefined();
+        expect(String(oldNeighborhood!.leaderUserId)).toBe(String(leader._id));
 
         const newNeighborhood = await Neighborhood.findById(neighborhoodB.data._id);
-        expect(String(newNeighborhood!.leaderUserId)).toBe(String(leader._id));
-
-        const updatedLeader = await User.findById(leader._id);
-        expect(String(updatedLeader!.neighborhoodId)).toBe(String(neighborhoodB.data._id));
-        expect(updatedLeader!.assignedNeighborhoodIds.map(String)).toEqual([
-            String(neighborhoodB.data._id),
-        ]);
-
-        const oldAssignment = await NeighborhoodLeaderAssignment.findOne({
-            neighborhoodId: neighborhoodA.data._id,
-        });
-        expect(oldAssignment!.unassignedAt).toBeDefined();
+        expect(newNeighborhood!.leaderUserId).toBeUndefined();
     });
+
+    // Luu y: khong the dung route gan truc tiep (PUT .../leader) de test truong
+    // hop "khong trung thoi gian van cung ton tai" - vi route nay doi hoi ca
+    // hai nhiem ky dang IN_PROGRESS CUNG LUC (status IN_PROGRESS nghia la
+    // startAt <= hien tai <= endAt), ma hai khoang thoi gian nao cung chua
+    // "hien tai" thi chac chan giao nhau. Truong hop "khong trung thoi gian"
+    // chi xay ra khi nhiem ky thu hai con o tuong lai (NOT_STARTED) va chi
+    // duoc CHI DINH (khong gan truc tiep) - xem
+    // tests/api/neighborhoodTermOverlap.test.ts.
 
     it("go gan to truong (leaderUserId=null): dong phan cong, xoa lien ket user", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
