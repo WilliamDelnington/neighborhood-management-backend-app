@@ -32,6 +32,17 @@ export interface INeighborhoodTerm extends Document {
     // BAT BUOC khi ket thuc som (endNeighborhoodTermEarly) - khong dung cho
     // cac chuyen trang thai khac (huy/dung han khong can ly do).
     endReason?: string;
+    // To truong/to pho DUOC CHI DINH cho nhiem ky nay - khai bao ngay tren
+    // form tao/sua nhiem ky (khac NeighborhoodLeaderAssignment/
+    // NeighborhoodColeaderAssignment, la nguon "su that" cho AI DANG QUAN LY
+    // thuc te tai moi thoi diem, co lich su/chuyen nhuong rieng). Hai truong
+    // nay chi la "du dinh" - khi nhiem ky chuyen sang IN_PROGRESS (luc tao,
+    // luc finalize ban nhap, hoac tu dong khi den ngay bat dau), he thong tu
+    // goi assignNeighborhoodLeader/assignNeighborhoodColeader de tao phan
+    // cong thuc su tu day. Sua duoc cung dieu kien voi cac truong khac (chi
+    // DRAFT/NOT_STARTED) - xem updateNeighborhoodTerm.
+    leaderUserId?: mongoose.Types.ObjectId;
+    coleaderUserId?: mongoose.Types.ObjectId;
     createdBy: mongoose.Types.ObjectId;
     updatedBy: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -58,6 +69,8 @@ const NeighborhoodTermSchema = new Schema<INeighborhoodTerm>(
         notes: { type: String, trim: true },
         endedEarly: { type: Boolean },
         endReason: { type: String, trim: true },
+        leaderUserId: { type: Schema.Types.ObjectId, ref: "User" },
+        coleaderUserId: { type: Schema.Types.ObjectId, ref: "User" },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     },

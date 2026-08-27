@@ -99,6 +99,11 @@ export type UnassignColeaderInput = z.infer<typeof unassignColeaderSchema>;
 // status truc tiep: true -> luon DRAFT; false/khong gui -> he thong tu tinh
 // NOT_STARTED/IN_PROGRESS (hoac ENDED neu ca khoang thoi gian da qua) dua
 // theo startAt/endAt, xem resolveTermStatusByDate trong neighborhoodService.ts.
+// leaderUserId/coleaderUserId: chi dinh to truong/to pho NGAY LUC TAO nhiem
+// ky - null/khong gui = chua chi dinh. Chi thuc su tao phan cong (goi
+// assignNeighborhoodLeader/assignNeighborhoodColeader) khi nhiem ky IN_PROGRESS
+// (ngay lap tuc neu startAt <= hom nay, hoac sau nay khi den ngay bat dau/
+// finalize) - xem ghi chu tren models/NeighborhoodTerm.ts.
 export const createNeighborhoodTermSchema = z
     .object({
         name: z.string().trim().min(1, "Tên nhiệm kỳ là bắt buộc"),
@@ -106,6 +111,8 @@ export const createNeighborhoodTermSchema = z
         endAt: z.coerce.date(),
         notes: z.string().trim().optional(),
         saveAsDraft: z.boolean().default(false),
+        leaderUserId: z.string().nullable().optional(),
+        coleaderUserId: z.string().nullable().optional(),
     })
     .refine(value => value.endAt >= value.startAt, {
         path: ["endAt"],
@@ -129,6 +136,8 @@ export const updateNeighborhoodTermSchema = z
         endAt: optionalDate,
         notes: z.string().trim().optional(),
         finalize: z.boolean().optional(),
+        leaderUserId: z.string().nullable().optional(),
+        coleaderUserId: z.string().nullable().optional(),
     });
 export type UpdateNeighborhoodTermInput = z.infer<
     typeof updateNeighborhoodTermSchema
