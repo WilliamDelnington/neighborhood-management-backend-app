@@ -15,7 +15,10 @@ import { generateSequentialCode } from "@/lib/utils";
 import { generateStreetCode } from "@/lib/streetSync";
 import { isValidVnPhone } from "@/lib/phone";
 import { writeAuditLog } from "@/services/auditService";
-import { createHouseRecord } from "@/services/houseRecordService";
+import {
+    createHouseRecord,
+    resolveInitialVerificationStatus,
+} from "@/services/houseRecordService";
 import { createBusiness } from "@/services/businessService";
 import {
     GIOI_TINH,
@@ -59,8 +62,20 @@ import {
 //     sử dụng, Tình trạng cư trú, Có kinh doanh, Số nhân khẩu, Trạng thái đất,
 //     Đối chiếu mã lô, Ghi chú) la TUY CHON - neu co chon cot, gia tri duoc
 //     gop lai thanh MOT doan ghi chu duy nhat luu vao House.note (xem
-//     buildHouseImportNote) de khong mat du lieu, thay vi tao them Household
-//     (import nay CHI tao House + tai khoan chu nha, khong tao Household).
+//     buildHouseImportNote) de khong mat du lieu.
+//   - "createHouseholds" (KHONG phai cot - tick chon MOT LAN cho ca file):
+//     khi bat, MOI dong CO ten chu ho (tu cot "Chủ hộ/người đang sử dụng",
+//     hoac "Chủ sở hữu đứng tên" neu cot truoc trong/khong chon) se duoc tao
+//     THEM mot Household lien ket qua houseId - mac dinh TAT (giu nguyen hanh
+//     vi cu: CHI tao House + tai khoan chu nha, khong tao Household) vi
+//     khong phai file nao cung mang du lieu ho dan that su. "Loại hình sử
+//     dụng" chua "kinh doanh" (hoac "Có kinh doanh"="Có") KHONG chan viec tao
+//     Household - mot dia chi co the vua o vua kinh doanh - chi duoc ghi
+//     thanh mot dong note tren Household de admin biet can bo sung Hộ kinh
+//     doanh rieng (he thong khong tu suy ra du du lieu ten/MST cho Business
+//     tu sheet nay). memberCount cua Household tao ra bat dau tu 0, duoc dien
+//     dan qua import nhan khau (xem duoi) - KHONG lay tu cot "Số nhân khẩu"
+//     de tranh dem trung.
 //
 // Import ho dan:
 //   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
@@ -72,11 +87,17 @@ import {
 //     Citizen thuc te thuoc ho dan, duoc dien khi import nhan khau (xem duoi).
 //
 // Import nhan khau:
-//   Họ tên | Số điện thoại | CCCD | Ngày sinh | Giới tính | Quan hệ với chủ hộ
-//   | Mã hộ | Thường trú/Tạm trú | Người cao tuổi | Trẻ em | Người khuyết tật
-//   | Đảng viên | Đoàn viên
-//   - "Mã hộ" phai la ma ho da ton tai trong he thong (vd HB001), duoc doi chieu
-//     truoc khi cho phep commit.
+//   Giong Import nha so/Business - upload TRUOC, chon cot o buoc sau (xem
+//   applyCitizenImportMapping). Chi "Họ tên" bat buoc; rieng cot lien ket toi
+//   ho dan chap nhan MOT TRONG HAI (uu tien "Mã hộ" cho tung dong neu co gia
+//   tri o ca hai):
+//   - "Mã hộ": khop truc tiep Household.code da co san (vd HB001).
+//   - "Mã căn/hộ": khop HouseRecord.code, roi tu tim Household DANG lien ket
+//     voi nha do (qua houseId) - dung cho cac file chi ghi ma nha (khong co
+//     ma ho rieng, vd phieu thu thap dan cu chuan) - loi neu nha chua co
+//     Household nao (xem tuy chon "createHouseholds" cua Import nha so o
+//     tren) hoac co nhieu hon 1 Household (truong hop nay phai dung "Mã hộ"
+//     de xac dinh chinh xac).
 //
 // Import duong/pho:
 //   Tên đường/phố | Mã đường/phố | Trạng thái
@@ -144,6 +165,9 @@ const CITIZEN_COLUMNS = {
     gender: "Giới tính",
     relationToHead: "Quan hệ với chủ hộ",
     householdCode: "Mã hộ",
+    // Cot lien ket THAY THE cho householdCode - xem ghi chu "Import nhan
+    // khau" o dau file va applyCitizenImportMapping.
+    houseCode: "Mã căn/hộ",
     residenceType: "Thường trú/Tạm trú",
     isElderly: "Người cao tuổi",
     isChild: "Trẻ em",
@@ -312,6 +336,9 @@ export type HouseColumnMapping = {
     // hoac o rong o mot so dong (xem applyHouseImportMapping).
     defaultCluster?: string;
     neighborhoodId?: string;
+    // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file (xem
+    // ghi chu chi tiet o houseImportMappingSchema va commitHouseImport).
+    createHouseholds?: boolean;
 };
 
 // Cac truong tuong ung 1-1 voi cot trong file (khac defaultCluster/
@@ -495,6 +522,18 @@ export async function applyHouseImportMapping(
         const ownerPhone = mapping.ownerPhone
             ? (row.values[mapping.ownerPhone] || "").trim()
             : "";
+        const headOfHousehold = mapping.headOfHousehold
+            ? (row.values[mapping.headOfHousehold] || "").trim()
+            : "";
+        const contactPhone = mapping.contactPhone
+            ? (row.values[mapping.contactPhone] || "").trim()
+            : "";
+        const usageType = mapping.usageType
+            ? (row.values[mapping.usageType] || "").trim()
+            : "";
+        const hasBusinessCell = mapping.hasBusiness
+            ? (row.values[mapping.hasBusiness] || "").trim()
+            : "";
 
         const rowErrors: string[] = [];
         if (!code) rowErrors.push("Thiếu 'Mã căn/hộ'");
@@ -532,6 +571,14 @@ export async function applyHouseImportMapping(
             ownerName: hasValidOwner ? ownerName : undefined,
             ownerPhone: hasValidOwner ? ownerPhone : undefined,
             note: buildHouseImportNote(row.values, mapping),
+            // Du lieu rieng de tao Household khi mapping.createHouseholds=true
+            // (xem commitHouseImport) - tinh san o day, chi thuc su dung khi
+            // co bat tuy chon, khong anh huong den House neu khong bat.
+            householdHeadOfHousehold: headOfHousehold || ownerName || undefined,
+            householdPhone: contactPhone || ownerPhone || undefined,
+            hasBusinessSignal:
+                (hasBusinessCell && parseBoolean(hasBusinessCell)) ||
+                normalizeEnumInput(usageType).includes("kinh_doanh"),
         });
     }
 
@@ -570,11 +617,18 @@ export async function commitHouseImport(
         );
     }
 
+    // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file luc
+    // "chon cot" (xem applyHouseImportMapping) - luu trong columnMapping da
+    // duoc job.save() o buoc do.
+    const createHouseholds =
+        (job.columnMapping as HouseColumnMapping)?.createHouseholds === true;
+
     let committedCount = 0;
+    let householdsCreated = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
         const hasOwner = !!row.ownerName && !!row.ownerPhone;
         // eslint-disable-next-line no-await-in-loop
-        await createHouseRecord(actorUser, {
+        const houseRecord = await createHouseRecord(actorUser, {
             code: row.code as string,
             cluster: row.cluster as string,
             address: row.address as string,
@@ -590,6 +644,45 @@ export async function commitHouseImport(
                 : undefined,
         });
         committedCount += 1;
+
+        // Tao them Household lien ket qua houseId khi nguoi dung bat tuy chon
+        // "Cũng tạo hộ dân" - CHI khi dong co ten chu ho (headOfHousehold hoac
+        // ownerName, xem applyHouseImportMapping), vi Household.headOfHousehold
+        // la truong bat buoc. Tao truc tiep qua Model (khong qua
+        // householdService.createHousehold) giong quy uoc cua
+        // commitHouseholdImport - tranh rang buoc "phone bat buoc" va viec tu
+        // dong sinh Citizen "Chủ hộ" cua ham do (co the trung voi du lieu that
+        // se duoc nhap rieng qua Citizen import cho cung nha nay, vd file
+        // "Chi tiết nhân khẩu" di kem - xem applyCitizenImportMapping o duoi).
+        const headOfHousehold = row.householdHeadOfHousehold as
+            | string
+            | undefined;
+        if (createHouseholds && headOfHousehold) {
+            // eslint-disable-next-line no-await-in-loop
+            const householdCode = await generateSequentialCode(
+                Household,
+                "HB",
+                3,
+            );
+            // eslint-disable-next-line no-await-in-loop
+            await Household.create({
+                code: householdCode,
+                cluster: houseRecord.cluster,
+                streetId: houseRecord.streetId,
+                neighborhoodId: houseRecord.neighborhoodId,
+                address: houseRecord.address,
+                headOfHousehold,
+                phone: row.householdPhone as string | undefined,
+                houseId: houseRecord._id,
+                status: resolveInitialVerificationStatus(houseRecord),
+                note: row.hasBusinessSignal
+                    ? "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin."
+                    : undefined,
+                createdBy: actorUser._id,
+                updatedBy: actorUser._id,
+            });
+            householdsCreated += 1;
+        }
     }
 
     job.status = "committed";
@@ -601,7 +694,7 @@ export async function commitHouseImport(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: job._id,
-        metadata: { type: "house", count: committedCount },
+        metadata: { type: "house", count: committedCount, householdsCreated },
     });
 
     return job;
@@ -739,52 +832,237 @@ export async function commitHouseholdImport(
 // Import nhan khau
 // ---------------------------------------------------------------------------
 
-export async function previewCitizenImport(
+export type CitizenColumnMapping = {
+    fullName: string;
+    phone?: string;
+    cccd?: string;
+    birthDate?: string;
+    gender?: string;
+    relationToHead?: string;
+    householdCode?: string;
+    houseCode?: string;
+    residenceType?: string;
+    isElderly?: string;
+    isChild?: string;
+    isDisabledOrSupportNeeded?: string;
+    isPartyMember?: string;
+    isUnionMember?: string;
+};
+
+// Cac truong tuong ung 1-1 voi cot trong file, tru "fullName" (bat buoc, xu
+// ly rieng - xem applyCitizenImportMapping).
+const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
+    keyof typeof CITIZEN_COLUMNS,
+    "fullName"
+>[] = [
+    "phone",
+    "cccd",
+    "birthDate",
+    "gender",
+    "relationToHead",
+    "householdCode",
+    "houseCode",
+    "residenceType",
+    "isElderly",
+    "isChild",
+    "isDisabledOrSupportNeeded",
+    "isPartyMember",
+    "isUnionMember",
+];
+
+/**
+ * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
+ * CITIZEN_COLUMNS co dinh - nguoi dung se chon cot ung voi tung truong o
+ * buoc sau (xem applyCitizenImportMapping), giong uploadHouseImportFile.
+ */
+export async function uploadCitizenImportFile(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
 ): Promise<IImportJob> {
-    const { rows } = await readWorksheetRows(fileBuffer);
+    const { headers, rows } = await readWorksheetRows(fileBuffer);
 
-    const codes = Array.from(
-        new Set(
-            rows
-                .map(r =>
-                    cellToString(
-                        r.values[CITIZEN_COLUMNS.householdCode],
-                    ).trim(),
-                )
-                .filter(Boolean),
-        ),
+    const rawRows = rows.map(row => {
+        const values: Record<string, string> = {};
+        for (const header of headers) {
+            if (header in row.values) {
+                values[header] = cellToString(row.values[header]).trim();
+            }
+        }
+        return { rowNumber: row.rowNumber, values };
+    });
+
+    const suggestedMapping: Record<string, string> = {};
+    for (const [field, expectedLabel] of Object.entries(CITIZEN_COLUMNS)) {
+        const match = headers.find(
+            h => normalizeEnumInput(h) === normalizeEnumInput(expectedLabel),
+        );
+        if (match) suggestedMapping[field] = match;
+    }
+
+    const job = await ImportJob.create({
+        type: "citizen",
+        status: "awaiting_mapping",
+        fileName,
+        totalRows: rows.length,
+        validRows: 0,
+        headers,
+        rawRows,
+        suggestedMapping,
+        columnMapping: {},
+        rowErrors: [],
+        previewData: [],
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+/**
+ * Buoc 2 (chon cot): ap dung mapping do nguoi dung xac nhan len du lieu tho
+ * da luu o buoc upload - bat buoc chon cot cho "Họ tên", va MOT TRONG HAI
+ * "Mã hộ"/"Mã căn/hộ" de liên ket toi ho dan (schema da rang buoc it nhat
+ * mot trong hai o tang validator, o day chi validate lai cho chac va xu ly
+ * tung dong). Co the goi lai nhieu lan mien la job chua commit - giong
+ * applyHouseImportMapping.
+ */
+export async function applyCitizenImportMapping(
+    importJobId: string,
+    mapping: CitizenColumnMapping,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "citizen") {
+        throw new HttpError("Import job này không phải loại nhân khẩu", 400);
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+
+    const headers = job.headers;
+    if (!mapping.fullName || !headers.includes(mapping.fullName)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Họ tên'",
+            422,
+        );
+    }
+    if (!mapping.householdCode && !mapping.houseCode) {
+        throw new HttpError(
+            "Vui lòng chọn cột 'Mã hộ' hoặc 'Mã căn/hộ' để liên kết nhân khẩu với hộ dân",
+            422,
+        );
+    }
+    for (const field of CITIZEN_MAPPING_COLUMN_FIELDS) {
+        const column = mapping[field];
+        if (column && !headers.includes(column)) {
+            throw new HttpError(
+                `Cột đã chọn cho '${CITIZEN_COLUMNS[field]}' không hợp lệ`,
+                422,
+            );
+        }
+    }
+    const mappedColumns = [
+        mapping.fullName,
+        ...CITIZEN_MAPPING_COLUMN_FIELDS.map(field => mapping[field]),
+    ].filter(Boolean) as string[];
+    if (new Set(mappedColumns).size !== mappedColumns.length) {
+        throw new HttpError(
+            "Không thể chọn cùng một cột cho nhiều trường dữ liệu khác nhau",
+            422,
+        );
+    }
+
+    const rows = job.rawRows;
+
+    // Tra cuu truoc (mot lan) Household theo "Mã hộ" (neu co chon cot) - giong
+    // ky thuat cua applyHouseImportMapping/applyBusinessImportMapping.
+    const householdCodesInFile = new Set<string>();
+    const houseCodesInFile = new Set<string>();
+    for (const row of rows) {
+        if (mapping.householdCode) {
+            const code = (row.values[mapping.householdCode] || "").trim();
+            if (code) householdCodesInFile.add(code);
+        }
+        if (mapping.houseCode) {
+            const code = (row.values[mapping.houseCode] || "").trim();
+            if (code) houseCodesInFile.add(code);
+        }
+    }
+    const householdsByCode = await Household.find({
+        code: { $in: Array.from(householdCodesInFile) },
+    }).select("code");
+    const householdCodeToId = new Map(
+        householdsByCode.map(h => [h.code, String(h._id)]),
     );
-    const households = await Household.find({ code: { $in: codes } }).select(
-        "code",
-    );
-    const codeToId = new Map(households.map(h => [h.code, String(h._id)]));
+
+    // "Mã căn/hộ" khong khop truc tiep Household - phai qua HouseRecord.code
+    // truoc, roi tim (dung) Household DANG lien ket voi nha do qua houseId
+    // (xem tuy chon "createHouseholds" cua Import nha so o dau file).
+    const housesByCode = await HouseRecord.find({
+        code: { $in: Array.from(houseCodesInFile) },
+    }).select("code");
+    const houseCodeToId = new Map(housesByCode.map(h => [h.code, String(h._id)]));
+    const householdsByHouseId = await Household.find({
+        houseId: { $in: Array.from(houseCodeToId.values()) },
+    }).select("houseId code");
+    const houseIdToHouseholdIds = new Map<string, string[]>();
+    for (const household of householdsByHouseId) {
+        const key = String(household.houseId);
+        const list = houseIdToHouseholdIds.get(key) || [];
+        list.push(String(household._id));
+        houseIdToHouseholdIds.set(key, list);
+    }
 
     const errors: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
     for (const row of rows) {
         const v = row.values;
-        const fullName = cellToString(v[CITIZEN_COLUMNS.fullName]).trim();
-        const householdCode = cellToString(
-            v[CITIZEN_COLUMNS.householdCode],
-        ).trim();
-        const genderRaw = cellToString(v[CITIZEN_COLUMNS.gender]).trim();
-        const residenceRaw = cellToString(
-            v[CITIZEN_COLUMNS.residenceType],
-        ).trim();
+        const fullName = (v[mapping.fullName] || "").trim();
+        const genderRaw = mapping.gender ? (v[mapping.gender] || "").trim() : "";
+        const residenceRaw = mapping.residenceType
+            ? (v[mapping.residenceType] || "").trim()
+            : "";
 
         const rowErrors: string[] = [];
         if (!fullName) rowErrors.push("Thiếu 'Họ tên'");
-        if (!householdCode) rowErrors.push("Thiếu 'Mã hộ'");
 
-        const householdId = householdCode
-            ? codeToId.get(householdCode)
-            : undefined;
-        if (householdCode && !householdId) {
-            rowErrors.push(`Không tìm thấy hộ dân với mã "${householdCode}"`);
+        // Uu tien "Mã hộ" cho tung dong neu co gia tri o ca hai cot (xem ghi
+        // chu dau file) - chi fallback sang "Mã căn/hộ" khi "Mã hộ" trong.
+        const householdCode = mapping.householdCode
+            ? (v[mapping.householdCode] || "").trim()
+            : "";
+        const houseCode = mapping.houseCode
+            ? (v[mapping.houseCode] || "").trim()
+            : "";
+
+        let householdId: string | undefined;
+        if (householdCode) {
+            householdId = householdCodeToId.get(householdCode);
+            if (!householdId) {
+                rowErrors.push(`Không tìm thấy hộ dân với mã "${householdCode}"`);
+            }
+        } else if (houseCode) {
+            const houseId = houseCodeToId.get(houseCode);
+            if (!houseId) {
+                rowErrors.push(`Không tìm thấy nhà số có mã "${houseCode}"`);
+            } else {
+                const householdIds = houseIdToHouseholdIds.get(houseId) || [];
+                if (householdIds.length === 0) {
+                    rowErrors.push(
+                        `Nhà số "${houseCode}" chưa có hộ dân nào được tạo`,
+                    );
+                } else if (householdIds.length > 1) {
+                    rowErrors.push(
+                        `Nhà số "${houseCode}" có nhiều hộ dân, vui lòng dùng cột 'Mã hộ' để xác định chính xác`,
+                    );
+                } else {
+                    [householdId] = householdIds;
+                }
+            }
+        } else {
+            rowErrors.push("Thiếu 'Mã hộ' hoặc 'Mã căn/hộ'");
         }
 
         let gender: GioiTinh = "nam";
@@ -818,38 +1096,39 @@ export async function previewCitizenImport(
 
         previewData.push({
             fullName,
-            phone: cellToString(v[CITIZEN_COLUMNS.phone]).trim() || undefined,
-            cccd: cellToString(v[CITIZEN_COLUMNS.cccd]).trim() || undefined,
-            birthDate: parseDateCell(
-                v[CITIZEN_COLUMNS.birthDate],
-            )?.toISOString(),
+            phone: mapping.phone ? (v[mapping.phone] || "").trim() || undefined : undefined,
+            cccd: mapping.cccd ? (v[mapping.cccd] || "").trim() || undefined : undefined,
+            birthDate: mapping.birthDate
+                ? parseDateCell(v[mapping.birthDate])?.toISOString()
+                : undefined,
             gender,
-            relationToHead:
-                cellToString(v[CITIZEN_COLUMNS.relationToHead]).trim() ||
-                undefined,
+            relationToHead: mapping.relationToHead
+                ? (v[mapping.relationToHead] || "").trim() || undefined
+                : undefined,
             householdId,
             residenceType,
-            isElderly: parseBoolean(v[CITIZEN_COLUMNS.isElderly]),
-            isChild: parseBoolean(v[CITIZEN_COLUMNS.isChild]),
-            isDisabledOrSupportNeeded: parseBoolean(
-                v[CITIZEN_COLUMNS.isDisabledOrSupportNeeded],
-            ),
-            isPartyMember: parseBoolean(v[CITIZEN_COLUMNS.isPartyMember]),
-            isUnionMember: parseBoolean(v[CITIZEN_COLUMNS.isUnionMember]),
+            isElderly: mapping.isElderly
+                ? parseBoolean(v[mapping.isElderly])
+                : false,
+            isChild: mapping.isChild ? parseBoolean(v[mapping.isChild]) : false,
+            isDisabledOrSupportNeeded: mapping.isDisabledOrSupportNeeded
+                ? parseBoolean(v[mapping.isDisabledOrSupportNeeded])
+                : false,
+            isPartyMember: mapping.isPartyMember
+                ? parseBoolean(v[mapping.isPartyMember])
+                : false,
+            isUnionMember: mapping.isUnionMember
+                ? parseBoolean(v[mapping.isUnionMember])
+                : false,
         });
     }
 
-    const job = await ImportJob.create({
-        type: "citizen",
-        status: errors.length === 0 ? "validated" : "previewing",
-        fileName,
-        totalRows: rows.length,
-        validRows: previewData.length,
-        rowErrors: errors,
-        previewData,
-        committedCount: 0,
-        createdBy: actorId,
-    });
+    job.columnMapping = mapping;
+    job.rowErrors = errors;
+    job.previewData = previewData;
+    job.validRows = previewData.length;
+    job.status = errors.length === 0 ? "validated" : "previewing";
+    await job.save();
 
     return job;
 }
@@ -865,6 +1144,12 @@ export async function commitCitizenImport(
     }
     if (job.status === "committed") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.status === "awaiting_mapping") {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu (mapping) trước khi commit",
+            400,
+        );
     }
     if (job.rowErrors.length > 0) {
         throw new HttpError(
@@ -1073,7 +1358,7 @@ export async function applyStreetImportMapping(
 
     // Tra cuu truoc (mot lan, khong lap tung dong) de doi chieu trung ma/ten
     // voi du lieu da co trong he thong - giong ky thuat build Map mot lan cua
-    // previewCitizenImport cho householdCode.
+    // applyCitizenImportMapping cho householdCode.
     const namesInSheet = new Set<string>();
     const codesInSheet = new Set<string>();
     for (const row of rows) {

@@ -56,6 +56,12 @@ export const houseImportMappingSchema = z.object({
     note: z.string().optional(),
     defaultCluster: z.string().optional(),
     neighborhoodId: z.string().optional(),
+    // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file (xem
+    // applyHouseImportMapping/commitHouseImport). Khi bat, moi dong CO chu ho
+    // (headOfHousehold hoac ownerName) se duoc tao them mot Household lien ket
+    // qua houseId, ben canh House nhu truoc - mac dinh TAT de khong doi hanh
+    // vi cua cac file nhap chi co du lieu nha (khong co thong tin ho dan).
+    createHouseholds: z.boolean().optional(),
 });
 export type HouseImportMappingInput = z.infer<
     typeof houseImportMappingSchema
@@ -81,4 +87,45 @@ export const businessImportMappingSchema = z.object({
 });
 export type BusinessImportMappingInput = z.infer<
     typeof businessImportMappingSchema
+>;
+
+/**
+ * Mapping cot Excel -> truong du lieu Citizen (nhan khau), do nguoi dung xac
+ * nhan o buoc "chon cot" sau khi upload (xem uploadCitizenImportFile/
+ * applyCitizenImportMapping trong importService.ts) - khac ban dau (bo nhan
+ * cot CO DINH), gio dung chung mau "chon cot" voi House/Business/Street de
+ * chap nhan file voi ten cot bat ky.
+ *
+ * "fullName" bat buoc phai chon cot. Rieng cot lien ket toi ho dan, chap
+ * nhan MOT TRONG HAI (hoac ca hai, uu tien householdCode neu o mot dong co
+ * gia tri o ca hai cot):
+ * - "householdCode" ("Mã hộ"): khop truc tiep voi Household.code da co san.
+ * - "houseCode" ("Mã căn/hộ"): khop voi HouseRecord.code, sau do he thong tu
+ *   tim Household dang lien ket voi nha do (houseId) - dung cho file chi ghi
+ *   ma nha (khong co ma ho rieng), vd cac phieu thu thap dan cu chuan.
+ */
+export const citizenImportMappingSchema = z
+    .object({
+        fullName: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Họ tên'"),
+        phone: z.string().optional(),
+        cccd: z.string().optional(),
+        birthDate: z.string().optional(),
+        gender: z.string().optional(),
+        relationToHead: z.string().optional(),
+        householdCode: z.string().optional(),
+        houseCode: z.string().optional(),
+        residenceType: z.string().optional(),
+        isElderly: z.string().optional(),
+        isChild: z.string().optional(),
+        isDisabledOrSupportNeeded: z.string().optional(),
+        isPartyMember: z.string().optional(),
+        isUnionMember: z.string().optional(),
+    })
+    .refine(data => !!data.householdCode || !!data.houseCode, {
+        message:
+            "Vui lòng chọn cột 'Mã hộ' hoặc 'Mã căn/hộ' để liên kết nhân khẩu với hộ dân",
+        path: ["householdCode"],
+    });
+export type CitizenImportMappingInput = z.infer<
+    typeof citizenImportMappingSchema
 >;
