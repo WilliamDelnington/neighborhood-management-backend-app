@@ -60,3 +60,25 @@ export const houseImportMappingSchema = z.object({
 export type HouseImportMappingInput = z.infer<
     typeof houseImportMappingSchema
 >;
+
+/**
+ * Mapping cot Excel -> truong du lieu Business (ho kinh doanh), do nguoi dung
+ * xac nhan o buoc "chon cot" sau khi upload (xem uploadBusinessImportFile/
+ * applyBusinessImportMapping trong importService.ts). "name" va "houseCode"
+ * bat buoc phai chon cot - khac House import (tao nha moi tu file), Business
+ * import CHI gan vao nha da ton tai san trong he thong (doi chieu qua
+ * houseCode voi HouseRecord.code), khong tu tao nha moi.
+ */
+export const businessImportMappingSchema = z.object({
+    name: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Tên hộ kinh doanh'"),
+    houseCode: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Mã nhà'"),
+    businessTypeName: z.string().optional(),
+    ownerName: z.string().optional(),
+    taxCode: z.string().optional(),
+    phone: z.string().optional(),
+    active: z.string().optional(),
+    note: z.string().optional(),
+});
+export type BusinessImportMappingInput = z.infer<
+    typeof businessImportMappingSchema
+>;
