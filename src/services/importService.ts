@@ -18,6 +18,7 @@ import { writeAuditLog } from "@/services/auditService";
 import {
     createHouseRecord,
     resolveInitialVerificationStatus,
+    assertHouseRecordInScope,
 } from "@/services/houseRecordService";
 import { createBusiness } from "@/services/businessService";
 import {
@@ -43,8 +44,19 @@ import {
 //     lam House.code (KHONG tu sinh qua generateSequentialCode nhu luong tao
 //     nha so binh thuong tren UI) - vi mot so dia ban da co san ma nha rieng
 //     (vd "H01-L19") tu truoc khi dung he thong nay, khong theo dinh dang
-//     tuan tu NSxxx. Phai duy nhat (ca trong file va trong he thong) - xem
-//     createHouseRecord input.code.
+//     tuan tu NSxxx.
+//   - Neu ma DA TON TAI trong he thong (vd import lai mot file da cap nhat
+//     them thong tin, giong cach du lieu thuc te duoc gop qua nhieu "đợt thu
+//     thập") - KHONG bao loi va KHONG tao trung, ma duoc coi la mot lan "cap
+//     nhat": CHI dien vao truong dang TRONG tren House da co (hien tai: note,
+//     neighborhoodId), khong bao gio ghi de gia tri da co san (xem
+//     mergeIntoExistingHouse). CHI ap dung khi nha van con
+//     "unverified"/"pending" - nha da "verified" bi khoa boi
+//     HOUSE_RECORD_PROTECTED_FIELDS (phai qua ChangeRequest de sua), nen dong
+//     nay se khong sua gi ca (van tinh la thanh cong, chi khong co gi thay
+//     doi). KHONG tu gan/doi chu nha cho nha da ton tai du dong co "Chủ sở
+//     hữu đứng tên" hop le - gan chu nha la hanh dong rieng, phai lam thu
+//     cong qua man chi tiet nha.
 //   - "Phân khu/dãy" (neu co chon cot) duoc dung lam cluster (cum dan cu)
 //     cua dong do; neu cot nay khong duoc chon HOAC o rong, dung "cum mac
 //     dinh cho ca file" nguoi dung nhap luc chon cot (xem
@@ -75,7 +87,12 @@ import {
 //     doanh rieng (he thong khong tu suy ra du du lieu ten/MST cho Business
 //     tu sheet nay). memberCount cua Household tao ra bat dau tu 0, duoc dien
 //     dan qua import nhan khau (xem duoi) - KHONG lay tu cot "Số nhân khẩu"
-//     de tranh dem trung.
+//     de tranh dem trung. Neu nha (moi hoac da ton tai) da co san DUNG 1
+//     Household, KHONG tao them ban thu hai - ap dung cung nguyen tac "chi
+//     dien vao truong dang trong" nhu House o tren (phone/note), va cung chi
+//     ap dung khi Household do con "unverified"/"pending". Neu nha co nhieu
+//     hon 1 Household (hiem, tao thu cong) thi bo qua, khong ro nen dien vao
+//     Household nao.
 //
 // Import ho dan:
 //   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
@@ -505,7 +522,11 @@ export async function applyHouseImportMapping(
     const existingHouses = await HouseRecord.find({
         code: { $in: Array.from(codesInFile) },
     }).select("code");
-    const existingCodes = new Set(existingHouses.map(h => h.code));
+    // code -> houseId, dung de nhan biet dong nao la "cap nhat" (nha da ton
+    // tai) thay vi "tao moi" - xem ghi chu o duoi va mergeIntoExistingHouse.
+    const existingCodeToId = new Map(
+        existingHouses.map(h => [h.code, String(h._id)]),
+    );
     const seenCodes = new Set<string>();
 
     const errors: { row: number; message: string }[] = [];
@@ -538,15 +559,22 @@ export async function applyHouseImportMapping(
         const rowErrors: string[] = [];
         if (!code) rowErrors.push("Thiếu 'Mã căn/hộ'");
         if (code) {
-            if (existingCodes.has(code) || seenCodes.has(code)) {
-                rowErrors.push(`Mã "${code}" đã tồn tại`);
+            if (seenCodes.has(code)) {
+                rowErrors.push(`Mã "${code}" xuất hiện nhiều lần trong file`);
             } else {
                 seenCodes.add(code);
             }
         }
 
+        // Nha da ton tai (trung "Mã căn/hộ" voi HouseRecord co san) KHONG con
+        // bi bao loi nhu truoc - dong nay se duoc COMMIT nhu mot lan "cap
+        // nhat" (chi dien vao truong dang trong, khong ghi de du lieu da co,
+        // xem mergeIntoExistingHouse) thay vi tao moi. cluster/address vi vay
+        // chi bat buoc khi TAO MOI.
+        const existingHouseId = code ? existingCodeToId.get(code) : undefined;
+
         const cluster = subZone || defaultCluster;
-        if (!cluster) {
+        if (!existingHouseId && !cluster) {
             rowErrors.push(
                 "Thiếu 'Phân khu/dãy' và chưa nhập cụm dân cư mặc định cho cả file",
             );
@@ -565,8 +593,9 @@ export async function applyHouseImportMapping(
 
         previewData.push({
             code,
-            cluster,
-            address: subZone ? `${subZone} - ${code}` : code,
+            cluster: cluster || undefined,
+            address: cluster ? (subZone ? `${subZone} - ${code}` : code) : undefined,
+            existingHouseId,
             neighborhoodId,
             ownerName: hasValidOwner ? ownerName : undefined,
             ownerPhone: hasValidOwner ? ownerPhone : undefined,
@@ -590,6 +619,55 @@ export async function applyHouseImportMapping(
     await job.save();
 
     return job;
+}
+
+/**
+ * Khi "Mã căn/hộ" cua mot dong DA TON TAI trong he thong (xem
+ * applyHouseImportMapping) - thay vi tao moi/bao loi, CHI dien vao cac
+ * truong dang TRONG (khong ghi de du lieu da co san) roi tra ve House do de
+ * dung tiep cho buoc tao/dien Household ben duoi.
+ *
+ * Chi ap dung cho nha CHUA xac thuc ("unverified"/"pending") - nha da
+ * "verified" bi bao ve boi HOUSE_RECORD_PROTECTED_FIELDS (phai qua
+ * ChangeRequest de sua, xem houseRecordService.updateHouseRecord), nen import
+ * hang loat KHONG duoc phep am tham bo qua co che nay - neu nha da xac thuc/
+ * bi tu choi/khoa, ham nay khong sua gi ca (dong van tinh la "thanh cong",
+ * chi la khong co gi thay doi).
+ *
+ * KHONG gan/doi chu nha o day du dong co "Chủ sở hữu đứng tên" hop le - gan
+ * chu nha cho mot nha DA TON TAI la mot hanh dong rieng, rui ro hon (tao/lien
+ * ket tai khoan dang nhap that su qua addHouseOwnership), chua duoc yeu cau -
+ * nha con thieu chu van duoc dien cac truong khac, chu nha phai gan thu cong
+ * qua man chi tiet nha.
+ */
+async function mergeIntoExistingHouse(
+    actorUser: IUser,
+    houseId: string,
+    row: Record<string, unknown>,
+) {
+    const houseRecord = await HouseRecord.findById(houseId);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
+    await assertHouseRecordInScope(actorUser, houseRecord);
+
+    if (houseRecord.status === "unverified" || houseRecord.status === "pending") {
+        const note = row.note as string | undefined;
+        const neighborhoodId = row.neighborhoodId as string | undefined;
+        let changed = false;
+        if (!houseRecord.note && note) {
+            houseRecord.note = note;
+            changed = true;
+        }
+        if (!houseRecord.neighborhoodId && neighborhoodId) {
+            houseRecord.neighborhoodId = neighborhoodId as unknown as typeof houseRecord.neighborhoodId;
+            changed = true;
+        }
+        if (changed) {
+            houseRecord.updatedBy = actorUser._id as unknown as typeof houseRecord.updatedBy;
+            await houseRecord.save();
+        }
+    }
+
+    return houseRecord;
 }
 
 export async function commitHouseImport(
@@ -624,64 +702,116 @@ export async function commitHouseImport(
         (job.columnMapping as HouseColumnMapping)?.createHouseholds === true;
 
     let committedCount = 0;
+    let housesCreated = 0;
+    let housesMerged = 0;
     let householdsCreated = 0;
+    let householdsUpdated = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
-        const hasOwner = !!row.ownerName && !!row.ownerPhone;
-        // eslint-disable-next-line no-await-in-loop
-        const houseRecord = await createHouseRecord(actorUser, {
-            code: row.code as string,
-            cluster: row.cluster as string,
-            address: row.address as string,
-            note: row.note as string | undefined,
-            neighborhoodId: (row.neighborhoodId as string | undefined) || undefined,
-            ownerKind: hasOwner ? "individual" : "none",
-            createOwnerAccount: hasOwner,
-            owner: hasOwner
-                ? {
-                      displayName: row.ownerName as string,
-                      phone: row.ownerPhone as string,
-                  }
-                : undefined,
-        });
+        const existingHouseId = row.existingHouseId as string | undefined;
+        let houseRecord;
+        if (existingHouseId) {
+            // eslint-disable-next-line no-await-in-loop
+            houseRecord = await mergeIntoExistingHouse(
+                actorUser,
+                existingHouseId,
+                row,
+            );
+            housesMerged += 1;
+        } else {
+            const hasOwner = !!row.ownerName && !!row.ownerPhone;
+            // eslint-disable-next-line no-await-in-loop
+            houseRecord = await createHouseRecord(actorUser, {
+                code: row.code as string,
+                cluster: row.cluster as string,
+                address: row.address as string,
+                note: row.note as string | undefined,
+                neighborhoodId:
+                    (row.neighborhoodId as string | undefined) || undefined,
+                ownerKind: hasOwner ? "individual" : "none",
+                createOwnerAccount: hasOwner,
+                owner: hasOwner
+                    ? {
+                          displayName: row.ownerName as string,
+                          phone: row.ownerPhone as string,
+                      }
+                    : undefined,
+            });
+            housesCreated += 1;
+        }
         committedCount += 1;
 
-        // Tao them Household lien ket qua houseId khi nguoi dung bat tuy chon
-        // "Cũng tạo hộ dân" - CHI khi dong co ten chu ho (headOfHousehold hoac
-        // ownerName, xem applyHouseImportMapping), vi Household.headOfHousehold
-        // la truong bat buoc. Tao truc tiep qua Model (khong qua
-        // householdService.createHousehold) giong quy uoc cua
-        // commitHouseholdImport - tranh rang buoc "phone bat buoc" va viec tu
-        // dong sinh Citizen "Chủ hộ" cua ham do (co the trung voi du lieu that
-        // se duoc nhap rieng qua Citizen import cho cung nha nay, vd file
-        // "Chi tiết nhân khẩu" di kem - xem applyCitizenImportMapping o duoi).
+        // Tao/dien them Household lien ket qua houseId khi nguoi dung bat tuy
+        // chon "Cũng tạo hộ dân" - CHI khi dong co ten chu ho (headOfHousehold
+        // hoac ownerName, xem applyHouseImportMapping), vi
+        // Household.headOfHousehold la truong bat buoc.
         const headOfHousehold = row.householdHeadOfHousehold as
             | string
             | undefined;
         if (createHouseholds && headOfHousehold) {
+            // Nha da ton tai co the da co san Household (vd tu lan import
+            // truoc) - CHI tao moi khi nha CHUA co Household nao; neu da co
+            // dung 1 Household, chi dien vao truong dang trong (phone/note),
+            // giong nguyen tac cua mergeIntoExistingHouse o tren. Neu nha co
+            // NHIEU HON 1 Household (truong hop hiem, tao thu cong) thi bo
+            // qua - khong ro nen dien vao Household nao.
             // eslint-disable-next-line no-await-in-loop
-            const householdCode = await generateSequentialCode(
-                Household,
-                "HB",
-                3,
-            );
-            // eslint-disable-next-line no-await-in-loop
-            await Household.create({
-                code: householdCode,
-                cluster: houseRecord.cluster,
-                streetId: houseRecord.streetId,
-                neighborhoodId: houseRecord.neighborhoodId,
-                address: houseRecord.address,
-                headOfHousehold,
-                phone: row.householdPhone as string | undefined,
+            const existingHouseholds = await Household.find({
                 houseId: houseRecord._id,
-                status: resolveInitialVerificationStatus(houseRecord),
-                note: row.hasBusinessSignal
-                    ? "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin."
-                    : undefined,
-                createdBy: actorUser._id,
-                updatedBy: actorUser._id,
-            });
-            householdsCreated += 1;
+            }).select("status phone note");
+
+            if (existingHouseholds.length === 0) {
+                // eslint-disable-next-line no-await-in-loop
+                const householdCode = await generateSequentialCode(
+                    Household,
+                    "HB",
+                    3,
+                );
+                // eslint-disable-next-line no-await-in-loop
+                await Household.create({
+                    code: householdCode,
+                    cluster: houseRecord.cluster,
+                    streetId: houseRecord.streetId,
+                    neighborhoodId: houseRecord.neighborhoodId,
+                    address: houseRecord.address,
+                    headOfHousehold,
+                    phone: row.householdPhone as string | undefined,
+                    houseId: houseRecord._id,
+                    status: resolveInitialVerificationStatus(houseRecord),
+                    note: row.hasBusinessSignal
+                        ? "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin."
+                        : undefined,
+                    createdBy: actorUser._id,
+                    updatedBy: actorUser._id,
+                });
+                householdsCreated += 1;
+            } else if (existingHouseholds.length === 1) {
+                const household = existingHouseholds[0];
+                if (
+                    household.status === "unverified" ||
+                    household.status === "pending"
+                ) {
+                    const householdPhone = row.householdPhone as
+                        | string
+                        | undefined;
+                    let changed = false;
+                    if (!household.phone && householdPhone) {
+                        household.phone = householdPhone;
+                        changed = true;
+                    }
+                    if (!household.note && row.hasBusinessSignal) {
+                        household.note =
+                            "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin.";
+                        changed = true;
+                    }
+                    if (changed) {
+                        household.updatedBy =
+                            actorUser._id as unknown as typeof household.updatedBy;
+                        // eslint-disable-next-line no-await-in-loop
+                        await household.save();
+                        householdsUpdated += 1;
+                    }
+                }
+            }
         }
     }
 
@@ -694,7 +824,14 @@ export async function commitHouseImport(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: job._id,
-        metadata: { type: "house", count: committedCount, householdsCreated },
+        metadata: {
+            type: "house",
+            count: committedCount,
+            housesCreated,
+            housesMerged,
+            householdsCreated,
+            householdsUpdated,
+        },
     });
 
     return job;

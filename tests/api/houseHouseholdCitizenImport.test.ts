@@ -95,6 +95,142 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
     });
 });
 
+describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (merge, không ghi đè)", () => {
+    it("nhà 'unverified' còn trống note/neighborhoodId: import lại điền vào chỗ trống, không tạo trùng House", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const first = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy"],
+                [["H01-L19", "H (An Phú)"]],
+            ),
+            "lan1.xlsx",
+        );
+        const firstMapped = await applyHouseImportMapping(String(first._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+        });
+        await commitHouseImport(admin, String(firstMapped._id));
+        const beforeCount = await HouseRecord.countDocuments({ code: "H01-L19" });
+        expect(beforeCount).toBe(1);
+
+        const second = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Ghi chú"],
+                [["H01-L19", "H (An Phú)", "Bổ sung từ đợt thu thập sau"]],
+            ),
+            "lan2.xlsx",
+        );
+        const secondMapped = await applyHouseImportMapping(String(second._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            note: "Ghi chú",
+        });
+        // Khong con bao loi "da ton tai" nua.
+        expect(secondMapped.rowErrors).toHaveLength(0);
+        expect(secondMapped.validRows).toBe(1);
+
+        const committed = await commitHouseImport(admin, String(secondMapped._id));
+        expect(committed.committedCount).toBe(1);
+
+        const afterCount = await HouseRecord.countDocuments({ code: "H01-L19" });
+        expect(afterCount).toBe(1); // van chi co 1 House, khong tao trung
+
+        const house = await HouseRecord.findOne({ code: "H01-L19" });
+        expect(house!.note).toBe("Ghi chú: Bổ sung từ đợt thu thập sau");
+    });
+
+    it("không ghi đè note đã có sẵn, và không sửa gì khi House đã 'verified'", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const uploaded = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Ghi chú"],
+                [["H01-L24", "H (An Phú)", "Ghi chú gốc"]],
+            ),
+            "goc.xlsx",
+        );
+        const mapped = await applyHouseImportMapping(String(uploaded._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            note: "Ghi chú",
+        });
+        await commitHouseImport(admin, String(mapped._id));
+        const house = await HouseRecord.findOne({ code: "H01-L24" });
+        house!.status = "verified";
+        await house!.save();
+
+        const reImport = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Ghi chú"],
+                [["H01-L24", "H (An Phú)", "Ghi chú mới sẽ KHÔNG được áp dụng"]],
+            ),
+            "cap-nhat.xlsx",
+        );
+        const reMapped = await applyHouseImportMapping(String(reImport._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            note: "Ghi chú",
+        });
+        expect(reMapped.rowErrors).toHaveLength(0);
+        await commitHouseImport(admin, String(reMapped._id));
+
+        const refreshed = await HouseRecord.findOne({ code: "H01-L24" });
+        // note van la ghi chu goc - khong bi ghi de, va cung khong bi ghi de
+        // boi "Ghi chú mới" du no dang trong vi status da "verified".
+        expect(refreshed!.note).toBe("Ghi chú: Ghi chú gốc");
+        expect(await HouseRecord.countDocuments({ code: "H01-L24" })).toBe(1);
+    });
+
+    it("nhà đã có sẵn 1 Household: import lại (createHouseholds=true) chỉ điền phone còn trống, không tạo Household thứ hai", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const first = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Chủ hộ"],
+                [["B06-L02", "An Vượng", "Nguyễn Hữu Đức Trung"]],
+            ),
+            "lan1.xlsx",
+        );
+        const firstMapped = await applyHouseImportMapping(String(first._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            headOfHousehold: "Chủ hộ",
+            createHouseholds: true,
+        });
+        await commitHouseImport(admin, String(firstMapped._id));
+        expect(await Household.countDocuments({})).toBe(1);
+        const householdBefore = await Household.findOne({});
+        expect(householdBefore!.phone).toBeUndefined();
+
+        const second = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Chủ hộ", "SĐT liên hệ"],
+                [["B06-L02", "An Vượng", "Nguyễn Hữu Đức Trung", "0913345974"]],
+            ),
+            "lan2.xlsx",
+        );
+        const secondMapped = await applyHouseImportMapping(String(second._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            headOfHousehold: "Chủ hộ",
+            contactPhone: "SĐT liên hệ",
+            createHouseholds: true,
+        });
+        await commitHouseImport(admin, String(secondMapped._id));
+
+        expect(await Household.countDocuments({})).toBe(1); // van chi co 1
+        const householdAfter = await Household.findOne({});
+        expect(householdAfter!.phone).toBe("0913345974");
+    });
+});
+
 describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã căn/hộ)", () => {
     async function createHouseWithHousehold(admin: Awaited<ReturnType<typeof createTestUser>>) {
         const uploaded = await uploadHouseImportFile(

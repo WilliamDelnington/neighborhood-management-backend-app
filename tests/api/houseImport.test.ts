@@ -236,7 +236,7 @@ describe("Import Excel: nha so (House)", () => {
         expect(json.data.validRows).toBe(1);
     });
 
-    it("trung 'Mã căn/hộ' voi House da co san trong DB bi bao loi", async () => {
+    it("trung 'Mã căn/hộ' voi House da co san trong DB duoc coi la cap nhat (khong bao loi, khong tao trung)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
         await HouseRecord.create({
@@ -249,16 +249,28 @@ describe("Import Excel: nha so (House)", () => {
 
         const uploadJson = await upload(
             adminHeaders,
-            ["Mã căn/hộ", "Phân khu/dãy"],
-            [["CH-G07", "Dãy G"]],
+            ["Mã căn/hộ", "Phân khu/dãy", "Ghi chú"],
+            [["CH-G07", "Dãy G", "Bổ sung từ đợt thu thập sau"]],
         );
 
-        const { json } = await applyMapping(adminHeaders, uploadJson.data._id, {
-            code: "Mã căn/hộ",
-            subZone: "Phân khu/dãy",
-        });
-        expect(json.data.rowErrors).toHaveLength(1);
-        expect(json.data.rowErrors[0].message).toContain("đã tồn tại");
+        const { json: mappedJson } = await applyMapping(
+            adminHeaders,
+            uploadJson.data._id,
+            { code: "Mã căn/hộ", subZone: "Phân khu/dãy", note: "Ghi chú" },
+        );
+        expect(mappedJson.data.rowErrors).toHaveLength(0);
+        expect(mappedJson.data.validRows).toBe(1);
+        expect(mappedJson.data.previewData[0].existingHouseId).toBeTruthy();
+
+        const { json: committedJson } = await commit(
+            adminHeaders,
+            mappedJson.data._id,
+        );
+        expect(committedJson.data.committedCount).toBe(1);
+
+        const houses = await HouseRecord.find({ code: "CH-G07" });
+        expect(houses).toHaveLength(1);
+        expect(houses[0].note).toBe("Ghi chú: Bổ sung từ đợt thu thập sau");
     });
 
     it("khong chon cot 'Phân khu/dãy' va khong nhap cum mac dinh bi bao loi", async () => {
