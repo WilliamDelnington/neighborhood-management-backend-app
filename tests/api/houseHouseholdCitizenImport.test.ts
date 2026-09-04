@@ -66,12 +66,124 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         expect(household1!.headOfHousehold).toBe("Đỗ Mạnh Thắng");
         expect(household1!.phone).toBe("0912797177");
         expect(household1!.note).toMatch(/kinh doanh/i);
-        expect(household1!.memberCount).toBe(0);
+        // Household phai co san 1 Citizen "Chủ hộ" ngay khi tao, khong con o
+        // trang thai "0 nhan khau" nhu truoc.
+        expect(household1!.memberCount).toBe(1);
+        const headCitizen1 = await Citizen.findOne({ householdId: household1!._id });
+        expect(headCitizen1).not.toBeNull();
+        expect(headCitizen1!.fullName).toBe("Đỗ Mạnh Thắng");
+        expect(headCitizen1!.phone).toBe("0912797177");
+        expect(headCitizen1!.relationToHead).toBe("Chủ hộ");
 
         const house2 = await HouseRecord.findOne({ code: "H01-L24" });
         const household2 = await Household.findOne({ houseId: house2!._id });
         expect(household2).not.toBeNull();
         expect(household2!.note).toBeUndefined();
+        expect(household2!.memberCount).toBe(1);
+    });
+
+    it("hộ dân đã tồn tại từ lần import trước nhưng có 0 nhân khẩu: import lại sẽ bổ sung Citizen 'Chủ hộ' còn thiếu (kịch bản HB061)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        // Gia lap ho dan da duoc tao boi PHIEN BAN CU cua tinh nang (truoc khi
+        // co doan code bo sung Citizen "Chủ hộ") - Household ton tai nhung
+        // khong co Citizen nao, giong dung hien trang HB061 nguoi dung bao cao.
+        const house = await HouseRecord.create({
+            code: "H01-L61",
+            cluster: "H (An Phú)",
+            address: "H (An Phú) - H01-L61",
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+        const staleHousehold = await Household.create({
+            code: "HB061",
+            cluster: house.cluster,
+            address: house.address,
+            headOfHousehold: "Bùi Văn Khánh",
+            houseId: house._id,
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+        expect(await Citizen.countDocuments({ householdId: staleHousehold._id })).toBe(0);
+
+        // Import lai CHINH file nha so nay voi createHouseholds=true.
+        const uploaded = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Chủ hộ"],
+                [["H01-L61", "H (An Phú)", "Bùi Văn Khánh"]],
+            ),
+            "reimport.xlsx",
+        );
+        const mapped = await applyHouseImportMapping(String(uploaded._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            headOfHousehold: "Chủ hộ",
+            createHouseholds: true,
+        });
+        expect(mapped.rowErrors).toHaveLength(0);
+        await commitHouseImport(admin, String(mapped._id));
+
+        // Van chi co 1 Household (khong tao trung ban thu hai).
+        expect(await Household.countDocuments({ houseId: house._id })).toBe(1);
+        const refreshedHousehold = await Household.findById(staleHousehold._id);
+        expect(refreshedHousehold!.memberCount).toBe(1);
+
+        const citizens = await Citizen.find({ householdId: staleHousehold._id });
+        expect(citizens).toHaveLength(1);
+        expect(citizens[0].fullName).toBe("Bùi Văn Khánh");
+        expect(citizens[0].relationToHead).toBe("Chủ hộ");
+    });
+
+    it("hộ dân đã có sẵn ít nhất 1 nhân khẩu: import lại KHÔNG tạo thêm 'Chủ hộ' trùng lặp", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const house = await HouseRecord.create({
+            code: "Y01-L19",
+            cluster: "Khu A",
+            address: "Khu A - Y01-L19",
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+        const household = await Household.create({
+            code: "HB070",
+            cluster: house.cluster,
+            address: house.address,
+            headOfHousehold: "Nguyễn Chiến Công",
+            houseId: house._id,
+            memberCount: 1,
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+        await Citizen.create({
+            fullName: "Nguyễn Chiến Công",
+            relationToHead: "Chủ hộ",
+            cccd: "001067008213",
+            householdId: household._id,
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+
+        const uploaded = await uploadHouseImportFile(
+            String(admin._id),
+            await buildWorkbookBuffer(
+                ["Mã căn/hộ", "Phân khu/dãy", "Chủ hộ"],
+                [["Y01-L19", "Khu A", "Nguyễn Chiến Công"]],
+            ),
+            "reimport.xlsx",
+        );
+        const mapped = await applyHouseImportMapping(String(uploaded._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            headOfHousehold: "Chủ hộ",
+            createHouseholds: true,
+        });
+        await commitHouseImport(admin, String(mapped._id));
+
+        const citizens = await Citizen.find({ householdId: household._id });
+        expect(citizens).toHaveLength(1); // khong them ban thu hai
+        const refreshed = await Household.findById(household._id);
+        expect(refreshed!.memberCount).toBe(1); // khong bi ghi de lai
     });
 
     it("mặc định (không bật createHouseholds) chỉ tạo House, không tạo Household", async () => {
@@ -285,7 +397,9 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         expect(String(citizen!.householdId)).toBe(String(household._id));
 
         const refreshed = await Household.findById(household._id);
-        expect(refreshed!.memberCount).toBe(1);
+        // 1 (Citizen "Chủ hộ" tu dong tao khi Household duoc tao - xem
+        // createHouseWithHousehold) + 1 (Hồ Thị Thiên vua import) = 2.
+        expect(refreshed!.memberCount).toBe(2);
     });
 
     it("báo lỗi khi mã nhà không có hộ dân, hoặc có nhiều hơn 1 hộ dân", async () => {

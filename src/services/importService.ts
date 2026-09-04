@@ -85,14 +85,27 @@ import {
 //     Household - mot dia chi co the vua o vua kinh doanh - chi duoc ghi
 //     thanh mot dong note tren Household de admin biet can bo sung Hộ kinh
 //     doanh rieng (he thong khong tu suy ra du du lieu ten/MST cho Business
-//     tu sheet nay). memberCount cua Household tao ra bat dau tu 0, duoc dien
-//     dan qua import nhan khau (xem duoi) - KHONG lay tu cot "Số nhân khẩu"
-//     de tranh dem trung. Neu nha (moi hoac da ton tai) da co san DUNG 1
+//     tu sheet nay). Neu nha (moi hoac da ton tai) da co san DUNG 1
 //     Household, KHONG tao them ban thu hai - ap dung cung nguyen tac "chi
 //     dien vao truong dang trong" nhu House o tren (phone/note), va cung chi
 //     ap dung khi Household do con "unverified"/"pending". Neu nha co nhieu
 //     hon 1 Household (hiem, tao thu cong) thi bo qua, khong ro nen dien vao
 //     Household nao.
+//   - Moi Household (moi tao HOAC da co san) deu duoc dam bao co it nhat MOT
+//     Citizen "Chủ hộ" (fullName = ten chu ho, phone = SĐT hộ dân neu co) -
+//     giong bat bien cua householdService.createHousehold, tranh chu ho
+//     "bien mat" khoi danh sach nhan khau. Rieng buoc nay AP DUNG BAT KE
+//     trang thai xac thuc, va CHO CA Household da ton tai tu lan import
+//     truoc (truoc khi tinh nang nay ton tai) - chi kich hoat khi Household
+//     do dang co DUNG 0 Citizen, vi day la bo sung du lieu con thieu chu
+//     khong phai sua du lieu da co. Ket qua: chay lai (import lai) chinh
+//     file da dung se tu dong bo sung chu ho cho cac ho dan bi thieu.
+//     memberCount duoc dat = 1 khi do. CANH BAO: neu sau nay import them
+//     "Chi tiết nhân khẩu" (xem "Import nhan khau" o duoi) ma sheet do CUNG
+//     liet ke chinh chu ho nhu mot dong rieng, se co HAI ban ghi Citizen
+//     "Chủ hộ" cho cung mot ho dan (mot ban toi thieu tu day, mot ban day du
+//     hon tu sheet nhan khau) - he thong khong tu gop/khu trung hai ban nay,
+//     admin can tu xoa ban trung neu gap truong hop nay.
 //
 // Import ho dan:
 //   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
@@ -706,6 +719,7 @@ export async function commitHouseImport(
     let housesMerged = 0;
     let householdsCreated = 0;
     let householdsUpdated = 0;
+    let headCitizensCreated = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
         const existingHouseId = row.existingHouseId as string | undefined;
         let houseRecord;
@@ -759,6 +773,7 @@ export async function commitHouseImport(
                 houseId: houseRecord._id,
             }).select("status phone note");
 
+            let household;
             if (existingHouseholds.length === 0) {
                 // eslint-disable-next-line no-await-in-loop
                 const householdCode = await generateSequentialCode(
@@ -767,7 +782,7 @@ export async function commitHouseImport(
                     3,
                 );
                 // eslint-disable-next-line no-await-in-loop
-                await Household.create({
+                household = await Household.create({
                     code: householdCode,
                     cluster: houseRecord.cluster,
                     streetId: houseRecord.streetId,
@@ -785,7 +800,7 @@ export async function commitHouseImport(
                 });
                 householdsCreated += 1;
             } else if (existingHouseholds.length === 1) {
-                const household = existingHouseholds[0];
+                [household] = existingHouseholds;
                 if (
                     household.status === "unverified" ||
                     household.status === "pending"
@@ -812,6 +827,44 @@ export async function commitHouseImport(
                     }
                 }
             }
+
+            // Household (moi hoac da co san) phai co it nhat MOT Citizen "Chủ
+            // hộ", giong bat bien cua householdService.createHousehold - neu
+            // khong, chu ho se khong xuat hien trong danh sach nhan khau cua
+            // ho dan (GET /households/:id/citizens chi doc tu Citizen), va
+            // memberCount se luon thieu 1 so voi thuc te. Ap dung CHO CA
+            // Household da ton tai tu lan import truoc (truoc khi co doan
+            // code nay) MA DANG co 0 nhan khau - bat ke trang thai xac thuc
+            // cua Household, vi day chi la BO SUNG du lieu con thieu (khong
+            // phai sua truong da co san nhu phone/note o tren) - chay lai
+            // (import lai) chinh file da dung se tu dong bo sung chu ho con
+            // thieu cho ho dan da tao truoc do. Bo qua neu nha co nhieu hon 1
+            // Household (household la undefined trong truong hop do) - cung
+            // ly do khong dien phone/note o tren: khong ro nen bo sung vao
+            // Household nao.
+            if (household) {
+                // eslint-disable-next-line no-await-in-loop
+                const citizenCount = await Citizen.countDocuments({
+                    householdId: household._id,
+                });
+                if (citizenCount === 0) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await Citizen.create({
+                        fullName: headOfHousehold,
+                        phone: row.householdPhone as string | undefined,
+                        relationToHead: "Chủ hộ",
+                        householdId: household._id,
+                        createdBy: actorUser._id,
+                        updatedBy: actorUser._id,
+                    });
+                    // eslint-disable-next-line no-await-in-loop
+                    await Household.updateOne(
+                        { _id: household._id },
+                        { memberCount: 1 },
+                    );
+                    headCitizensCreated += 1;
+                }
+            }
         }
     }
 
@@ -831,6 +884,7 @@ export async function commitHouseImport(
             housesMerged,
             householdsCreated,
             householdsUpdated,
+            headCitizensCreated,
         },
     });
 
