@@ -11,12 +11,13 @@ import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
-import type {
-    AssignRoleInput,
-    CreateHouseOwnerInput,
-    LockUserStatusInput,
-    ResetUserPasswordInput,
-    UpdateUserInput,
+import {
+    ACCOUNT_CREATION_RESERVED_ROLE_KEYS,
+    type AssignRoleInput,
+    type CreateHouseOwnerInput,
+    type LockUserStatusInput,
+    type ResetUserPasswordInput,
+    type UpdateUserInput,
 } from "@/validators/user";
 import type { Role as RoleType } from "@/types";
 
@@ -147,29 +148,92 @@ export async function searchResidentUsers(
 }
 
 /**
- * To truong (hoac admin) tao tai khoan chu ho thay, dat san so dien thoai +
- * mat khau ban dau - cung logic tao User voi authService.registerWithPhone
- * (tu dang ky), chi khac actor va co ghi nhan createdBy. Chu ho dang nhap
- * bang chinh so dien thoai/mat khau nay (xem authService.loginWithPhone).
+ * Danh sach vai tro (key + ten hien thi) ma actorUser duoc phep chon khi "Tạo
+ * tài khoản" qua createHouseOwnerByStaff - dung chung boi endpoint tao tai
+ * khoan (kiem tra quyen) VA endpoint GET /api/users/creatable-roles (cho FE
+ * ca 3 app hien dropdown dung, khong tu suy luan lai rule o client).
  *
- * input.role khac "house_owner" (to truong/to pho/cong tac vien To dan pho)
- * CHI admin moi duoc tao - day la cac vai tro pham vi rong hoac can gan vao
- * mot To dan pho cu the, khong the giao pho khong kiem soat cho bat ky ai co
- * "users.create" (vd chinh to truong) nhu voi house_owner (xem
- * validators/user.ts CREATABLE_STAFF_ROLES). Tai khoan tao ra o day CHUA duoc
- * gan vao To dan pho nao - phai lien ket rieng qua man "Gan to truong/to pho/
- * cong tac vien" tren trang Tổ dân phố sau khi tao (xem neighborhoodService.ts).
+ * house_owner LUON co mat KHONG DIEU KIEN (bat ky ai dang goi ham nay deu da
+ * co "users.create" - hanh vi cu, khong doi, giong het cach
+ * createHouseOwnerByStaff bo qua moi kiem tra khi role==="house_owner"). Vi
+ * vay house_owner duoc tra ve rieng, KHONG phu thuoc vao viec co Role doc
+ * active hay khong (khac cac vai tro con lai). Cac vai tro con lai: admin
+ * duoc bo qua moi gioi han (tao duoc bat ky vai tro active nao, tru
+ * ACCOUNT_CREATION_RESERVED_ROLE_KEYS); nguoi khac chi duoc chon vai tro nam
+ * trong allowedCreatableRoles cua BAT KY vai tro active nao ho dang giu (hop
+ * cac vai tro co the giu nhieu vai tro cung luc) - xem Role.allowedCreatableRoles.
+ * Loai bo phong thu cac key trong ACCOUNT_CREATION_RESERVED_ROLE_KEYS ngay ca
+ * khi lo duoc cau hinh nham vao allowedCreatableRoles cua mot vai tro.
+ */
+export async function getCreatableRolesForActor(
+    actorUser: IUser,
+): Promise<{ key: string; name: string }[]> {
+    const houseOwnerRoleDoc = await RoleModel.findOne({ key: "house_owner" });
+    const houseOwnerEntry = {
+        key: "house_owner",
+        name: houseOwnerRoleDoc?.name || "Chủ sở hữu",
+    };
+
+    if (actorUser.roles.includes("admin")) {
+        const roles = await RoleModel.find({
+            active: true,
+            key: { $nin: [...ACCOUNT_CREATION_RESERVED_ROLE_KEYS, "house_owner"] },
+        }).sort({ sortOrder: 1, name: 1 });
+        return [houseOwnerEntry, ...roles.map(r => ({ key: r.key, name: r.name }))];
+    }
+
+    const actorRoleDocs = await RoleModel.find({
+        key: { $in: actorUser.roles },
+        active: true,
+    });
+    const allowedKeys = new Set<string>();
+    for (const roleDoc of actorRoleDocs) {
+        for (const key of roleDoc.allowedCreatableRoles || []) {
+            allowedKeys.add(key);
+        }
+    }
+    for (const reserved of ACCOUNT_CREATION_RESERVED_ROLE_KEYS) {
+        allowedKeys.delete(reserved);
+    }
+    allowedKeys.delete("house_owner");
+
+    const roles = await RoleModel.find({
+        key: { $in: [...allowedKeys] },
+        active: true,
+    }).sort({ sortOrder: 1, name: 1 });
+    return [houseOwnerEntry, ...roles.map(r => ({ key: r.key, name: r.name }))];
+}
+
+/**
+ * To truong (hoac bat ky vai tro nao khac dang giu "users.create") tao tai
+ * khoan thay, dat san so dien thoai + mat khau ban dau - cung logic tao User
+ * voi authService.registerWithPhone (tu dang ky), chi khac actor va co ghi
+ * nhan createdBy. Chu ho dang nhap bang chinh so dien thoai/mat khau nay (xem
+ * authService.loginWithPhone).
+ *
+ * input.role khac "house_owner": chi duoc tao neu nam trong
+ * getCreatableRolesForActor(actorUser) - kiem tra DUY NHAT nay gom ca 3 dieu
+ * kien: actor co duoc phep gan vai tro nay khong (permission dong qua
+ * Role.allowedCreatableRoles, hoac admin), vai tro co nam trong
+ * ACCOUNT_CREATION_RESERVED_ROLE_KEYS khong (luon bi loai khoi danh sach tra
+ * ve), va vai tro co ton tai/active khong (danh sach chi gom Role active).
+ * Tai khoan tao ra o day CHUA duoc gan vao To dan pho nao - phai lien ket
+ * rieng qua man "Gan to truong/to pho/cong tac vien" tren trang Tổ dân phố sau
+ * khi tao (xem neighborhoodService.ts).
  */
 export async function createHouseOwnerByStaff(
     actorUser: IUser,
     input: CreateHouseOwnerInput,
 ) {
     const role = input.role || "house_owner";
-    if (role !== "house_owner" && !actorUser.roles.includes("admin")) {
-        throw new HttpError(
-            "Chỉ quản trị viên mới được tạo tài khoản với vai trò này",
-            403,
-        );
+    if (role !== "house_owner") {
+        const creatableRoles = await getCreatableRolesForActor(actorUser);
+        if (!creatableRoles.some(r => r.key === role)) {
+            throw new HttpError(
+                "Bạn không có quyền tạo tài khoản với vai trò này",
+                403,
+            );
+        }
     }
 
     const existing = await User.findOne({ phone: input.phone });

@@ -238,13 +238,43 @@ const BUSINESS_COLUMNS = {
 
 type WorksheetRow = { rowNumber: number; values: Record<string, unknown> };
 
+/**
+ * Doc mot sheet trong file Excel thanh header + tung dong tho. MAC DINH doc
+ * sheet DAU TIEN trong file (giu tuong thich nguoc voi file chi co 1 sheet) -
+ * neu file co NHIEU sheet va nguoi dung muon doc mot sheet KHAC (vd file gop
+ * "Nhà số" + "Chi tiết nhân khẩu", can doc dung sheet "Chi tiết nhân khẩu"
+ * cho Import nhan khau), truyen `sheetName` de chi dinh chinh xac - tim theo
+ * TEN sheet (khong phai vi tri), nem loi ro rang neu khong tim thay. Luon tra
+ * ve `availableSheetNames` (TAT CA ten sheet trong file, khong chi sheet duoc
+ * doc) de caller luu lai va hien thi cho nguoi dung biet file co nhung sheet
+ * nao, phong truong hop ho doc nham sheet (mac dinh) ma khong biet.
+ */
 async function readWorksheetRows(
     fileBuffer: Buffer,
-): Promise<{ headers: string[]; rows: WorksheetRow[] }> {
+    sheetName?: string,
+): Promise<{
+    headers: string[];
+    rows: WorksheetRow[];
+    availableSheetNames: string[];
+    sourceSheetName: string;
+}> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(fileBuffer as unknown as ExcelJS.Buffer);
 
-    const worksheet = workbook.worksheets[0];
+    const availableSheetNames = workbook.worksheets.map(w => w.name);
+
+    let worksheet;
+    if (sheetName) {
+        worksheet = workbook.worksheets.find(w => w.name === sheetName);
+        if (!worksheet) {
+            throw new HttpError(
+                `Không tìm thấy sheet "${sheetName}" trong file - file này có các sheet: ${availableSheetNames.join(", ") || "(không có)"}`,
+                400,
+            );
+        }
+    } else {
+        worksheet = workbook.worksheets[0];
+    }
     if (!worksheet) {
         throw new HttpError("File Excel không có sheet dữ liệu nào", 400);
     }
@@ -275,7 +305,12 @@ async function readWorksheetRows(
         rows.push({ rowNumber, values });
     });
 
-    return { headers: headers.filter(Boolean), rows };
+    return {
+        headers: headers.filter(Boolean),
+        rows,
+        availableSheetNames,
+        sourceSheetName: worksheet.name,
+    };
 }
 
 function cellToString(value: unknown): string {
@@ -445,8 +480,10 @@ export async function uploadHouseImportFile(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
+    sheetName?: string,
 ): Promise<IImportJob> {
-    const { headers, rows } = await readWorksheetRows(fileBuffer);
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
 
     const rawRows = rows.map(row => {
         const values: Record<string, string> = {};
@@ -474,6 +511,8 @@ export async function uploadHouseImportFile(
         validRows: 0,
         headers,
         rawRows,
+        availableSheetNames,
+        sourceSheetName,
         suggestedMapping,
         columnMapping: {},
         rowErrors: [],
@@ -913,8 +952,10 @@ export async function previewHouseholdImport(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
+    sheetName?: string,
 ): Promise<IImportJob> {
-    const { rows } = await readWorksheetRows(fileBuffer);
+    const { rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
     const errors: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
@@ -970,6 +1011,8 @@ export async function previewHouseholdImport(
         fileName,
         totalRows: rows.length,
         validRows: previewData.length,
+        availableSheetNames,
+        sourceSheetName,
         rowErrors: errors,
         previewData,
         committedCount: 0,
@@ -1084,8 +1127,10 @@ export async function uploadCitizenImportFile(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
+    sheetName?: string,
 ): Promise<IImportJob> {
-    const { headers, rows } = await readWorksheetRows(fileBuffer);
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
 
     const rawRows = rows.map(row => {
         const values: Record<string, string> = {};
@@ -1113,6 +1158,8 @@ export async function uploadCitizenImportFile(
         validRows: 0,
         headers,
         rawRows,
+        availableSheetNames,
+        sourceSheetName,
         suggestedMapping,
         columnMapping: {},
         rowErrors: [],
@@ -1472,8 +1519,10 @@ export async function uploadStreetImportFile(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
+    sheetName?: string,
 ): Promise<IImportJob> {
-    const { headers, rows } = await readWorksheetRows(fileBuffer);
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
 
     const rawRows = rows.map(row => {
         const values: Record<string, string> = {};
@@ -1504,6 +1553,8 @@ export async function uploadStreetImportFile(
         validRows: 0,
         headers,
         rawRows,
+        availableSheetNames,
+        sourceSheetName,
         suggestedMapping,
         columnMapping: {},
         rowErrors: [],
@@ -1732,8 +1783,10 @@ export async function uploadBusinessImportFile(
     actorId: string,
     fileBuffer: Buffer,
     fileName: string,
+    sheetName?: string,
 ): Promise<IImportJob> {
-    const { headers, rows } = await readWorksheetRows(fileBuffer);
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
 
     const rawRows = rows.map(row => {
         const values: Record<string, string> = {};
@@ -1761,6 +1814,8 @@ export async function uploadBusinessImportFile(
         validRows: 0,
         headers,
         rawRows,
+        availableSheetNames,
+        sourceSheetName,
         suggestedMapping,
         columnMapping: {},
         rowErrors: [],

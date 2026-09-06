@@ -7,6 +7,16 @@ export interface IRole extends Document {
     permissions: string[];
     allowedComplaintCategories?: string[];
     allowedRequestTypes?: string[];
+    // Vai tro (KHONG ke house_owner - luon mo san cho bat ky ai co
+    // "users.create") ma NGUOI GIU vai tro nay duoc phep chon khi "Tạo tài
+    // khoản" (xem userService.getCreatableRolesForActor). Khac
+    // allowedComplaintCategories/allowedRequestTypes: KHONG dung quy uoc
+    // undefined = khong gioi han - default rong (khong duoc tao vai tro nao
+    // ngoai house_owner) la lua chon AN TOAN vi day la quyen han nhay cam
+    // (tao tai khoan voi vai tro tuy y), phai admin CHOT tung vai tro duoc
+    // phep. Admin luon duoc bo qua truong nay (tao duoc bat ky vai tro active
+    // nao, tru ACCOUNT_CREATION_RESERVED_ROLE_KEYS - xem validators/user.ts).
+    allowedCreatableRoles: string[];
     system: boolean;
     active: boolean;
     sortOrder: number;
@@ -34,6 +44,7 @@ const RoleSchema = new Schema<IRole>(
         // Cung quy uoc voi allowedComplaintCategories: undefined = khong gioi
         // han loai yeu cau duoc gui, [] = admin da chot khong cho gui loai nao.
         allowedRequestTypes: { type: [String], default: undefined },
+        allowedCreatableRoles: { type: [String], default: [] },
         system: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
         sortOrder: { type: Number, default: 0 },

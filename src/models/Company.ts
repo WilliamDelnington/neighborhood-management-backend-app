@@ -30,6 +30,12 @@ export interface ICompany extends Document {
     // chung RequiredDocumentSettings category "company" (xem
     // requiredDocumentAdapters.ts).
     businessTypeIds: mongoose.Types.ObjectId[];
+    // Loai hinh doanh nghiep (CompanyType) - phap ly, KHAC businessTypeIds
+    // (nganh nghe kinh doanh): TNHH mot thanh vien / TNHH hai thanh vien tro
+    // len / Co phan / Hop danh / DNTN... Khong ap dung cho Business (ho kinh
+    // doanh khong co loai hinh phap ly nay) nen la truong rieng cua Company,
+    // mot gia tri duy nhat (khac businessTypeIds - mang).
+    companyTypeId?: mongoose.Types.ObjectId;
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH cong ty nay - doc lap voi trang thai cua
@@ -79,6 +85,11 @@ const CompanySchema = new Schema<ICompany>(
         businessTypeIds: {
             type: [{ type: Schema.Types.ObjectId, ref: "BusinessType" }],
             default: [],
+        },
+        companyTypeId: {
+            type: Schema.Types.ObjectId,
+            ref: "CompanyType",
+            index: true,
         },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },

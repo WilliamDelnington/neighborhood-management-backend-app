@@ -49,6 +49,7 @@ export async function GET(req: Request) {
             search: searchParams.get("search") || undefined,
             status,
             businessType: searchParams.get("businessType") || undefined,
+            companyType: searchParams.get("companyType") || undefined,
             actorUser: user,
         });
         return apiSuccess(result);

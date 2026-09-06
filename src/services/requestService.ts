@@ -409,6 +409,7 @@ export async function createRequest(
     const definition = await findRequestTypeForActor(actorUser, input.type);
     if (
         definition &&
+        !actorUser.roles.includes("admin") &&
         !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
     ) {
         throw new HttpError("Vai trò của bạn không được gửi loại nhiệm vụ này", 403);
@@ -1465,13 +1466,14 @@ export async function getRequestMeta(actorUser: IUser) {
         .map(type => type.key)
         .filter(type => allowedTypes === null || allowedTypes.includes(type));
 
+    // Moi type gio deu la mot RequestTypeDefinition that (ke ca 4 loai "he
+    // thong" cu - xem RequestTypeDefinition.isBuiltIn), nen allowedReceiverRoles
+    // cua chinh dinh nghia do luon la nguon dung, khong con can fallback qua
+    // permission "${type}.assign" (eligiblePermissionForType) nhu truoc.
     const eligibleRolesByType: Record<string, string[]> = {};
     for (const type of types) {
         const custom = availableDefinitions.find(item => item.key === type);
-        eligibleRolesByType[type] =
-            custom && !custom.builtIn
-                ? custom.allowedReceiverRoles || []
-                : await getRoleKeysWithPermission(eligiblePermissionForType(type));
+        eligibleRolesByType[type] = custom?.allowedReceiverRoles || [];
     }
 
     return {

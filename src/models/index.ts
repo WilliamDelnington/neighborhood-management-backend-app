@@ -23,6 +23,7 @@ export {
 } from "./BusinessType";
 export { default as Business, type IBusiness } from "./Business";
 export { default as Company, type ICompany } from "./Company";
+export { default as CompanyType, type ICompanyType } from "./CompanyType";
 export {
     default as HouseUsageUnit,
     type IHouseUsageUnit,

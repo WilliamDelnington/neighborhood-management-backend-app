@@ -19,6 +19,13 @@ const complaintCategoriesField = z.array(
 const requestTypesField = z.array(
     z.string().regex(/^[a-z][a-z0-9_]*$/, "Loại yêu cầu không hợp lệ"),
 );
+// Danh sach role key duoc phep chon khi "Tạo tài khoản" (xem
+// userService.getCreatableRolesForActor) - khac 2 truong tren, KHONG dung quy
+// uoc undefined/null = khong gioi han vi day la quyen nhay cam, nen luon la
+// mang (mac dinh rong).
+const creatableRolesField = z.array(
+    z.string().regex(/^[a-z][a-z0-9_]*$/, "Vai trò không hợp lệ"),
+);
 
 export const createRoleSchema = z.object({
     key: z
@@ -35,6 +42,9 @@ export const createRoleSchema = z.object({
     allowedComplaintCategories: complaintCategoriesField.optional(),
     // Bo trong = khong gioi han (gui duoc tat ca loai yeu cau).
     allowedRequestTypes: requestTypesField.optional(),
+    // Bo trong = KHONG duoc tao vai tro nao ngoai house_owner (mac dinh an
+    // toan, khac 2 truong tren) - xem ghi chu o Role.ts.
+    allowedCreatableRoles: creatableRolesField.default([]),
     active: z.boolean().default(true),
     sortOrder: z.number().default(0),
 });
@@ -47,6 +57,9 @@ export const updateRoleSchema = z.object({
     // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
     allowedComplaintCategories: complaintCategoriesField.nullable().optional(),
     allowedRequestTypes: requestTypesField.nullable().optional(),
+    // undefined = khong doi, mang (ke ca rong) = thay the toan bo danh sach -
+    // khong co gia tri null o day (xem ghi chu creatableRolesField).
+    allowedCreatableRoles: creatableRolesField.optional(),
     active: z.boolean().optional(),
     sortOrder: z.number().optional(),
 });
