@@ -1,7 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { previewCitizenImport } from "@/services/importService";
+import { uploadCitizenImportFile } from "@/services/importService";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +24,14 @@ export async function POST(req: Request) {
         const fileName =
             file instanceof File ? file.name : "import-nhan-khau.xlsx";
 
-        const job = await previewCitizenImport(
+        const job = await uploadCitizenImportFile(
             String(actorUser._id),
             buffer,
             fileName,
         );
         return apiSuccess(
             job,
-            "Đã đọc và kiểm tra dữ liệu, vui lòng xem trước kết quả trước khi commit",
+            "Đã đọc dữ liệu, vui lòng chọn cột tương ứng cho từng trường",
             201,
         );
     } catch (err) {

@@ -32,6 +32,11 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
                 label:
                     "Khóa / mở khóa tài khoản chủ nhà (giới hạn theo tổ dân phố phụ trách)",
             },
+            {
+                key: "users.reset_password",
+                label:
+                    "Đặt lại mật khẩu tài khoản chủ nhà (giới hạn theo tổ dân phố phụ trách)",
+            },
             { key: "users.assign_roles", label: "Gán / thu hồi vai trò" },
         ],
     },
@@ -184,7 +189,7 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
     },
     {
         key: "organizations",
-        label: "Tổ chức (chủ nhà)",
+        label: "Tổ chức (chủ sở hữu)",
         permissions: [
             { key: "organizations.read", label: "Xem tổ chức" },
             { key: "organizations.create", label: "Tạo tổ chức" },

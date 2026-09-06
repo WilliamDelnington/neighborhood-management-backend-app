@@ -10,15 +10,19 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     neighborhood_leader: [
         "dashboard.read",
         "users.create",
-        // users.read/users.lock deu duoc userService (listUsers/getUserById/
-        // lockUserStatus) tu dong gioi han: to truong chi thay/khoa duoc tai
+        // users.read/users.lock/users.reset_password deu duoc userService
+        // (listUsers/getUserById/lockUserStatus/resetUserPasswordByAdmin) tu
+        // dong gioi han: to truong chi thay/khoa/dat lai mat khau duoc tai
         // khoan house_owner dang so huu nha thuoc to dan pho minh phu trach
         // (xem getHouseOwnerIdsInLeaderScope) - KHONG duoc cap users.update:
         // quyen do khong gioi han theo pham vi va cho sua moi truong cua bat
         // ky nguoi dung nao (doi ten, gan cum, doi vai tro chinh...), khong chi
-        // status.
+        // status. users.reset_password them vao de to truong thuc hien duoc
+        // loi huong dan "Quen mat khau? lien he to truong" o LoginPage.tsx
+        // (resident-web-app).
         "users.read",
         "users.lock",
+        "users.reset_password",
         "neighborhoods.read",
         "streets.read",
         // So ha tang (den/duong/cong/cay...) trong to dan pho minh phu trach -
@@ -111,6 +115,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "users.create",
         "users.read",
         "users.lock",
+        "users.reset_password",
         "neighborhoods.read",
         "streets.read",
         "infrastructure.read",

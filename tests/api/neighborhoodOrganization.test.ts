@@ -4,7 +4,7 @@ import { PATCH as updateNeighborhoodRoute } from "@/app/api/neighborhoods/[id]/r
 import {
     POST as createTermRoute,
 } from "@/app/api/neighborhoods/[id]/terms/route";
-import { PATCH as updateTermRoute } from "@/app/api/neighborhoods/[id]/terms/[termId]/route";
+import { POST as endTermEarlyRoute } from "@/app/api/neighborhoods/[id]/terms/[termId]/end-early/route";
 import { PUT as assignLeaderRoute } from "@/app/api/neighborhoods/[id]/leader/route";
 import {
     DELETE as unassignCollaboratorRoute,
@@ -105,13 +105,15 @@ describe("Neighborhood organization", () => {
                     name: "Nhiệm kỳ kiểm thử",
                     startAt: "2026-01-01",
                     endAt: "2028-12-31",
-                    status: "ACTIVE",
                 },
             }),
             { params: { id: neighborhoodId } },
         );
         const term = await readJson(termResponse);
         expect(termResponse.status).toBe(201);
+        // startAt da qua, endAt con o tuong lai -> tu dong IN_PROGRESS (xem
+        // resolveTermStatusByDate), khong con truyen status truc tiep nua.
+        expect(term.data.status).toBe("IN_PROGRESS");
 
         const assignmentResponse = await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodId}/leader`, {
@@ -126,10 +128,14 @@ describe("Neighborhood organization", () => {
         );
         expect(assignmentResponse.status).toBe(200);
 
-        const endResponse = await updateTermRoute(
+        const endResponse = await endTermEarlyRoute(
             makeRequest(
-                `/api/neighborhoods/${neighborhoodId}/terms/${term.data._id}`,
-                { method: "PATCH", headers, body: { status: "ENDED" } },
+                `/api/neighborhoods/${neighborhoodId}/terms/${term.data._id}/end-early`,
+                {
+                    method: "POST",
+                    headers,
+                    body: { reason: "Kết thúc kiểm thử" },
+                },
             ),
             { params: { id: neighborhoodId, termId: term.data._id } },
         );

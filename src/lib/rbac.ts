@@ -34,6 +34,17 @@ export function requireRole(
     }
 }
 
+// Cac duong dan duy nhat con duoc phep goi khi User.mustChangePassword=true
+// (xem ghi chu chi tiet ben duoi requireUser) - phai du de: (1) tu doi mat
+// khau (set-password), (2) doc thong tin ban than de UI biet mustChangePassword
+// da tat chua/hien thi thong tin co ban (me), (3) dang xuat neu khong muon
+// doi ngay. Moi API khac deu bi chan 423 cho toi khi doi mat khau xong.
+const MUST_CHANGE_PASSWORD_EXEMPT_PATHS = [
+    "/api/auth/set-password",
+    "/api/auth/me",
+    "/api/auth/logout",
+];
+
 /**
  * Tai ve document User day du (can cho scope filtering: assignedClusters, householdId...).
  * Nem HttpError(401) neu tai khoan khong con ton tai hoac bi khoa.
@@ -49,6 +60,23 @@ export async function requireUser(req: Request): Promise<IUser> {
             "Phien dang nhap da het hieu luc, vui long dang nhap lai",
             401,
         );
+    }
+    // Mat khau hien tai la do nguoi khac dat thay (import Excel, nhan vien
+    // tao ho, admin dat lai - xem User.mustChangePassword) - chan MOI API
+    // khac ngoai danh sach cho phep o tren cho toi khi tu doi mat khau qua
+    // authService.setPassword (tu dong tat flag nay). Dung 423 (Locked, KHONG
+    // phai 401/403 da co y nghia khac trong he thong nay) de client phan
+    // biet duoc va tu dong chuyen huong sang man doi mat khau bat buoc, thay
+    // vi hien loi chung chung.
+    if (user.mustChangePassword) {
+        const pathname = new URL(req.url).pathname;
+        const isExempt = MUST_CHANGE_PASSWORD_EXEMPT_PATHS.includes(pathname);
+        if (!isExempt) {
+            throw new HttpError(
+                "Bạn cần đổi mật khẩu trước khi tiếp tục sử dụng",
+                423,
+            );
+        }
     }
     // Ngay ket thuc nhiem ky/phan cong la rang buoc quyen: thu hoi scope
     // truoc khi bat ky bo loc nghiep vu nao doc neighborhoodId tu User.

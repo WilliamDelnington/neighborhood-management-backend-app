@@ -133,9 +133,10 @@ const GEO_CONSENT_ISSUE = {
     path: ["geoConsentAccepted"],
 };
 
-export const createHouseRecordSchema = houseRecordBaseSchema
-    .refine(data => !!data.cluster || !!data.streetId, {
-        message: "Vui long chon duong/pho hoac nhap cum dan cu",
+export const createHouseRecordSchema = houseRecordBaseSchema.refine(
+    data => !!data.cluster || !!data.streetId,
+    {
+        message: "Vui lòng chọn đường/phố hoặc nhập cụm dân cư",
         path: ["cluster"],
     })
     .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);
@@ -175,4 +176,45 @@ export const updateHouseRecordStatusSchema = z
     );
 export type UpdateHouseRecordStatusInput = z.infer<
     typeof updateHouseRecordStatusSchema
+>;
+
+const bulkHouseIdsSchema = {
+    ids: z
+        .array(z.string().min(1))
+        .min(1, "Vui lòng chọn ít nhất một nhà số"),
+};
+
+// Gan mot to dan pho cho nhieu nha so cung luc (vd nha nhap tu Excel con
+// thieu to dan pho) - xem houseRecordService.bulkAssignHouseNeighborhood.
+// Nha da "verified" se bi tu choi RIENG cho tung nha (khong lam dung ca lo),
+// giong quy tac cua updateHouseRecordSchema.
+export const bulkAssignHouseNeighborhoodSchema = z.object({
+    ...bulkHouseIdsSchema,
+    neighborhoodId: z.string().min(1, "Vui lòng chọn tổ dân phố"),
+});
+export type BulkAssignHouseNeighborhoodInput = z.infer<
+    typeof bulkAssignHouseNeighborhoodSchema
+>;
+
+// Duyet/tu choi hang loat (vd cac nha dang "Chờ duyệt") - cung quy tac voi
+// updateHouseRecordStatusSchema (ly do bat buoc khi tu choi/yeu cau cap nhat).
+export const bulkUpdateHouseRecordStatusSchema = z
+    .object({
+        ...bulkHouseIdsSchema,
+        status: z.enum(HOUSE_RECORD_STATUS),
+        note: z.string().optional(),
+    })
+    .refine(data => data.status !== "denied" || !!data.note?.trim(), {
+        message: "Vui lòng nhập lý do khi từ chối nhà số",
+        path: ["note"],
+    })
+    .refine(
+        data => data.status !== "needs_update" || !!data.note?.trim(),
+        {
+            message: "Vui lòng nhập chi tiết cần cập nhật",
+            path: ["note"],
+        },
+    );
+export type BulkUpdateHouseRecordStatusInput = z.infer<
+    typeof bulkUpdateHouseRecordStatusSchema
 >;

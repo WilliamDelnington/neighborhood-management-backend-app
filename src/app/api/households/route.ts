@@ -6,6 +6,7 @@ import {
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
 import { createHouseholdSchema } from "@/validators/household";
+import { VERIFICATION_STATUS, type VerificationStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
 import { createHousehold, listHouseholds } from "@/services/householdService";
@@ -32,12 +33,20 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
+        const statusParam = searchParams.get("status") || undefined;
+        const status =
+            statusParam &&
+            (VERIFICATION_STATUS as readonly string[]).includes(statusParam)
+                ? (statusParam as VerificationStatus)
+                : undefined;
         const result = await listHouseholds({
             page,
             limit,
             search: searchParams.get("search") || undefined,
             cluster: searchParams.get("cluster") || undefined,
             streetId: searchParams.get("streetId") || undefined,
+            unassigned: searchParams.get("unassigned") === "true",
+            status,
             actorUser: user,
         });
         return apiSuccess(result);

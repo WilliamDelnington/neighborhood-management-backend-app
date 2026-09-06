@@ -2,6 +2,7 @@ import {
     Company,
     HouseRecord,
     HouseUsageUnit,
+    BusinessType,
     type ICompany,
     type IUser,
 } from "@/models";
@@ -26,6 +27,20 @@ import type {
     UpdateCompanyInput,
 } from "@/validators/company";
 
+/**
+ * Nem HttpError(404) neu MOT trong cac businessTypeIds duoc chon khong ton
+ * tai - tranh cong ty tro toi loai hinh da bi xoa hoac chua bao gio ton tai.
+ * Khac assertBusinessTypeExists cua Business (mot gia tri) - ham nay nhan
+ * MANG vi mot cong ty co the co nhieu loai hinh kinh doanh cung luc.
+ */
+async function assertBusinessTypesExist(ids?: string[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    const count = await BusinessType.countDocuments({ _id: { $in: ids } });
+    if (count !== new Set(ids).size) {
+        throw new HttpError("Có loại hình kinh doanh không tồn tại", 404);
+    }
+}
+
 export async function createCompany(
     actorUser: IUser,
     input: CreateCompanyInput,
@@ -37,6 +52,7 @@ export async function createCompany(
     // "unverified"/"pending" cho toi khi duoc xac thuc rieng (xem
     // resolveInitialVerificationStatus).
     assertHouseRecordAllowsDeclaration(actorUser, houseRecord);
+    await assertBusinessTypesExist(input.businessTypeIds);
 
     const company = await Company.create({
         name: input.name,
@@ -48,6 +64,7 @@ export async function createCompany(
         taxCode: input.taxCode,
         representativeUserId: input.representativeUserId || undefined,
         organizationId: input.organizationId || undefined,
+        businessTypeIds: input.businessTypeIds || [],
         phone: input.phone,
         active: input.active ?? true,
         status: resolveInitialVerificationStatus(houseRecord),
@@ -77,6 +94,9 @@ export async function listCompanies(params: {
     limit?: number;
     search?: string;
     status?: VerificationStatus;
+    // Loc "co chua loai hinh nay" - mot gia tri filter khop bat ky cong ty
+    // nao co id nay trong mang businessTypeIds (khac Business - loc bang).
+    businessType?: string;
     actorUser?: IUser;
 }) {
     const page = params.page || 1;
@@ -85,6 +105,10 @@ export async function listCompanies(params: {
 
     if (params.status) {
         filter.status = params.status;
+    }
+
+    if (params.businessType) {
+        filter.businessTypeIds = params.businessType;
     }
 
     if (params.houseId) {
@@ -110,7 +134,8 @@ export async function listCompanies(params: {
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
-        .populate("organizationId", "name");
+        .populate("organizationId", "name")
+        .populate("businessTypeIds", "name");
     if (!params.houseId) {
         query = query.populate("houseId", "code address cluster");
     }
@@ -133,7 +158,8 @@ export async function getCompanyById(id: string): Promise<ICompany> {
     const company = await Company.findById(id)
         .populate("houseId", "code address cluster ownerId ownerType status")
         .populate("representativeUserId", "displayName phone")
-        .populate("organizationId", "name");
+        .populate("organizationId", "name")
+        .populate("businessTypeIds", "name");
     if (!company) throw new HttpError("Không tìm thấy công ty", 404);
     return company;
 }
@@ -151,6 +177,10 @@ export async function updateCompany(
 
     assertVerificationEditable(actorUser, company.status, "Công ty");
 
+    if (patch.businessTypeIds) {
+        await assertBusinessTypesExist(patch.businessTypeIds);
+    }
+
     for (const [key, value] of Object.entries(patch)) {
         if (value !== undefined) {
             (company as unknown as Record<string, unknown>)[key] = value;
@@ -160,6 +190,7 @@ export async function updateCompany(
     await company.save();
     await company.populate("representativeUserId", "displayName phone");
     await company.populate("organizationId", "name");
+    await company.populate("businessTypeIds", "name");
 
     await writeAuditLog({
         actorId: String(actorUser._id),

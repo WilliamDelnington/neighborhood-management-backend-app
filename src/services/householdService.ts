@@ -244,6 +244,7 @@ export async function listHouseholds(params: {
     streetId?: string;
     houseId?: string;
     unassigned?: boolean;
+    status?: VerificationStatus;
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
@@ -306,11 +307,16 @@ export async function listHouseholds(params: {
         ];
     }
 
+    if (params.status) {
+        filter.status = params.status;
+    }
+
     const [items, total] = await Promise.all([
         Household.find(filter)
             .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
+            .limit(params.limit)
+            .populate("houseId", "code address"),
         Household.countDocuments(filter),
     ]);
 

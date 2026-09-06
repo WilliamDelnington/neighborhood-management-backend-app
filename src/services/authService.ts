@@ -213,6 +213,10 @@ export async function setPassword(
     }
 
     user.passwordHash = await hashPassword(input.password);
+    // Tu day tro di mat khau la do CHINH CHU tai khoan chon - go bo yeu cau
+    // bat buoc doi mat khau (neu co, xem User.mustChangePassword va
+    // rbac.ts requireUser).
+    user.mustChangePassword = false;
     await user.save();
     return sanitizeUserWithPermissions(user);
 }
@@ -362,6 +366,12 @@ export function sanitizeUser(user: IUser) {
         roles: user.roles,
         primaryRole: user.primaryRole,
         status: user.status,
+        // True khi mat khau hien tai la do nguoi khac dat thay (import Excel,
+        // nhan vien tao ho, admin dat lai) - client (mini app/web app) phai
+        // chuyen huong sang man doi mat khau bat buoc khi thay true (backend
+        // da chan san moi API khac o rbac.ts requireUser, day chi la tin
+        // hieu de UI dieu huong dung, khong phai co che bao mat chinh).
+        mustChangePassword: user.mustChangePassword,
         // Tai khoan cu chua backfill duoc hieu dung theo che do dang nhap
         // hien tai: so dien thoai tam thoi, chua xac minh danh tinh quoc gia.
         identityProvider: user.identityProvider || "phone_temporary",

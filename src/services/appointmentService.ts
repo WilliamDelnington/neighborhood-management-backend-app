@@ -559,29 +559,6 @@ export async function createAppointment(
 
     // Dat cho nguyen tu (xem AppointmentSlotCounter.ts).
     await reserveSlotCounter(service._id, slot._id, appointedDate, slot.maxCapacity);
-    // Dat cho nguyen tu (xem AppointmentSlotCounter.ts): dam bao doc counter
-    // ton tai truoc, roi $inc co dieu kien bookedCount < maxCapacity.
-    await AppointmentSlotCounter.findOneAndUpdate(
-        { serviceId: service._id, timeSlotId: slot._id, appointedDate },
-        { $setOnInsert: { bookedCount: 0 } },
-        { upsert: true },
-    );
-    const reserved = await AppointmentSlotCounter.findOneAndUpdate(
-        {
-            serviceId: service._id,
-            timeSlotId: slot._id,
-            appointedDate,
-            bookedCount: { $lt: slot.maxCapacity },
-        },
-        { $inc: { bookedCount: 1 } },
-        { new: true },
-    );
-    if (!reserved) {
-        throw new HttpError(
-            "Khung giờ này đã hết chỗ, vui lòng chọn khung giờ khác",
-            409,
-        );
-    }
 
     let appointment: IAppointment;
     try {

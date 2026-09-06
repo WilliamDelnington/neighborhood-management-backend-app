@@ -429,7 +429,7 @@ export async function listInspectionCampaigns(params: {
     if (params.status) filter.status = params.status;
     const [items, total] = await Promise.all([
         InspectionCampaign.find(filter)
-            .sort({ dueAt: 1, createdAt: -1 })
+            .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
             .populate("createdByWardUserId", "displayName"),

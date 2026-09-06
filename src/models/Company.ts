@@ -22,6 +22,14 @@ export interface ICompany extends Document {
     // minh rieng, Organization la so dang ky phap nhan dung lam ownerType cho
     // HouseOwnership - xem ghi chu tai models/Organization.ts).
     organizationId?: mongoose.Types.ObjectId;
+    // Loai hinh kinh doanh (BusinessType) - KHAC Business.businessType (mot
+    // gia tri duy nhat): mot cong ty/doanh nghiep co the dang ky nhieu nganh
+    // nghe/loai hinh cung luc nen day la MANG tham chieu, khong phai 1 gia
+    // tri. Khong co quy trinh giay to rieng theo tung loai (khac
+    // BusinessType.requiredDocuments danh cho Business) - cong ty van dung
+    // chung RequiredDocumentSettings category "company" (xem
+    // requiredDocumentAdapters.ts).
+    businessTypeIds: mongoose.Types.ObjectId[];
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH cong ty nay - doc lap voi trang thai cua
@@ -67,6 +75,10 @@ const CompanySchema = new Schema<ICompany>(
             type: Schema.Types.ObjectId,
             ref: "Organization",
             index: true,
+        },
+        businessTypeIds: {
+            type: [{ type: Schema.Types.ObjectId, ref: "BusinessType" }],
+            default: [],
         },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },

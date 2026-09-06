@@ -488,6 +488,13 @@ async function resolveOrCreateHouseOwner(
             displayName: ownerInput.displayName,
             email: ownerInput.email || undefined,
             passwordHash,
+            // Mat khau nay do NHAN VIEN/ADMIN dat thay (khong phai chinh chu
+            // nha tu chon) - bat buoc doi mat khau ngay lan dang nhap dau
+            // tien (xem User.mustChangePassword). Chi bat khi THUC SU co dat
+            // mat khau (passwordHash) - tai khoan chua co mat khau (import
+            // khong dien "Mật khẩu mặc định") van chua dang nhap duoc nen
+            // khong can flag nay.
+            mustChangePassword: !!passwordHash,
             roles: ["house_owner"],
             primaryRole: "house_owner",
             status: "active",
@@ -606,7 +613,13 @@ async function resolveOrCreateOrganizationOwner(
 
 export async function createHouseRecord(
     actorUser: IUser,
-    input: CreateHouseRecordInput,
+    // "code": KHONG thuoc createHouseRecordSchema/HouseForm (luon tu sinh qua
+    // generateSequentialCode cho luong tao nha so thong thuong) - chi duoc
+    // truyen thu cong tu importService khi commit "Nhap Excel nha so", vi mot
+    // so dia ban dung ma nha rieng (vd "H01-L19") khong theo dinh dang tuan tu
+    // NSxxx. Khong them vao zod schema de nguoi dung thuong (qua API/HouseForm)
+    // khong the tu dat ma tuy y.
+    input: CreateHouseRecordInput & { code?: string },
 ): Promise<IHouseRecord> {
     const { cluster, streetId } = await resolveStreetClusterPair(input);
     assertClusterAssignable(actorUser, cluster);
@@ -644,24 +657,35 @@ export async function createHouseRecord(
         ownerId = actorUser._id;
     }
 
-    const code = await generateSequentialCode(HouseRecord, "NS", 3);
+    const code =
+        input.code || (await generateSequentialCode(HouseRecord, "NS", 3));
     const gis = normalizeHouseGis(input);
-    const houseRecord = await HouseRecord.create({
-        code,
-        cluster,
-        streetId,
-        neighborhoodId: input.neighborhoodId || undefined,
-        address: input.address,
-        ...administrativeDivisions,
-        physicalStatus: input.physicalStatus,
-        usageTypes: input.usageTypes?.length ? input.usageTypes : ["household"],
-        otherUsageNote: input.otherUsageNote,
-        note: input.note,
-        residenceDeclarationNumber: input.residenceDeclarationNumber,
-        ...gis,
-        createdBy: actorUser._id,
-        updatedBy: actorUser._id,
-    });
+    let houseRecord: IHouseRecord;
+    try {
+        houseRecord = await HouseRecord.create({
+            code,
+            cluster,
+            streetId,
+            neighborhoodId: input.neighborhoodId || undefined,
+            address: input.address,
+            ...administrativeDivisions,
+            physicalStatus: input.physicalStatus,
+            usageTypes: input.usageTypes?.length
+                ? input.usageTypes
+                : ["household"],
+            otherUsageNote: input.otherUsageNote,
+            note: input.note,
+            residenceDeclarationNumber: input.residenceDeclarationNumber,
+            ...gis,
+            createdBy: actorUser._id,
+            updatedBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError(`Mã nhà "${code}" đã tồn tại`, 409);
+        }
+        throw err;
+    }
 
     // Tao quan he primary_owner ban dau trong HouseOwnership (nguon "su that"
     // cho quan he nhieu-nhieu House<->chu nha) - ham nay tu dong dong bo lai
@@ -1143,6 +1167,76 @@ export async function transitionHouseRecordStatus(
 
     await houseRecord.populate(HOUSE_RECORD_POPULATE);
     return withInferredUsageTypes(houseRecord);
+}
+
+export interface BulkHouseActionResult {
+    succeededIds: string[];
+    failed: { id: string; message: string }[];
+}
+
+/**
+ * Gan mot to dan pho cho NHIEU nha so cung luc (vd nha nhap tu Excel con
+ * thieu to dan pho) - danh cho man "Danh sach nha so" chon nhieu dong roi
+ * thao tac hang loat. Goi lai updateHouseRecord() TUNG nha mot (khong tu
+ * viet lai logic) de tan dung nguyen ven cac rang buoc da co: nha "verified"
+ * se bi tu choi (403, phai di qua ChangeRequest chuyen to dan pho), nha
+ * ngoai pham vi cua actor se bi tu choi... Loi cua tung nha KHONG lam dung
+ * ca lo - duoc gom lai va tra ve trong "failed" de UI hien thi ro nha nao
+ * thanh cong/that bai va vi sao.
+ */
+export async function bulkAssignHouseNeighborhood(
+    actorUser: IUser,
+    ids: string[],
+    neighborhoodId: string,
+): Promise<BulkHouseActionResult> {
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+    for (const id of ids) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await updateHouseRecord(actorUser, id, { neighborhoodId });
+            succeededIds.push(id);
+        } catch (err) {
+            failed.push({
+                id,
+                message:
+                    err instanceof HttpError ? err.message : "Có lỗi xảy ra",
+            });
+        }
+    }
+    return { succeededIds, failed };
+}
+
+/**
+ * Chuyen trang thai xac thuc cho NHIEU nha so cung luc (vd duyet hang loat
+ * cac nha dang "Chờ duyệt") - goi lai transitionHouseRecordStatus() TUNG nha
+ * mot, cung ly do voi bulkAssignHouseNeighborhood o tren (tai su dung nguyen
+ * rang buoc chuyen trang thai hop le, gom loi rieng tung nha thay vi chan ca
+ * lo). Nha khong o dung trang thai nguon (vd da "verified" tu truoc) se rot
+ * vao "failed" voi thong bao loi co san, khong lam dung nhung nha con lai.
+ */
+export async function bulkTransitionHouseRecordStatus(
+    actorUser: IUser,
+    ids: string[],
+    targetStatus: HouseRecordStatus,
+    note?: string,
+): Promise<BulkHouseActionResult> {
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+    for (const id of ids) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await transitionHouseRecordStatus(actorUser, id, targetStatus, note);
+            succeededIds.push(id);
+        } catch (err) {
+            failed.push({
+                id,
+                message:
+                    err instanceof HttpError ? err.message : "Có lỗi xảy ra",
+            });
+        }
+    }
+    return { succeededIds, failed };
 }
 
 export async function deleteHouseRecord(

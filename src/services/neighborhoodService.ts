@@ -11,6 +11,7 @@ import {
     InspectionTarget,
     User,
     type INeighborhood,
+    type INeighborhoodTerm,
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
@@ -23,6 +24,7 @@ import type {
     UpdateNeighborhoodInput,
 } from "@/validators/neighborhood";
 import type { NeighborhoodStatus } from "@/models/Neighborhood";
+import type { NeighborhoodTermStatus } from "@/models/NeighborhoodTerm";
 
 const LEADER_POPULATE = "displayName phone status";
 
@@ -33,10 +35,67 @@ const LEADER_POPULATE = "displayName phone status";
  */
 export async function expireNeighborhoodOfficerAssignments(userId?: string) {
     const now = new Date();
-    const expiredTerms = await NeighborhoodTerm.updateMany(
-        { status: "ACTIVE", endAt: { $lt: now } },
-        { $set: { status: "ENDED" } },
+
+    // 1) IN_PROGRESS -> ENDED (dung han) khi da qua endAt.
+    const endedOnTime = await NeighborhoodTerm.updateMany(
+        { status: "IN_PROGRESS", endAt: { $lt: now } },
+        { $set: { status: "ENDED", endedEarly: false } },
     );
+
+    // 2) NOT_STARTED -> IN_PROGRESS khi den/qua startAt - phai xu ly TUNG
+    // nhiem ky (khong the gop thanh 1 updateMany nhu buoc 1) vi phai kiem tra
+    // rang buoc "toi da 1 IN_PROGRESS/to dan pho" truoc khi chuyen (mot to
+    // dan pho co the co nhieu nhiem ky NOT_STARTED "xep hang").
+    const dueTerms = await NeighborhoodTerm.find({
+        status: "NOT_STARTED",
+        startAt: { $lte: now },
+    });
+    let startedCount = 0;
+    for (const term of dueTerms) {
+        // eslint-disable-next-line no-await-in-loop
+        const alreadyInProgress = await NeighborhoodTerm.exists({
+            neighborhoodId: term.neighborhoodId,
+            status: "IN_PROGRESS",
+        });
+        // Da co nhiem ky khac dang IN_PROGRESS o to dan pho nay - bo qua, de
+        // nguyen NOT_STARTED cho toi khi admin ket thuc nhiem ky kia hoac huy
+        // nhiem ky nay (khong tu dong xu ly xung dot).
+        if (alreadyInProgress) continue;
+        if (term.endAt < now) {
+            // Ca khoang thoi gian da troi qua truoc khi kip bat dau (vd he
+            // thong ngung hoat dong mot thoi gian dai) - vao thang ENDED
+            // luon, khong dung o IN_PROGRESS mot khoanh khac roi ket thuc ngay.
+            term.status = "ENDED";
+            term.endedEarly = false;
+        } else {
+            term.status = "IN_PROGRESS";
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await term.save();
+        startedCount += 1;
+
+        if (term.status === "IN_PROGRESS" && (term.leaderUserId || term.coleaderUserId)) {
+            try {
+                // Nguoi tao nhiem ky (da chi dinh to truong/to pho luc do)
+                // dung lam actor cho phan cong tu dong nay - khong co nguoi
+                // dang thao tac de gan actor thuc su (day la vong quet ngam).
+                // eslint-disable-next-line no-await-in-loop
+                await applyDesignatedLeadership(
+                    String(term.createdBy),
+                    term,
+                    true,
+                );
+            } catch {
+                // Loi (vd nguoi duoc chi dinh da mat vai tro/bi khoa tai
+                // khoan trong luc cho) KHONG duoc lam hong ca vong quet -
+                // nhiem ky van chuyen IN_PROGRESS binh thuong, admin tu gan
+                // lai qua the "Tổ trưởng"/"Tổ phó" neu can.
+            }
+        }
+    }
+
+    const expiredTerms = { modifiedCount: endedOnTime.modifiedCount + startedCount };
+
     const userFilter = userId ? { leaderUserId: userId } : {};
     const expiredLeaders = await NeighborhoodLeaderAssignment.find({
         ...userFilter,
@@ -226,7 +285,7 @@ export async function listNeighborhoods(params: {
           }).populate("coleaderUserId", LEADER_POPULATE),
           NeighborhoodTerm.find({
               neighborhoodId: { $in: ids },
-              status: "ACTIVE",
+              status: "IN_PROGRESS",
           }).sort({ startAt: -1 }),
           FileAsset.aggregate([
               { $match: { relatedModel: "Neighborhood", relatedId: { $in: ids } } },
@@ -314,7 +373,7 @@ export async function getNeighborhoodById(
     const [houseCount, coleaders, currentTerm, attachmentCount] = await Promise.all([
         HouseRecord.countDocuments({ neighborhoodId: neighborhood._id }),
         listColeaders(id),
-        NeighborhoodTerm.findOne({ neighborhoodId: id, status: "ACTIVE" })
+        NeighborhoodTerm.findOne({ neighborhoodId: id, status: "IN_PROGRESS" })
             .sort({ startAt: -1 }),
         FileAsset.countDocuments({ relatedModel: "Neighborhood", relatedId: id }),
     ]);
@@ -428,8 +487,15 @@ export async function assignNeighborhoodLeader(
     leaderUserId: string | null,
     note?: string,
     options?: { termId?: string; endAt?: Date },
+    // true = bo qua quet het han o dau ham - CHI dung boi
+    // applyDesignatedLeadership khi goi TU BEN TRONG chinh vong quet do (luc
+    // mot nhiem ky NOT_STARTED tu dong chuyen sang IN_PROGRESS), tranh de quy
+    // goi lai expireNeighborhoodOfficerAssignments() lam lai toan bo vong quet
+    // mot lan nua mot cach du thua. Cac noi goi khac (route, applyDesignatedLeadership
+    // tu createNeighborhoodTerm/updateNeighborhoodTerm) khong truyen co nay.
+    skipExpirySweep = false,
 ): Promise<INeighborhood> {
-    await expireNeighborhoodOfficerAssignments();
+    if (!skipExpirySweep) await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
@@ -444,14 +510,26 @@ export async function assignNeighborhoodLeader(
     let newLeader: IUser | null = null;
     let assignmentEndAt = options?.endAt;
     let termId = options?.termId;
+    let resolvedTerm: INeighborhoodTerm | null = null;
+    // Phan cong to truong PHAI gan voi mot nhiem ky dang ACTIVE - to truong
+    // khong con la mot "quan he doc lap" voi nhiem ky nua (xem
+    // assignLeaderSchema o validator, day la lop chan thu hai o service phong
+    // truong hop goi thang service, bo qua validator). Khong ap dung cho
+    // nhanh HUY gan (leaderUserId null) - go lien ket khong can chon nhiem ky.
+    if (leaderUserId && !termId) {
+        throw new HttpError(
+            "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ trưởng",
+            422,
+        );
+    }
     if (termId) {
-        const term = await NeighborhoodTerm.findOne({
+        resolvedTerm = await NeighborhoodTerm.findOne({
             _id: termId,
             neighborhoodId,
-            status: "ACTIVE",
+            status: "IN_PROGRESS",
         });
-        if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
-        assignmentEndAt = term.endAt;
+        if (!resolvedTerm) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
+        assignmentEndAt = resolvedTerm.endAt;
     }
     if (assignmentEndAt && assignmentEndAt <= new Date()) {
         throw new HttpError("Ngày kết thúc phân công phải ở tương lai", 422);
@@ -469,6 +547,18 @@ export async function assignNeighborhoodLeader(
             throw new HttpError(
                 "Người dùng được chọn phải có vai trò Tổ trưởng",
                 422,
+            );
+        }
+        // Kiem tra TRUOC khi mutate bat cu thu gi (ham nay khong dung Mongo
+        // transaction) - neu to truong nay dang co mot nhiem ky khac trung
+        // thoi gian o to dan pho khac, tu choi thay vi tu dong "chuyen" (xem
+        // ghi chu o buoc 2 ben duoi).
+        if (resolvedTerm) {
+            await assertLeaderAvailableForInterval(
+                String(newLeader._id),
+                resolvedTerm.startAt,
+                resolvedTerm.endAt,
+                String(neighborhood._id),
             );
         }
     }
@@ -493,34 +583,14 @@ export async function assignNeighborhoodLeader(
         });
     }
 
-    // 2) Neu to truong moi dang active o mot to dan pho KHAC, chuyen ho di
-    // (dong ban ghi cu, xoa lien ket cu) - giao dien phai xac nhan hanh dong
-    // nay voi admin truoc khi goi API, API chi thuc hien.
-    if (newLeader) {
-        const priorAssignment = await NeighborhoodLeaderAssignment.findOne({
-            leaderUserId: newLeader._id,
-            neighborhoodId: { $ne: neighborhood._id },
-            unassignedAt: { $exists: false },
-        });
-        if (priorAssignment) {
-            await NeighborhoodLeaderAssignment.updateOne(
-                { _id: priorAssignment._id },
-                { unassignedAt: now, unassignedBy: actorId },
-            );
-            await Neighborhood.updateOne(
-                { _id: priorAssignment.neighborhoodId },
-                { $unset: { leaderUserId: "" }, updatedBy: actorId },
-            );
-            await User.updateOne(
-                { _id: newLeader._id, neighborhoodId: priorAssignment.neighborhoodId },
-                { $unset: { neighborhoodId: "" } },
-            );
-            await User.updateOne(
-                { _id: newLeader._id },
-                { $pull: { assignedNeighborhoodIds: priorAssignment.neighborhoodId } },
-            );
-        }
-    }
+    // 2) (Da bo "tu dong chuyen to truong" cu o day) Neu to truong moi dang co
+    // mot phan cong con hieu luc o to dan pho KHAC, no da duoc kiem tra
+    // KHONG trung thoi gian voi nhiem ky moi ngay tu buoc validate o tren
+    // (assertLeaderAvailableForInterval) - neu trung, ham da nem loi va dung
+    // truoc khi den day. Neu khong trung, CO CHU DICH khong dong/dong bo lai
+    // phan cong cu: nguoi nay quan ly ca hai to dan pho o hai khoang thoi
+    // gian khac nhau, phan cong cu se tu ket thuc dung luc cua no qua vong
+    // quet het han binh thuong (khong can can thiep thu cong o day).
 
     if (!leaderUserId) {
         neighborhood.leaderUserId = undefined as any;
@@ -622,22 +692,32 @@ export async function assignNeighborhoodColeader(
     coleaderUserId: string,
     note?: string,
     options?: { termId?: string; endAt?: Date },
+    // Xem ghi chu tren assignNeighborhoodLeader - cung ly do.
+    skipExpirySweep = false,
 ): Promise<void> {
-    await expireNeighborhoodOfficerAssignments();
+    if (!skipExpirySweep) await expireNeighborhoodOfficerAssignments();
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
     let assignmentEndAt = options?.endAt;
     const termId = options?.termId;
-    if (termId) {
-        const term = await NeighborhoodTerm.findOne({
-            _id: termId,
-            neighborhoodId,
-            status: "ACTIVE",
-        });
-        if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
-        assignmentEndAt = term.endAt;
+    // Phan cong to pho PHAI gan voi mot nhiem ky dang ACTIVE - cung quy tac
+    // voi assignNeighborhoodLeader (xem ghi chu tren do), khong co nhanh huy
+    // gan rieng trong ham nay (unassignNeighborhoodColeader o duoi khong can
+    // nhiem ky).
+    if (!termId) {
+        throw new HttpError(
+            "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ phó",
+            422,
+        );
     }
+    const term = await NeighborhoodTerm.findOne({
+        _id: termId,
+        neighborhoodId,
+        status: "IN_PROGRESS",
+    });
+    if (!term) throw new HttpError("Nhiệm kỳ không hợp lệ", 422);
+    assignmentEndAt = term.endAt;
     if (assignmentEndAt && assignmentEndAt <= new Date()) {
         throw new HttpError("Ngày kết thúc phân công phải ở tương lai", 422);
     }
@@ -664,17 +744,16 @@ export async function assignNeighborhoodColeader(
         );
     }
 
-    const activeElsewhere = await NeighborhoodColeaderAssignment.findOne({
+    // Khac ban cu (chan bat ke ngay thang): chi chan neu nhiem ky cua phan
+    // cong to pho khac do TRUNG thoi gian voi nhiem ky nay - nguoi nay co the
+    // la to pho nhieu to dan pho khac nhau mien la khong giao nhau ve thoi
+    // gian (cung logic voi to truong - xem assertColeaderAvailableForInterval).
+    await assertColeaderAvailableForInterval(
         coleaderUserId,
-        neighborhoodId: { $ne: neighborhoodId },
-        unassignedAt: { $exists: false },
-    });
-    if (activeElsewhere) {
-        throw new HttpError(
-            "Người dùng này đang là Tổ phó của một tổ dân phố khác",
-            422,
-        );
-    }
+        term.startAt,
+        term.endAt,
+        neighborhoodId,
+    );
 
     await NeighborhoodColeaderAssignment.create({
         neighborhoodId,
@@ -754,28 +833,286 @@ export async function listNeighborhoodTerms(neighborhoodId: string) {
     return NeighborhoodTerm.find({ neighborhoodId })
         .sort({ startAt: -1 })
         .populate("createdBy", "displayName")
-        .populate("updatedBy", "displayName");
+        .populate("updatedBy", "displayName")
+        .populate("leaderUserId", "displayName phone")
+        .populate("coleaderUserId", "displayName phone");
 }
 
-async function assertSingleActiveTerm(
+/**
+ * Tra ve trang thai "thuc te" cua mot khoang thoi gian nhiem ky dua vao ngay
+ * hien tai - dung khi tao moi (nut "Tạo", khac "Lưu nháp") va khi finalize
+ * mot ban nhap (nut "Tạo" luc sua DRAFT). KHONG dung cho DRAFT/CANCELLED (hai
+ * trang thai nay khong suy ra tu ngay thang).
+ */
+function resolveTermStatusByDate(
+    startAt: Date,
+    endAt: Date,
+    now: Date = new Date(),
+): "NOT_STARTED" | "IN_PROGRESS" | "ENDED" {
+    if (endAt < now) return "ENDED";
+    if (startAt <= now) return "IN_PROGRESS";
+    return "NOT_STARTED";
+}
+
+function intervalsOverlap(
+    aStart: Date,
+    aEnd: Date,
+    bStart: Date,
+    bEnd: Date,
+): boolean {
+    return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * Nem HttpError(409) neu khoang thoi gian [startAt, endAt] TRUNG voi mot
+ * nhiem ky KHAC cua CUNG to dan pho dang NOT_STARTED hoac IN_PROGRESS (goi la
+ * "active" - con hieu luc, khac ENDED/CANCELLED da "giai phong" khoang thoi
+ * gian cua no). Thay the assertNoOtherInProgressTerm cu (chi chan IN_PROGRESS
+ * trung nhau) - quy tac moi tong quat hon: hai nhiem ky NOT_STARTED "xep
+ * hang" cung khong duoc trung nhau, khong chi rieng IN_PROGRESS (hai
+ * IN_PROGRESS luon trung nhau vi ca hai deu chua "hom nay" nen quy tac cu la
+ * mot truong hop dac biet cua quy tac nay).
+ */
+async function assertNoOverlappingActiveTerm(
     neighborhoodId: string,
-    status: string | undefined,
+    startAt: Date,
+    endAt: Date,
     excludeId?: string,
-) {
-    if (status !== "ACTIVE") return;
-    const existing = await NeighborhoodTerm.exists({
+): Promise<void> {
+    const candidates = await NeighborhoodTerm.find({
         neighborhoodId,
-        status: "ACTIVE",
+        status: { $in: ["NOT_STARTED", "IN_PROGRESS"] },
         ...(excludeId ? { _id: { $ne: excludeId } } : {}),
-    });
-    if (existing) {
+    }).select("name startAt endAt");
+    const conflict = candidates.find(t =>
+        intervalsOverlap(startAt, endAt, t.startAt, t.endAt),
+    );
+    if (conflict) {
         throw new HttpError(
-            "Tổ dân phố đã có một nhiệm kỳ đang hoạt động; hãy kết thúc nhiệm kỳ cũ trước",
+            `Khoảng thời gian trùng với nhiệm kỳ "${conflict.name}" đang diễn ra hoặc chưa bắt đầu`,
             409,
         );
     }
 }
 
+/**
+ * Nem HttpError(409) neu leaderUserId dang co MOT phan cong to truong con
+ * hieu luc (unassignedAt chua co) o mot to dan pho KHAC, VA nhiem ky gan voi
+ * phan cong do TRUNG thoi gian voi [startAt, endAt] duoc kiem tra - "mot
+ * nguoi chi lam to truong o MOT NOI tai mot thoi diem", nhung nguoi do CO THE
+ * lam to truong nhieu to dan pho khac nhau MIEN LA cac nhiem ky khong giao
+ * nhau ve thoi gian (khac chinh sach cu: tu dong "chuyen" to truong bat ke
+ * ngay thang - xem ghi chu cu tren assignNeighborhoodLeader). Phan cong
+ * khong gan voi nhiem ky nao (termId rong, du lieu cu truoc khi nhiem ky bat
+ * buoc) duoc bo qua vi khong co ngay de doi chieu.
+ */
+async function assertLeaderAvailableForInterval(
+    leaderUserId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeNeighborhoodId?: string,
+): Promise<void> {
+    const assignments = await NeighborhoodLeaderAssignment.find({
+        leaderUserId,
+        unassignedAt: { $exists: false },
+        ...(excludeNeighborhoodId
+            ? { neighborhoodId: { $ne: excludeNeighborhoodId } }
+            : {}),
+    }).populate<{ termId: INeighborhoodTerm | null }>(
+        "termId",
+        "name startAt endAt",
+    );
+    for (const assignment of assignments) {
+        const term = assignment.termId;
+        if (!term) continue;
+        if (intervalsOverlap(startAt, endAt, term.startAt, term.endAt)) {
+            const neighborhood = await Neighborhood.findById(
+                assignment.neighborhoodId,
+            ).select("name");
+            throw new HttpError(
+                `Người dùng này đang là tổ trưởng của "${
+                    neighborhood?.name || "một tổ dân phố khác"
+                }" trong nhiệm kỳ "${term.name}", trùng thời gian với nhiệm kỳ này`,
+                409,
+            );
+        }
+    }
+}
+
+/** Nhu assertLeaderAvailableForInterval nhung cho To pho. */
+async function assertColeaderAvailableForInterval(
+    coleaderUserId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeNeighborhoodId?: string,
+): Promise<void> {
+    const assignments = await NeighborhoodColeaderAssignment.find({
+        coleaderUserId,
+        unassignedAt: { $exists: false },
+        ...(excludeNeighborhoodId
+            ? { neighborhoodId: { $ne: excludeNeighborhoodId } }
+            : {}),
+    }).populate<{ termId: INeighborhoodTerm | null }>(
+        "termId",
+        "name startAt endAt",
+    );
+    for (const assignment of assignments) {
+        const term = assignment.termId;
+        if (!term) continue;
+        if (intervalsOverlap(startAt, endAt, term.startAt, term.endAt)) {
+            const neighborhood = await Neighborhood.findById(
+                assignment.neighborhoodId,
+            ).select("name");
+            throw new HttpError(
+                `Người dùng này đang là tổ phó của "${
+                    neighborhood?.name || "một tổ dân phố khác"
+                }" trong nhiệm kỳ "${term.name}", trùng thời gian với nhiệm kỳ này`,
+                409,
+            );
+        }
+    }
+}
+
+/**
+ * Dong ngay cac phan cong to truong/to pho gan voi mot nhiem ky (goi khi
+ * nhiem ky ket thuc SOM - ket thuc dung han da tu dong xu ly trong
+ * expireNeighborhoodOfficerAssignments vi endAt cua phan cong von da bang
+ * endAt cua nhiem ky). Dat endAt = thoi diem ket thuc thuc te (som hon endAt
+ * goc), roi quet lai ngay de thuc su thu hoi scope tren User.
+ */
+async function closeAssignmentsForTerm(termId: unknown, endedAt: Date) {
+    await Promise.all([
+        NeighborhoodLeaderAssignment.updateMany(
+            { termId, unassignedAt: { $exists: false } },
+            { $set: { endAt: endedAt } },
+        ),
+        NeighborhoodColeaderAssignment.updateMany(
+            { termId, unassignedAt: { $exists: false } },
+            { $set: { endAt: endedAt } },
+        ),
+    ]);
+    await expireNeighborhoodOfficerAssignments();
+}
+
+/**
+ * Nem HttpError neu leaderUserId/coleaderUserId CHI DINH tren mot nhiem ky
+ * (form tao/sua nhiem ky) khong hop le - cung dieu kien voi
+ * assignNeighborhoodLeader/assignNeighborhoodColeader (tai khoan dang hoat
+ * dong + dung vai tro + KHONG trung thoi gian voi nhiem ky khac cua chinh ho
+ * o to dan pho khac), kiem tra SOM ngay luc tao/sua nhiem ky de bao loi ro
+ * rang thay vi de that bai am tham luc nhiem ky sau nay chuyen sang
+ * IN_PROGRESS. Bo qua gia tri rong/null (chua chi dinh). startAt/endAt la
+ * khoang thoi gian cua CHINH nhiem ky dang tao/sua (dung de doi chieu trung
+ * lich voi nhiem ky khac cua nguoi duoc chon). checkAvailability=false (luc
+ * "Lưu nháp") bo qua rieng phan doi chieu trung lich (chi con kiem tra vai
+ * tro/trang thai tai khoan) - ban nhap chua "cong bo" nen chua nen chan boi
+ * mot xung dot co the se khong con dung vao luc finalize sau nay.
+ */
+async function assertLeadershipCandidatesValid(
+    neighborhoodId: string,
+    startAt: Date,
+    endAt: Date,
+    leaderUserId: string | null | undefined,
+    coleaderUserId: string | null | undefined,
+    checkAvailability: boolean,
+): Promise<void> {
+    if (leaderUserId) {
+        const leader = await User.findById(leaderUserId);
+        if (!leader) throw new HttpError("Không tìm thấy người dùng", 404);
+        if (leader.status !== "active") {
+            throw new HttpError(
+                "Chỉ có thể chỉ định tài khoản đang hoạt động làm tổ trưởng",
+                422,
+            );
+        }
+        if (!leader.roles.includes("neighborhood_leader")) {
+            throw new HttpError(
+                "Người dùng được chọn phải có vai trò Tổ trưởng",
+                422,
+            );
+        }
+        if (checkAvailability) {
+            await assertLeaderAvailableForInterval(
+                leaderUserId,
+                startAt,
+                endAt,
+                neighborhoodId,
+            );
+        }
+    }
+    if (coleaderUserId) {
+        const coleader = await User.findById(coleaderUserId);
+        if (!coleader) throw new HttpError("Không tìm thấy người dùng", 404);
+        if (coleader.status !== "active") {
+            throw new HttpError(
+                "Chỉ có thể chỉ định tài khoản đang hoạt động làm tổ phó",
+                422,
+            );
+        }
+        if (!coleader.roles.includes("neighborhood_coleader")) {
+            throw new HttpError(
+                "Người dùng được chọn phải có vai trò Tổ phó",
+                422,
+            );
+        }
+        if (checkAvailability) {
+            await assertColeaderAvailableForInterval(
+                coleaderUserId,
+                startAt,
+                endAt,
+                neighborhoodId,
+            );
+        }
+    }
+}
+
+/**
+ * Ap dung to truong/to pho DA CHI DINH tren mot nhiem ky (term.leaderUserId/
+ * coleaderUserId) thanh phan cong THUC SU, ngay sau khi nhiem ky do CHUYEN
+ * SANG IN_PROGRESS (luc tao, luc finalize ban nhap, hoac tu dong khi den
+ * ngay bat dau - xem cac noi goi). skipExpirySweep=true khi goi TU BEN TRONG
+ * chinh vong quet expireNeighborhoodOfficerAssignments (tranh de quy quet
+ * lai tu dau) - xem ghi chu tren assignNeighborhoodLeader.
+ */
+async function applyDesignatedLeadership(
+    actorId: string,
+    term: INeighborhoodTerm,
+    skipExpirySweep: boolean,
+): Promise<void> {
+    if (term.leaderUserId) {
+        await assignNeighborhoodLeader(
+            actorId,
+            String(term.neighborhoodId),
+            String(term.leaderUserId),
+            undefined,
+            { termId: String(term._id) },
+            skipExpirySweep,
+        );
+    }
+    if (term.coleaderUserId) {
+        await assignNeighborhoodColeader(
+            actorId,
+            String(term.neighborhoodId),
+            String(term.coleaderUserId),
+            undefined,
+            { termId: String(term._id) },
+            skipExpirySweep,
+        );
+    }
+}
+
+/**
+ * Tao nhiem ky moi. "saveAsDraft" quyet dinh trang thai ban dau:
+ * - true (nut "Lưu nháp"): luon DRAFT, khong can kiem tra gi them.
+ * - false (nut "Tạo"): tu tinh NOT_STARTED/IN_PROGRESS (hoac ENDED neu ca
+ *   khoang thoi gian da qua) dua theo startAt/endAt - xem resolveTermStatusByDate.
+ *   Neu ket qua la IN_PROGRESS, kiem tra khong co nhiem ky IN_PROGRESS nao
+ *   khac cua to dan pho nay dang chay.
+ * leaderUserId/coleaderUserId (neu co) duoc kiem tra hop le ngay tai day; neu
+ * nhiem ky IN_PROGRESS ngay luc tao (startAt <= hom nay), phan cong duoc tao
+ * THUC SU luon (xem applyDesignatedLeadership) - neu con NOT_STARTED, chi
+ * luu lai "du dinh", se tu dong ap dung khi den ngay bat dau.
+ */
 export async function createNeighborhoodTerm(
     actorId: string,
     neighborhoodId: string,
@@ -783,20 +1120,50 @@ export async function createNeighborhoodTerm(
 ) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
-    await assertSingleActiveTerm(neighborhoodId, input.status);
+    await assertLeadershipCandidatesValid(
+        neighborhoodId,
+        input.startAt,
+        input.endAt,
+        input.leaderUserId,
+        input.coleaderUserId,
+        !input.saveAsDraft,
+    );
+
+    let status: NeighborhoodTermStatus = "DRAFT";
+    if (!input.saveAsDraft) {
+        await assertNoOverlappingActiveTerm(
+            neighborhoodId,
+            input.startAt,
+            input.endAt,
+        );
+        status = resolveTermStatusByDate(input.startAt, input.endAt);
+    }
+
     const term = await NeighborhoodTerm.create({
-        ...input,
+        name: input.name,
+        startAt: input.startAt,
+        endAt: input.endAt,
+        notes: input.notes,
+        status,
+        endedEarly: status === "ENDED" ? false : undefined,
+        leaderUserId: input.leaderUserId || undefined,
+        coleaderUserId: input.coleaderUserId || undefined,
         neighborhoodId,
         createdBy: actorId,
         updatedBy: actorId,
     });
+
+    if (status === "IN_PROGRESS") {
+        await applyDesignatedLeadership(actorId, term, false);
+    }
+
     await Promise.all([
         writeAuditLog({
             actorId,
             action: "neighborhood.term_create",
             targetModel: "NeighborhoodTerm",
             targetId: term._id,
-            metadata: { neighborhoodId, name: term.name },
+            metadata: { neighborhoodId, name: term.name, status },
         }),
         NeighborhoodHistory.create({
             neighborhoodId,
@@ -805,9 +1172,20 @@ export async function createNeighborhoodTerm(
             after: term.toObject(),
         }),
     ]);
-    return term;
+    return term.populate([
+        { path: "leaderUserId", select: "displayName phone" },
+        { path: "coleaderUserId", select: "displayName phone" },
+    ]);
 }
 
+/**
+ * Sua thong tin nhiem ky (ten/ngay/ghi chu) - CHI cho phep khi dang DRAFT
+ * hoac NOT_STARTED (nhiem ky da IN_PROGRESS/ENDED/CANCELLED la bat bien -
+ * khac ban cu, cho PATCH status tuy y khong co state machine). "finalize=true"
+ * CHI co tac dung khi dang DRAFT: sau khi luu thong tin, chuyen luon sang
+ * NOT_STARTED/IN_PROGRESS theo ngay (nut "Tạo" khi sua mot ban nhap) thay vi
+ * giu nguyen DRAFT (nut "Lưu nháp").
+ */
 export async function updateNeighborhoodTerm(
     actorId: string,
     neighborhoodId: string,
@@ -816,28 +1194,76 @@ export async function updateNeighborhoodTerm(
 ) {
     const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
     if (!term) throw new HttpError("Không tìm thấy nhiệm kỳ", 404);
-    await assertSingleActiveTerm(neighborhoodId, patch.status, termId);
+    if (term.status !== "DRAFT" && term.status !== "NOT_STARTED") {
+        throw new HttpError(
+            "Chỉ có thể sửa thông tin nhiệm kỳ khi đang ở trạng thái Nháp hoặc Chưa bắt đầu",
+            409,
+        );
+    }
+
+    const { finalize, ...fields } = patch;
+    // Gia tri "sau khi ap dung patch" - dung de doi chieu (chua ghi vao
+    // term), vi patch co the chi doi ngay ma khong doi to truong/to pho (van
+    // phai kiem tra lai to truong/to pho HIEN CO co con trung lich voi
+    // khoang thoi gian MOI hay khong) hoac nguoc lai.
+    const effectiveStartAt = fields.startAt ?? term.startAt;
+    const effectiveEndAt = fields.endAt ?? term.endAt;
+    const effectiveLeaderUserId =
+        fields.leaderUserId !== undefined
+            ? fields.leaderUserId
+            : term.leaderUserId
+              ? String(term.leaderUserId)
+              : null;
+    const effectiveColeaderUserId =
+        fields.coleaderUserId !== undefined
+            ? fields.coleaderUserId
+            : term.coleaderUserId
+              ? String(term.coleaderUserId)
+              : null;
+    // Chi doi chieu trung lich khi nhiem ky DA (hoac SE, qua finalize) o
+    // trang thai NOT_STARTED/IN_PROGRESS - con DRAFT (khong finalize) thi bo
+    // qua, giong ly do o assertLeadershipCandidatesValid.
+    const checkAvailability =
+        term.status === "NOT_STARTED" || (term.status === "DRAFT" && !!finalize);
+    await assertLeadershipCandidatesValid(
+        neighborhoodId,
+        effectiveStartAt,
+        effectiveEndAt,
+        effectiveLeaderUserId,
+        effectiveColeaderUserId,
+        checkAvailability,
+    );
+
     const before = term.toObject();
-    Object.assign(term, patch, { updatedBy: actorId });
+    // term.status luc vao ham chi co the la DRAFT hoac NOT_STARTED (guard o
+    // tren), nen "vua chuyen sang IN_PROGRESS trong lan goi nay" tuong duong
+    // voi "sau khi luu, status la IN_PROGRESS" - chi co the xay ra qua nhanh
+    // finalize (DRAFT -> IN_PROGRESS), NOT_STARTED khong the tu chuyen
+    // IN_PROGRESS qua ham nay (chi qua vong quet tu dong).
+    Object.assign(term, fields, { updatedBy: actorId });
     if (term.endAt < term.startAt) {
         throw new HttpError("Ngày kết thúc nhiệm kỳ phải sau ngày bắt đầu", 422);
     }
+
+    if (term.status === "NOT_STARTED" || (finalize && term.status === "DRAFT")) {
+        await assertNoOverlappingActiveTerm(
+            neighborhoodId,
+            term.startAt,
+            term.endAt,
+            termId,
+        );
+    }
+
+    if (finalize && term.status === "DRAFT") {
+        const nextStatus = resolveTermStatusByDate(term.startAt, term.endAt);
+        term.status = nextStatus;
+        if (nextStatus === "ENDED") term.endedEarly = false;
+    }
+
     await term.save();
 
-    // Khi ket thuc/huy nhiem ky, phan cong lien quan se het hieu luc ngay.
-    if (term.status === "ENDED" || term.status === "CANCELLED") {
-        const endedAt = new Date();
-        await Promise.all([
-            NeighborhoodLeaderAssignment.updateMany(
-                { termId: term._id, unassignedAt: { $exists: false } },
-                { $set: { endAt: endedAt } },
-            ),
-            NeighborhoodColeaderAssignment.updateMany(
-                { termId: term._id, unassignedAt: { $exists: false } },
-                { $set: { endAt: endedAt } },
-            ),
-        ]);
-        await expireNeighborhoodOfficerAssignments();
+    if (term.status === "IN_PROGRESS") {
+        await applyDesignatedLeadership(actorId, term, false);
     }
 
     await Promise.all([
@@ -846,7 +1272,11 @@ export async function updateNeighborhoodTerm(
             action: "neighborhood.term_update",
             targetModel: "NeighborhoodTerm",
             targetId: term._id,
-            metadata: { neighborhoodId, fields: Object.keys(patch) },
+            metadata: {
+                neighborhoodId,
+                fields: Object.keys(fields),
+                finalized: !!finalize,
+            },
         }),
         NeighborhoodHistory.create({
             neighborhoodId,
@@ -856,7 +1286,134 @@ export async function updateNeighborhoodTerm(
             after: term.toObject(),
         }),
     ]);
+    return term.populate([
+        { path: "leaderUserId", select: "displayName phone" },
+        { path: "coleaderUserId", select: "displayName phone" },
+    ]);
+}
+
+/**
+ * Huy mot nhiem ky CHUA bat dau (NOT_STARTED -> CANCELLED) - khong can ly do
+ * (khac ket thuc som). Khong the huy DRAFT (xoa thay vi huy, xem
+ * deleteNeighborhoodTerm) hay nhiem ky da IN_PROGRESS/ENDED/CANCELLED. Khong
+ * co phan cong to truong/to pho nao can thu hoi - gan chuc danh luon doi hoi
+ * nhiem ky IN_PROGRESS, nen mot nhiem ky NOT_STARTED chua tung co phan cong.
+ */
+export async function cancelNeighborhoodTerm(
+    actorId: string,
+    neighborhoodId: string,
+    termId: string,
+) {
+    const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
+    if (!term) throw new HttpError("Không tìm thấy nhiệm kỳ", 404);
+    if (term.status !== "NOT_STARTED") {
+        throw new HttpError(
+            "Chỉ có thể hủy nhiệm kỳ khi đang ở trạng thái Chưa bắt đầu",
+            409,
+        );
+    }
+    const before = term.toObject();
+    term.status = "CANCELLED";
+    term.updatedBy = actorId as any;
+    await term.save();
+
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.term_cancel",
+            targetModel: "NeighborhoodTerm",
+            targetId: term._id,
+            metadata: { neighborhoodId },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "TERM_CANCELLED",
+            before,
+            after: term.toObject(),
+        }),
+    ]);
     return term;
+}
+
+/**
+ * Ket thuc SOM mot nhiem ky dang dien ra (IN_PROGRESS -> ENDED, endedEarly=
+ * true) - BAT BUOC ly do (xem endNeighborhoodTermEarlySchema), va thu hoi
+ * ngay cac phan cong to truong/to pho gan voi nhiem ky nay (khac ket thuc
+ * dung han, tu dong khong can hanh dong - xem closeAssignmentsForTerm).
+ */
+export async function endNeighborhoodTermEarly(
+    actorId: string,
+    neighborhoodId: string,
+    termId: string,
+    reason: string,
+) {
+    const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
+    if (!term) throw new HttpError("Không tìm thấy nhiệm kỳ", 404);
+    if (term.status !== "IN_PROGRESS") {
+        throw new HttpError("Chỉ có thể kết thúc sớm nhiệm kỳ đang diễn ra", 409);
+    }
+    const before = term.toObject();
+    term.status = "ENDED";
+    term.endedEarly = true;
+    term.endReason = reason;
+    term.updatedBy = actorId as any;
+    await term.save();
+
+    await closeAssignmentsForTerm(term._id, new Date());
+
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.term_end_early",
+            targetModel: "NeighborhoodTerm",
+            targetId: term._id,
+            metadata: { neighborhoodId, reason },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "TERM_ENDED_EARLY",
+            before,
+            after: term.toObject(),
+        }),
+    ]);
+    return term;
+}
+
+/**
+ * Xoa han mot nhiem ky - CHI cho phep khi dang DRAFT (chua "cong bo"). Cac
+ * trang thai khac chi chuyen tiep (huy/ket thuc), khong bao gio bi xoa de giu
+ * lich su.
+ */
+export async function deleteNeighborhoodTerm(
+    actorId: string,
+    neighborhoodId: string,
+    termId: string,
+): Promise<void> {
+    const term = await NeighborhoodTerm.findOne({ _id: termId, neighborhoodId });
+    if (!term) throw new HttpError("Không tìm thấy nhiệm kỳ", 404);
+    if (term.status !== "DRAFT") {
+        throw new HttpError("Chỉ có thể xóa nhiệm kỳ đang ở trạng thái Nháp", 409);
+    }
+    const before = term.toObject();
+    await term.deleteOne();
+
+    await Promise.all([
+        writeAuditLog({
+            actorId,
+            action: "neighborhood.term_delete",
+            targetModel: "NeighborhoodTerm",
+            targetId: termId,
+            metadata: { neighborhoodId, name: before.name },
+        }),
+        NeighborhoodHistory.create({
+            neighborhoodId,
+            actorId,
+            action: "TERM_DELETED",
+            before,
+        }),
+    ]);
 }
 
 export async function listNeighborhoodHistory(neighborhoodId: string) {

@@ -73,6 +73,14 @@ export const lockUserStatusSchema = z.object({
 });
 export type LockUserStatusInput = z.infer<typeof lockUserStatusSchema>;
 
+// Dung cho endpoint admin/to truong dat lai mat khau cho MOT tai khoan bat ky
+// (khac setPassword trong authService.ts - tu doi mat khau cua chinh minh) -
+// xem userService.resetUserPasswordByAdmin.
+export const resetUserPasswordSchema = z.object({
+    password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+});
+export type ResetUserPasswordInput = z.infer<typeof resetUserPasswordSchema>;
+
 export const assignRoleSchema = z.object({
     userId: z.string().min(1),
     role: z.string().min(1),

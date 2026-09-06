@@ -35,8 +35,10 @@ export interface IImportJob extends Document {
     // sua truoc khi ap dung.
     suggestedMapping: Record<string, string>;
     // Mapping THUC TE da duoc ap dung (sau khi nguoi dung xac nhan) - luu lai
-    // de doi chieu/audit, khac voi suggestedMapping.
-    columnMapping: Record<string, string>;
+    // de doi chieu/audit, khac voi suggestedMapping. unknown vi mot so loai
+    // import co truong "rieng cua ca file" khong phai string (vd
+    // HouseColumnMapping.createHouseholds la boolean).
+    columnMapping: Record<string, unknown>;
     rowErrors: IImportRowError[];
     previewData: Record<string, unknown>[];
     committedCount: number;
