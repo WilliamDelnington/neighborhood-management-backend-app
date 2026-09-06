@@ -106,6 +106,15 @@ import {
 //     "Chủ hộ" cho cung mot ho dan (mot ban toi thieu tu day, mot ban day du
 //     hon tu sheet nhan khau) - he thong khong tu gop/khu trung hai ban nay,
 //     admin can tu xoa ban trung neu gap truong hop nay.
+//   - "defaultPassword" (KHONG phai cot - admin nhap MOT LAN cho ca file):
+//     khi co, MOI tai khoan chu nha MOI tao trong lan import nay (dong co ca
+//     "Chủ sở hữu đứng tên" + "SĐT chủ sở hữu" hop le) se duoc dat mat khau
+//     nay qua createHouseRecord -> resolveOrCreateHouseOwner. Vi nhieu tai
+//     khoan dung chung MOT mat khau, moi tai khoan duoc tao theo cach nay se
+//     tu dong bat User.mustChangePassword=true - bi chan moi API khac ngoai
+//     doi mat khau (xem rbac.ts requireUser) cho toi khi tu doi. KHONG anh
+//     huong tai khoan da ton tai tu truoc (resolveOrCreateHouseOwner khong
+//     bao gio ghi de mat khau cua tai khoan co san).
 //
 // Import ho dan:
 //   Cụm dân cư | Địa chỉ | Chủ hộ | Số điện thoại | Loại sở hữu | Cần hỗ trợ
@@ -369,6 +378,9 @@ export type HouseColumnMapping = {
     // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file (xem
     // ghi chu chi tiet o houseImportMappingSchema va commitHouseImport).
     createHouseholds?: boolean;
+    // KHONG phai cot trong file - admin nhap MOT LAN cho ca file (xem ghi chu
+    // chi tiet o houseImportMappingSchema va commitHouseImport).
+    defaultPassword?: string;
 };
 
 // Cac truong tuong ung 1-1 voi cot trong file (khac defaultCluster/
@@ -711,8 +723,9 @@ export async function commitHouseImport(
     // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file luc
     // "chon cot" (xem applyHouseImportMapping) - luu trong columnMapping da
     // duoc job.save() o buoc do.
-    const createHouseholds =
-        (job.columnMapping as HouseColumnMapping)?.createHouseholds === true;
+    const mappingOptions = job.columnMapping as HouseColumnMapping;
+    const createHouseholds = mappingOptions?.createHouseholds === true;
+    const defaultPassword = mappingOptions?.defaultPassword || undefined;
 
     let committedCount = 0;
     let housesCreated = 0;
@@ -747,6 +760,7 @@ export async function commitHouseImport(
                     ? {
                           displayName: row.ownerName as string,
                           phone: row.ownerPhone as string,
+                          password: defaultPassword,
                       }
                     : undefined,
             });

@@ -62,6 +62,14 @@ export const houseImportMappingSchema = z.object({
     // qua houseId, ben canh House nhu truoc - mac dinh TAT de khong doi hanh
     // vi cua cac file nhap chi co du lieu nha (khong co thong tin ho dan).
     createHouseholds: z.boolean().optional(),
+    // KHONG phai cot trong file - admin nhap MOT LAN cho ca file (xem
+    // applyHouseImportMapping/commitHouseImport). Khi co, moi tai khoan chu
+    // nha MOI duoc tao trong lan import nay (dong co ca ten + SDT chu so
+    // huu hop le) se duoc dat mat khau nay, VA bat buoc doi mat khau ngay
+    // lan dang nhap dau tien (xem User.mustChangePassword) - vi mat khau
+    // giong het nhau cho nhieu tai khoan la rui ro tam thoi, chap nhan duoc
+    // trong thoi gian ngan cho toi khi tung chu nha tu doi.
+    defaultPassword: z.string().min(6, "Mật khẩu mặc định phải có ít nhất 6 ký tự").optional(),
 });
 export type HouseImportMappingInput = z.infer<
     typeof houseImportMappingSchema

@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, it, expect } from "vitest";
-import { Household, Citizen, HouseRecord } from "@/models";
+import { Household, Citizen, HouseRecord, User } from "@/models";
 import {
     uploadHouseImportFile,
     applyHouseImportMapping,
@@ -204,6 +204,57 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const house = await HouseRecord.findOne({ code: "B06-L02" });
         const household = await Household.findOne({ houseId: house!._id });
         expect(household).toBeNull();
+    });
+});
+
+describe("Import nhà số kèm mật khẩu mặc định cho chủ nhà mới (defaultPassword)", () => {
+    it("tài khoản chủ nhà mới tạo từ import được đặt defaultPassword và bắt buộc đổi mật khẩu", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const headers = ["Mã căn/hộ", "Phân khu/dãy", "Chủ sở hữu đứng tên", "SĐT chủ sở hữu"];
+        const buffer = await buildWorkbookBuffer(headers, [
+            ["D01-L01", "Khu D", "Trần Văn Bình", "0966000111"],
+        ]);
+
+        const uploaded = await uploadHouseImportFile(String(admin._id), buffer, "test.xlsx");
+        const mapping: HouseColumnMapping = {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            ownerName: "Chủ sở hữu đứng tên",
+            ownerPhone: "SĐT chủ sở hữu",
+            defaultPassword: "ImportDefault123",
+        };
+        const mapped = await applyHouseImportMapping(String(uploaded._id), mapping);
+        expect(mapped.rowErrors).toHaveLength(0);
+        await commitHouseImport(admin, String(mapped._id));
+
+        const owner = await User.findOne({ phone: "0966000111" }).select("+passwordHash");
+        expect(owner).not.toBeNull();
+        expect(owner!.passwordHash).toBeDefined();
+        expect(owner!.mustChangePassword).toBe(true);
+    });
+
+    it("không nhập defaultPassword: giữ nguyên hành vi cũ, tài khoản chủ nhà chưa có mật khẩu", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+
+        const headers = ["Mã căn/hộ", "Phân khu/dãy", "Chủ sở hữu đứng tên", "SĐT chủ sở hữu"];
+        const buffer = await buildWorkbookBuffer(headers, [
+            ["D01-L02", "Khu D", "Lê Thị Cúc", "0966000222"],
+        ]);
+
+        const uploaded = await uploadHouseImportFile(String(admin._id), buffer, "test.xlsx");
+        const mapped = await applyHouseImportMapping(String(uploaded._id), {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            ownerName: "Chủ sở hữu đứng tên",
+            ownerPhone: "SĐT chủ sở hữu",
+        });
+        await commitHouseImport(admin, String(mapped._id));
+
+        const owner = await User.findOne({ phone: "0966000222" }).select("+passwordHash");
+        expect(owner).not.toBeNull();
+        expect(owner!.passwordHash).toBeUndefined();
+        expect(owner!.mustChangePassword).toBe(false);
     });
 });
 

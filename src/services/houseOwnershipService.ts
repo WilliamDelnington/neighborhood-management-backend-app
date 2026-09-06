@@ -215,6 +215,11 @@ async function resolveExistingOwnerId(
                     phone: input.phone,
                     displayName: input.displayName,
                     passwordHash,
+                    // Mat khau nay do nguoi dai dien/nhan vien dat thay khi
+                    // gan chu nha - bat buoc doi ngay lan dang nhap dau tien
+                    // (xem User.mustChangePassword va ghi chu tuong tu o
+                    // houseRecordService.resolveOrCreateHouseOwner).
+                    mustChangePassword: true,
                     roles: ["house_owner"],
                     primaryRole: "house_owner",
                     status: "active",

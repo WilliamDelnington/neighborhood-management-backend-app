@@ -189,6 +189,11 @@ export async function createHouseOwnerByStaff(
             address: input.address,
             idNumber: input.idNumber,
             passwordHash,
+            // Mat khau nay do nhan vien dat thay - bat buoc doi ngay lan
+            // dang nhap dau tien (xem User.mustChangePassword va ghi chu
+            // tuong tu o houseRecordService.resolveOrCreateHouseOwner). Chi
+            // bat khi thuc su co dat mat khau.
+            mustChangePassword: !!passwordHash,
             roles: [role],
             primaryRole: role,
             status: "active",
@@ -321,6 +326,10 @@ export async function resetUserPasswordByAdmin(
     }
 
     target.passwordHash = await hashPassword(input.password);
+    // Mat khau nay do admin/to truong dat thay, khong phai chinh chu tai
+    // khoan tu chon - bat buoc doi ngay lan dang nhap ke tiep (xem
+    // User.mustChangePassword).
+    target.mustChangePassword = true;
     target.sessionVersion += 1;
     target.updatedBy = actorUser._id as any;
     await target.save();

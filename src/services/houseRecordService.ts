@@ -488,6 +488,13 @@ async function resolveOrCreateHouseOwner(
             displayName: ownerInput.displayName,
             email: ownerInput.email || undefined,
             passwordHash,
+            // Mat khau nay do NHAN VIEN/ADMIN dat thay (khong phai chinh chu
+            // nha tu chon) - bat buoc doi mat khau ngay lan dang nhap dau
+            // tien (xem User.mustChangePassword). Chi bat khi THUC SU co dat
+            // mat khau (passwordHash) - tai khoan chua co mat khau (import
+            // khong dien "Mật khẩu mặc định") van chua dang nhap duoc nen
+            // khong can flag nay.
+            mustChangePassword: !!passwordHash,
             roles: ["house_owner"],
             primaryRole: "house_owner",
             status: "active",

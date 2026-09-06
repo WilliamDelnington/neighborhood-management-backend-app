@@ -32,6 +32,14 @@ export interface IUser extends Document {
     idNumber?: string;
     idNumberHash?: string;
     passwordHash?: string;
+    // True khi mat khau HIEN TAI la do NGUOI KHAC dat thay (import Excel,
+    // nhan vien tao ho ho, admin dat lai qua resetUserPasswordByAdmin) - CHUA
+    // TUNG do chinh chu tai khoan tu chon. Chan moi request khac ngoai
+    // set-password/me/logout (xem rbac.ts requireUser) cho toi khi tai khoan
+    // tu doi mat khau qua authService.setPassword (tu dong tat co flag nay).
+    // Tu dang ky (registerWithPhone) va dang nhap Zalo/OTP KHONG bao gio bat
+    // co flag nay, vi nguoi dung da tu chon mat khau cua chinh minh.
+    mustChangePassword: boolean;
     roles: Role[];
     primaryRole: Role;
     status: UserStatus;
@@ -80,6 +88,7 @@ const UserSchema = new Schema<IUser>(
         idNumber: { type: String, trim: true },
         idNumberHash: { type: String, index: true },
         passwordHash: { type: String, select: false },
+        mustChangePassword: { type: Boolean, default: false },
         // Vai tro la du lieu dong (bang Role), khong con enum tinh - tinh hop le
         // (ton tai, active) duoc kiem tra o service layer (assignRole).
         roles: { type: [String], default: ["house_owner"] },
