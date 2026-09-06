@@ -188,6 +188,25 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "company_types",
+        label: "Loại hình doanh nghiệp",
+        permissions: [
+            { key: "company_types.read", label: "Xem loại hình doanh nghiệp" },
+            {
+                key: "company_types.create",
+                label: "Tạo loại hình doanh nghiệp",
+            },
+            {
+                key: "company_types.update",
+                label: "Cập nhật loại hình doanh nghiệp",
+            },
+            {
+                key: "company_types.delete",
+                label: "Xóa loại hình doanh nghiệp",
+            },
+        ],
+    },
+    {
         key: "organizations",
         label: "Tổ chức (chủ sở hữu)",
         permissions: [

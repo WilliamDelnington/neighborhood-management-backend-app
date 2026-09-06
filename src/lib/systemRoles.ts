@@ -37,6 +37,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.verify",
         "citizens.read",
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         // Khong co businesses.verify: neighborhood_leader chi duoc xem tien do
         // duyet ho kinh doanh, khong duoc duyet/tu choi giay to (xem
@@ -128,6 +129,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.verify",
         "citizens.read",
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         "companies.read",
         "usage_units.read",
@@ -206,6 +208,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "infrastructure.read",
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         // Khong co businesses.verify: secretary chi xem duoc tien do duyet ho
         // kinh doanh, khong duoc duyet/tu choi giay to (xem cung ghi chu o
@@ -284,6 +287,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "households.read",
         "citizens.read",
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         "companies.read",
         "usage_units.read",
@@ -336,6 +340,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "infrastructure.read",
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         "businesses.verify",
         "companies.read",
@@ -416,6 +421,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // duoc lam (dung active flag de "ngung hoat dong" thay vi xoa), va
         // duyet giay to van thuoc ve cac vai tro chuyen mon.
         "business_types.read",
+        "company_types.read",
         "businesses.read",
         "businesses.create",
         "businesses.update",

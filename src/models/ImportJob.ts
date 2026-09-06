@@ -30,6 +30,15 @@ export interface IImportJob extends Document {
     // truong nay.
     headers: string[];
     rawRows: IImportRawRow[];
+    // Danh sach TAT CA ten sheet co trong file da upload (khong phai chi
+    // sheet duoc doc) - de client biet file co nhieu sheet hay khong va cho
+    // phep chon lai neu doc nham (xem readWorksheetRows/sourceSheetName).
+    availableSheetNames: string[];
+    // Ten sheet THUC SU da duoc doc de tao rawRows/headers o tren - mac dinh
+    // la sheet dau tien trong file neu khong chi dinh (xem readWorksheetRows).
+    // Hien thi cho nguoi dung biet dang doc sheet nao, dac biet quan trong khi
+    // file co nhieu sheet (vd file gop "Nhà số" + "Chi tiết nhân khẩu").
+    sourceSheetName: string;
     // Goi y mapping tu dong (doi chieu header phat hien duoc voi nhan mong
     // doi, khong phan biet hoa/thuong/dau) - chi la goi y, nguoi dung co the
     // sua truoc khi ap dung.
@@ -68,6 +77,8 @@ const ImportJobSchema = new Schema<IImportJob>(
         validRows: { type: Number, default: 0 },
         headers: { type: [String], default: [] },
         rawRows: { type: Schema.Types.Mixed, default: [] },
+        availableSheetNames: { type: [String], default: [] },
+        sourceSheetName: { type: String, default: "" },
         suggestedMapping: { type: Schema.Types.Mixed, default: {} },
         columnMapping: { type: Schema.Types.Mixed, default: {} },
         rowErrors: { type: [ImportRowErrorSchema], default: [] },

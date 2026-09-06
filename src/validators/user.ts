@@ -2,23 +2,33 @@ import { z } from "zod";
 import { USER_STATUS } from "@/types";
 import { isValidVnPhone } from "@/lib/phone";
 
-// Vai tro duoc phep tao qua man hinh nay - house_owner mo cho bat ky ai co
-// quyen "users.create" (hanh vi cu, vd to truong tao chu ho); ba vai tro con
-// lai (to truong/to pho/cong tac vien To dan pho) CHI admin moi duoc chon,
-// kiem tra rieng trong userService.createHouseOwnerByStaff (khong the bieu
-// dat "admin-only" bang zod don thuan) vi day la cac vai tro co pham vi rong
-// (to truong/to pho) hoac can gan vao mot To dan pho cu the sau khi tao.
-export const CREATABLE_STAFF_ROLES = [
-    "house_owner",
-    "neighborhood_leader",
-    "neighborhood_coleader",
-    "neighborhood_collaborator",
-] as const;
+// Vai tro KHONG duoc tao truc tiep qua man "Tao tai khoan" nay, du la vai tro
+// he thong hay vai tro tuy chinh admin them sau nay qua man Quan ly vai tro -
+// cac vai tro nay gan vao TAI KHOAN DA CO SAN qua cac luong khac (vd "Gan vai
+// tro moi" o UserListPage.tsx, hoac gan can bo o WardManagementPage.tsx) thay
+// vi tao tai khoan phone+password moi o day: admin (khong ai duoc tu tao tai
+// khoan admin), household_head (gan vao Household.headOfHouseholdUserId tro
+// ve mot tai khoan da co, khong tao rieng), secretary/regional_police/
+// people_committee_official (can bo phuong da co tai khoan tu truoc, chi duoc
+// GAN vai tro nay). Vai tro con lai (house_owner luon mo, cac vai tro con lai
+// CHI admin moi duoc chon - kiem tra trong userService.createHouseOwnerByStaff)
+// deu la du lieu dong (xem model Role) nen KHONG con liet ke tinh o day - xem
+// getCreatableExtraRoles trong userService.ts.
+export const ACCOUNT_CREATION_RESERVED_ROLE_KEYS = [
+    "admin",
+    "household_head",
+    "secretary",
+    "regional_police",
+    "people_committee_official",
+];
 
 // Nhan vien (to truong/admin) tao tai khoan chu ho (hoac to truong/to pho/
-// cong tac vien, admin-only) thay - cung dinh dang voi registerWithPhone
-// (phone+password tu dang ky), chi khac o cho ai la actor va co them dia chi
-// tuy chon (xem userService.createHouseOwnerByStaff).
+// cong tac vien/vai tro tuy chinh khac, admin-only) thay - cung dinh dang voi
+// registerWithPhone (phone+password tu dang ky), chi khac o cho ai la actor va
+// co them dia chi tuy chon (xem userService.createHouseOwnerByStaff). role la
+// du lieu dong (xem model Role) nen khong con kiem bang z.enum tinh - tinh hop
+// le (ton tai, active, khong nam trong ACCOUNT_CREATION_RESERVED_ROLE_KEYS)
+// duoc kiem trong userService.createHouseOwnerByStaff.
 // password: TAM THOI cho phep dat mat khau luc tao (thay OTP/Zalo, hien chua
 // san sang do can duyet mau tin truoc - xem LoginPage.tsx o mini app).
 export const createHouseOwnerSchema = z.object({
@@ -29,7 +39,7 @@ export const createHouseOwnerSchema = z.object({
     displayName: z.string().min(1, "Thiếu họ tên"),
     address: z.string().optional(),
     idNumber: z.string().min(1, "Thiếu số CMND/CCCD"),
-    role: z.enum(CREATABLE_STAFF_ROLES).default("house_owner"),
+    role: z.string().min(1).default("house_owner"),
     password: z
         .string()
         .min(6, "Mật khẩu phải có ít nhất 6 ký tự")

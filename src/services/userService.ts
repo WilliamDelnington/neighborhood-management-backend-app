@@ -11,12 +11,13 @@ import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
-import type {
-    AssignRoleInput,
-    CreateHouseOwnerInput,
-    LockUserStatusInput,
-    ResetUserPasswordInput,
-    UpdateUserInput,
+import {
+    ACCOUNT_CREATION_RESERVED_ROLE_KEYS,
+    type AssignRoleInput,
+    type CreateHouseOwnerInput,
+    type LockUserStatusInput,
+    type ResetUserPasswordInput,
+    type UpdateUserInput,
 } from "@/validators/user";
 import type { Role as RoleType } from "@/types";
 
@@ -152,12 +153,16 @@ export async function searchResidentUsers(
  * (tu dang ky), chi khac actor va co ghi nhan createdBy. Chu ho dang nhap
  * bang chinh so dien thoai/mat khau nay (xem authService.loginWithPhone).
  *
- * input.role khac "house_owner" (to truong/to pho/cong tac vien To dan pho)
- * CHI admin moi duoc tao - day la cac vai tro pham vi rong hoac can gan vao
- * mot To dan pho cu the, khong the giao pho khong kiem soat cho bat ky ai co
- * "users.create" (vd chinh to truong) nhu voi house_owner (xem
- * validators/user.ts CREATABLE_STAFF_ROLES). Tai khoan tao ra o day CHUA duoc
- * gan vao To dan pho nao - phai lien ket rieng qua man "Gan to truong/to pho/
+ * input.role khac "house_owner" (to truong/to pho/cong tac vien To dan pho,
+ * hoac vai tro tuy chinh admin them qua man Quan ly vai tro) CHI admin moi
+ * duoc tao - day la cac vai tro pham vi rong hoac can gan vao mot To dan pho
+ * cu the, khong the giao pho khong kiem soat cho bat ky ai co "users.create"
+ * (vd chinh to truong) nhu voi house_owner. Vai tro la du lieu dong (xem model
+ * Role) nen phai kiem ton tai/active o day thay vi z.enum tinh, va tu choi
+ * rieng cac vai tro trong ACCOUNT_CREATION_RESERVED_ROLE_KEYS (xem
+ * validators/user.ts) vi cac vai tro do gan vao tai khoan DA CO SAN qua luong
+ * khac, khong tao tai khoan moi qua day. Tai khoan tao ra o day CHUA duoc gan
+ * vao To dan pho nao - phai lien ket rieng qua man "Gan to truong/to pho/
  * cong tac vien" tren trang Tổ dân phố sau khi tao (xem neighborhoodService.ts).
  */
 export async function createHouseOwnerByStaff(
@@ -165,11 +170,26 @@ export async function createHouseOwnerByStaff(
     input: CreateHouseOwnerInput,
 ) {
     const role = input.role || "house_owner";
-    if (role !== "house_owner" && !actorUser.roles.includes("admin")) {
-        throw new HttpError(
-            "Chỉ quản trị viên mới được tạo tài khoản với vai trò này",
-            403,
-        );
+    if (role !== "house_owner") {
+        if (!actorUser.roles.includes("admin")) {
+            throw new HttpError(
+                "Chỉ quản trị viên mới được tạo tài khoản với vai trò này",
+                403,
+            );
+        }
+        if (ACCOUNT_CREATION_RESERVED_ROLE_KEYS.includes(role)) {
+            throw new HttpError(
+                "Vai trò này không thể gán khi tạo tài khoản mới, vui lòng gán vào tài khoản đã có sẵn",
+                400,
+            );
+        }
+        const roleRecord = await RoleModel.findOne({ key: role, active: true });
+        if (!roleRecord) {
+            throw new HttpError(
+                "Vai trò không tồn tại hoặc đã bị vô hiệu hóa",
+                400,
+            );
+        }
     }
 
     const existing = await User.findOne({ phone: input.phone });

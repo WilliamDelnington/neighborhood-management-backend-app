@@ -15,6 +15,9 @@ export const createCompanySchema = z.object({
     // nhat) - mang rong = khong gan loai hinh nao, undefined (update) =
     // khong doi.
     businessTypeIds: z.array(z.string()).optional(),
+    // Loai hinh doanh nghiep (phap ly) - mot gia tri duy nhat, khac
+    // businessTypeIds - xem ghi chu tren models/Company.ts.
+    companyTypeId: z.string().nullable().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),

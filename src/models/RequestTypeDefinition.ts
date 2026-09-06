@@ -29,6 +29,15 @@ export interface IRequestTypeDefinition extends Document {
     allowedReceiverRoles: string[];
     dataEntryMode: "sender" | "recipient";
     version: number;
+    // true = loai duoc seed san tu 4 loai he thong cu ("pccc"/"security"/
+    // "other"/"task", xem scripts/seed-request-types.ts) - khong con dac cach
+    // trong code (xem requestTypeDefinitionService.ts), nhung van khong the bi
+    // sua wardCode/xoa key vi assertDefinitionInScope 403 voi bat ky ai khong
+    // phai admin khi wardCode khong khop - built-in luon co wardCode rong nen
+    // hieu ung la CHI admin sua/khoa duoc, giong quy uoc cua
+    // ComplaintTypeDefinition.isBuiltIn (nhung o day khong can chan rieng viec
+    // archive - assertDefinitionInScope da lam dieu do).
+    isBuiltIn: boolean;
     active: boolean;
     wardCode?: number;
     wardName?: string;
@@ -78,6 +87,7 @@ const RequestTypeDefinitionSchema = new Schema<IRequestTypeDefinition>(
             default: "recipient",
         },
         version: { type: Number, default: 1, min: 1 },
+        isBuiltIn: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
         wardCode: { type: Number, index: true },
         wardName: { type: String },

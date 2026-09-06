@@ -23,11 +23,15 @@ export async function POST(req: Request) {
         const buffer = Buffer.from(await file.arrayBuffer());
         const fileName =
             file instanceof File ? file.name : "import-ho-kinh-doanh.xlsx";
+        // Tuy chon - chi dinh sheet can doc khi file co nhieu sheet (mac dinh
+        // sheet dau tien neu khong truyen, xem readWorksheetRows).
+        const sheetName = formData.get("sheetName");
 
         const job = await uploadBusinessImportFile(
             String(actorUser._id),
             buffer,
             fileName,
+            typeof sheetName === "string" && sheetName ? sheetName : undefined,
         );
         return apiSuccess(
             job,

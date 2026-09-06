@@ -7,13 +7,11 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
-import { REQUEST_TYPES, REQUEST_TYPE_LABEL } from "@/types";
+import { REQUEST_TYPE_LABEL } from "@/types";
 import type {
     CreateRequestTypeDefinitionInput,
     UpdateRequestTypeDefinitionInput,
 } from "@/validators/requestTypeDefinition";
-
-const BUILT_IN_KEYS = new Set<string>(REQUEST_TYPES);
 
 async function assertRoleKeysExist(roleKeys: string[]) {
     const unique = [...new Set(roleKeys)];
@@ -23,10 +21,18 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     }
 }
 
+/**
+ * Loai nhiem vu isBuiltIn=true (seed san, khong gan wardCode - xem
+ * scripts/seed-request-types.ts) phai luon hien voi MOI actor, ke ca nguoi
+ * khong co wardCode - giong dung ly do/loi da gap voi
+ * ComplaintTypeDefinition.definitionScope (xem ghi chu o do): dieu kien
+ * {wardCode: actorUser.wardCode} loai bo ca isBuiltIn (wardCode undefined !=
+ * actorUser.wardCode), va !actorUser.wardCode tra ve rong hoan toan.
+ */
 function definitionScope(actorUser: IUser): Record<string, unknown> {
     if (actorUser.roles.includes("admin")) return {};
-    if (!actorUser.wardCode) return { _id: { $in: [] } };
-    return { wardCode: actorUser.wardCode };
+    if (!actorUser.wardCode) return { isBuiltIn: true };
+    return { $or: [{ isBuiltIn: true }, { wardCode: actorUser.wardCode }] };
 }
 
 function assertDefinitionInScope(actorUser: IUser, definition: IRequestTypeDefinition) {
@@ -45,14 +51,22 @@ export async function listRequestTypeDefinitions(params: {
 }) {
     const page = params.page || 1;
     const limit = params.limit || 10;
-    const filter: Record<string, unknown> = definitionScope(params.actorUser);
-    if (params.active !== undefined) filter.active = params.active;
+    // Ket hop bang $and (khong gan truc tiep vao filter.$or) - definitionScope
+    // co the tra ve chinh mot dieu kien $or (isBuiltIn/wardCode), neu gan de
+    // "filter.$or = [...tim kiem]" ben duoi se de ghi de mat scope.
+    const conditions: Record<string, unknown>[] = [
+        definitionScope(params.actorUser),
+    ];
+    if (params.active !== undefined) conditions.push({ active: params.active });
     if (params.search) {
-        filter.$or = [
-            { key: { $regex: params.search, $options: "i" } },
-            { name: { $regex: params.search, $options: "i" } },
-        ];
+        conditions.push({
+            $or: [
+                { key: { $regex: params.search, $options: "i" } },
+                { name: { $regex: params.search, $options: "i" } },
+            ],
+        });
     }
+    const filter: Record<string, unknown> = { $and: conditions };
 
     const [items, total] = await Promise.all([
         RequestTypeDefinition.find(filter)
@@ -75,9 +89,6 @@ export async function createRequestTypeDefinition(
     input: CreateRequestTypeDefinitionInput,
 ) {
     const key = input.key.trim().toLowerCase();
-    if (BUILT_IN_KEYS.has(key)) {
-        throw new HttpError("Mã này đã được sử dụng bởi loại nhiệm vụ hệ thống", 409);
-    }
     if (await RequestTypeDefinition.exists({ key })) {
         throw new HttpError("Mã loại nhiệm vụ đã tồn tại", 409);
     }
@@ -163,41 +174,40 @@ export async function archiveRequestTypeDefinition(actorUser: IUser, id: string)
 }
 
 export async function findRequestTypeForActor(actorUser: IUser, key: string) {
-    if (BUILT_IN_KEYS.has(key)) return null;
     const definition = await RequestTypeDefinition.findOne({ key, active: true });
     if (!definition) throw new HttpError("Loại nhiệm vụ không tồn tại/đã khóa", 422);
-    assertDefinitionInScope(actorUser, definition);
+    // Loai isBuiltIn (seed san, khong gan wardCode) phai dung duoc boi MOI
+    // nguoi gui hop le (kiem tra allowedSenderRoles rieng o createRequest) -
+    // assertDefinitionInScope se 403 sai neu ap dung cho built-in, vi
+    // definition.wardCode luon la undefined, khong khop wardCode cua bat ky
+    // actor khong phai admin nao.
+    if (!definition.isBuiltIn) assertDefinitionInScope(actorUser, definition);
     return definition;
 }
 
 export async function getAvailableRequestTypes(actorUser: IUser) {
-    const customs = await RequestTypeDefinition.find({
+    const isAdmin = actorUser.roles.includes("admin");
+    const items = await RequestTypeDefinition.find({
         ...definitionScope(actorUser),
         active: true,
-        allowedSenderRoles: { $in: actorUser.roles },
+        // Admin bo qua dieu kien nguoi gui (giong cach admin da bo qua moi
+        // scope check khac trong he thong nay) - khong co ngoai le nay thi
+        // admin cung khong gui duoc loai nhiem vu nao neu "admin" khong nam
+        // trong allowedSenderRoles cua loai do.
+        ...(isAdmin ? {} : { allowedSenderRoles: { $in: actorUser.roles } }),
     }).sort({ name: 1 });
 
-    return [
-        ...REQUEST_TYPES.map(key => ({
-            key,
-            name: REQUEST_TYPE_LABEL[key] || key,
-            builtIn: true as const,
-            fields: [],
-            dataEntryMode: "sender" as const,
-            version: 1,
-        })),
-        ...customs.map(item => ({
-            _id: item._id,
-            key: item.key,
-            name: item.name,
-            description: item.description,
-            builtIn: false as const,
-            fields: item.fields,
-            dataEntryMode: item.dataEntryMode,
-            version: item.version,
-            allowedReceiverRoles: item.allowedReceiverRoles,
-        })),
-    ];
+    return items.map(item => ({
+        _id: item._id,
+        key: item.key,
+        name: item.name,
+        description: item.description,
+        builtIn: item.isBuiltIn,
+        fields: item.fields,
+        dataEntryMode: item.dataEntryMode,
+        version: item.version,
+        allowedReceiverRoles: item.allowedReceiverRoles,
+    }));
 }
 
 export function requestTypeLabel(
