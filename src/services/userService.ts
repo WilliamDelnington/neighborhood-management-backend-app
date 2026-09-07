@@ -253,11 +253,14 @@ export async function createHouseOwnerByStaff(
             address: input.address,
             idNumber: input.idNumber,
             passwordHash,
-            // Mat khau nay do nhan vien dat thay - bat buoc doi ngay lan
-            // dang nhap dau tien (xem User.mustChangePassword va ghi chu
-            // tuong tu o houseRecordService.resolveOrCreateHouseOwner). Chi
-            // bat khi thuc su co dat mat khau.
-            mustChangePassword: !!passwordHash,
+            // Mat khau nay do nhan vien dat thay - bat buoc doi ngay lan dang
+            // nhap dau tien (xem User.mustChangePassword va ghi chu tuong tu
+            // o houseRecordService.resolveOrCreateHouseOwner). CHI ap dung
+            // cho house_owner (dang nhap resident-web-app/mini app) - cac
+            // vai tro nhan vien/quan tri (dang nhap admin-web-app) khong bi
+            // buoc doi mat khau lan dau, du admin/to truong co dat san mat
+            // khau khi tao tai khoan thay.
+            mustChangePassword: role === "house_owner" && !!passwordHash,
             roles: [role],
             primaryRole: role,
             status: "active",
@@ -392,8 +395,12 @@ export async function resetUserPasswordByAdmin(
     target.passwordHash = await hashPassword(input.password);
     // Mat khau nay do admin/to truong dat thay, khong phai chinh chu tai
     // khoan tu chon - bat buoc doi ngay lan dang nhap ke tiep (xem
-    // User.mustChangePassword).
-    target.mustChangePassword = true;
+    // User.mustChangePassword). CHI ap dung cho house_owner, cung quy uoc
+    // voi createHouseOwnerByStaff - nhan vien/quan tri dang nhap
+    // admin-web-app khong bi buoc doi mat khau lan dau. Gan tuong minh (khong
+    // chi bat khi true) de lan dat lai mat khau nay cung tu sua duoc tai
+    // khoan nhan vien lo bi bat nham flag nay truoc khi co quy uoc nay.
+    target.mustChangePassword = target.roles.includes("house_owner");
     target.sessionVersion += 1;
     target.updatedBy = actorUser._id as any;
     await target.save();

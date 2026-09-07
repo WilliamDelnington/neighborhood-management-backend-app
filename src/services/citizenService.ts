@@ -76,6 +76,7 @@ export async function createCitizen(
         birthDate: input.birthDate ? new Date(input.birthDate) : undefined,
         gender: input.gender ?? "nam",
         relationToHead: input.relationToHead,
+        occupation: input.occupation,
         householdId: input.householdId,
         residenceType: input.residenceType ?? "thuong_tru",
         temporaryResidenceExpiresAt: input.temporaryResidenceExpiresAt

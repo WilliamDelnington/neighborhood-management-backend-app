@@ -420,9 +420,15 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         const admin = await createTestUser({ roles: ["admin"] });
         const { house, household } = await createHouseWithHousehold(admin);
 
-        const headers = ["Họ và tên", "Mã căn/hộ", "Giới tính", "Quan hệ với chủ hộ"];
+        const headers = [
+            "Họ và tên",
+            "Mã căn/hộ",
+            "Giới tính",
+            "Quan hệ với chủ hộ",
+            "Nghề nghiệp/nơi làm việc",
+        ];
         const buffer = await buildWorkbookBuffer(headers, [
-            ["Hồ Thị Thiên", house.code, "Nữ", "Vợ"],
+            ["Hồ Thị Thiên", house.code, "Nữ", "Vợ", "Nhân viên văn phòng"],
         ]);
 
         const uploaded = await uploadCitizenImportFile(String(admin._id), buffer, "members.xlsx");
@@ -433,11 +439,15 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
             houseCode: "Mã căn/hộ",
             gender: "Giới tính",
             relationToHead: "Quan hệ với chủ hộ",
+            occupation: "Nghề nghiệp/nơi làm việc",
         };
         const mapped = await applyCitizenImportMapping(String(uploaded._id), mapping);
         expect(mapped.rowErrors).toHaveLength(0);
         expect((mapped.previewData[0] as Record<string, unknown>).householdId).toBe(
             String(household._id),
+        );
+        expect((mapped.previewData[0] as Record<string, unknown>).occupation).toBe(
+            "Nhân viên văn phòng",
         );
 
         const committed = await commitCitizenImport(String(admin._id), String(mapped._id));
@@ -446,6 +456,7 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         const citizen = await Citizen.findOne({ fullName: "Hồ Thị Thiên" });
         expect(citizen).not.toBeNull();
         expect(String(citizen!.householdId)).toBe(String(household._id));
+        expect(citizen!.occupation).toBe("Nhân viên văn phòng");
 
         const refreshed = await Household.findById(household._id);
         // 1 (Citizen "Chủ hộ" tu dong tao khi Household duoc tao - xem

@@ -13,6 +13,11 @@ import {
     InspectionCampaign,
     InspectionTarget,
     Neighborhood,
+    Business,
+    Company,
+    BusinessDocument,
+    BusinessType,
+    ResidentRecord,
     type IUser,
 } from "@/models";
 import {
@@ -22,6 +27,7 @@ import {
 import {
     TRANG_THAI_PHAN_ANH_LABEL,
     type TrangThaiPhanAnh,
+    type HouseRecordStatus,
 } from "@/types";
 import {
     getMyRequestCounts,
@@ -30,7 +36,11 @@ import {
 import { getMyAssignedComplaintCounts } from "@/services/complaintService";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
 import { getUnreadCount } from "@/services/notificationReadService";
-import { getFinanceReport, getRequestReport } from "@/services/reportService";
+import {
+    getFinanceReport,
+    getRequestReport,
+    type RequestReport,
+} from "@/services/reportService";
 
 const COMPLAINT_TERMINAL_STATUSES = ["hoan_thanh", "dong"];
 const SUPPORT_TICKET_TERMINAL_STATUSES = ["dong"];
@@ -55,6 +65,115 @@ type DashboardAreaContext = {
 
 const NO_SCOPE_FILTER = { _id: { $in: [] } };
 
+// Nguong dung de gan co "cham"/"nhieu canh bao" cho tung To trong dashboard
+// Phuong - la quy uoc hien thi, khong phai chi tieu chinh thuc duoc duyet.
+const WARD_SLOW_VERIFICATION_RATE = 70;
+const WARD_HIGH_ALERT_THRESHOLD = 3;
+const BUSINESS_LICENSE_EXPIRING_DAYS = 60;
+
+export type NeighborhoodOverview = {
+    houses: {
+        total: number;
+        verified: number;
+        unverified: number;
+        pending: number;
+        needsAttention: number;
+        occupied: number;
+        business: number;
+        vacant: number;
+    };
+    population: {
+        households: number;
+        citizens: number;
+        permanentResidents: number;
+        temporaryResidents: number;
+        renters: number;
+        elderly: number;
+        children: number;
+        needsSupport: number;
+    };
+    business: {
+        dataAvailable: boolean;
+        total: number;
+        totalCompanies: number;
+        byIndustry: { label: string; count: number }[];
+        missingLicense: number;
+        expiringLicenses: number;
+        needsReview: number;
+    };
+    safety: {
+        dataAvailable: boolean;
+        housesNotInspected: number;
+        highRiskPccc: number;
+        urgentSecurity: number;
+        unresolvedRecommendations: number;
+        openComplaints: number;
+    };
+    tasks: {
+        newComplaints: number;
+        inProgressComplaints: number;
+        overdueRequestAssignments: number;
+        resolvedRequestAssignments: number;
+        totalRequestAssignments: number;
+        onTimeCompletionRate: number | null;
+        averageSatisfaction: number | null;
+        ratedComplaintCount: number;
+    };
+};
+
+export type WardNeighborhoodRow = {
+    neighborhoodId: string;
+    name: string;
+    totalHouses: number;
+    verifiedHouses: number;
+    verificationRate: number;
+    lastUpdatedAt: string | null;
+    isSlow: boolean;
+    highAlertCount: number;
+    isHighAlert: boolean;
+};
+
+export type WardOverview = {
+    neighborhoods: WardNeighborhoodRow[];
+    dataQuality: {
+        duplicateAddressGroups: number;
+        duplicateAddressHouses: number;
+        otherChecksAvailable: boolean;
+    };
+    population: {
+        households: number;
+        citizens: number;
+        renters: number;
+        elderly: number;
+        childrenApprox: number;
+        needsSupport: number;
+    };
+    economy: {
+        dataAvailable: boolean;
+        total: number;
+        totalCompanies: number;
+        byIndustry: { label: string; count: number }[];
+        expiringLicenses: number;
+        newInPeriod: number;
+        inactive: number;
+    };
+    safety: {
+        dataAvailable: boolean;
+        highRiskPccc: number;
+        urgentSecurity: number;
+        housesNotInspected: number;
+        byNeighborhood: {
+            neighborhoodId: string;
+            name: string;
+            highRiskPccc: number;
+            urgentSecurity: number;
+            openComplaints: number;
+        }[];
+    };
+    digitalServicesAvailable: boolean;
+    systemSafetyAvailable: boolean;
+};
+
 /** Xac dinh audience va pham vi du lieu cho dashboard, khong chi cho menu. */
 async function dashboardAreaContext(actorUser: IUser): Promise<DashboardAreaContext> {
     const roles = actorUser.roles || [];
@@ -72,14 +191,20 @@ async function dashboardAreaContext(actorUser: IUser): Promise<DashboardAreaCont
     const isNeighborhood =
         roles.includes("neighborhood_leader") ||
         roles.includes("neighborhood_coleader");
+    const isPolice = roles.includes("regional_police");
+    // Truoc day chi secretary/people_committee_official duoc coi la audience
+    // "ward". Cac vai tro Phuong tuy chinh tao qua Role admin (vd
+    // social_cultral_leader) duoc gan wardCode giong secretary nhung khong
+    // nam trong danh sach co dinh - tong quat hoa: bat ky vai tro nao khong
+    // phai To/Cong an/Admin va co wardCode deu duoc coi la dieu hanh cap
+    // Phuong, khong phu thuoc ten role key cu the.
     const isWard =
-        roles.includes("secretary") ||
-        roles.includes("people_committee_official");
+        !isNeighborhood && !isPolice && Boolean(actorUser.wardCode);
     const audience: DashboardAudience = isNeighborhood
         ? "neighborhood"
         : isWard
           ? "ward"
-          : roles.includes("regional_police")
+          : isPolice
             ? "police"
             : "staff";
 
@@ -235,6 +360,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         finance: permissions.has("finance.read"),
         surveys: permissions.has("surveys.read"),
         meetings: permissions.has("meetings.read"),
+        business: permissions.has("businesses.read"),
     };
 
     const [households, houses, myRequests, myRequestCounts, myComplaintCounts] =
@@ -244,9 +370,12 @@ export async function getDashboardSummary(actorUser: IUser) {
                       "_id houseId cluster neighborhoodId ownershipType needsSupport",
                   )
                 : Promise.resolve([]),
-            capabilities.population || capabilities.pccc || capabilities.security
+            capabilities.population ||
+            capabilities.pccc ||
+            capabilities.security ||
+            capabilities.business
                 ? HouseRecord.find(context.areaFilter).select(
-                      "_id code address cluster neighborhoodId gisLatitude gisLongitude gisAccuracyMeters gisSource",
+                      "_id code address cluster neighborhoodId status gisLatitude gisLongitude gisAccuracyMeters gisSource",
                   )
                 : Promise.resolve([]),
             listMyPendingRequestsForDashboard(String(actorUser._id)),
@@ -307,6 +436,7 @@ export async function getDashboardSummary(actorUser: IUser) {
                           $group: {
                               _id: "$houseId",
                               riskLevel: { $first: "$riskLevel" },
+                              followUpStatus: { $first: "$followUpStatus" },
                           },
                       },
                   ])
@@ -525,7 +655,27 @@ export async function getDashboardSummary(actorUser: IUser) {
         overdueInspectionTargets: inspection.overdueTargets,
     });
 
+    const [neighborhoodOverview, wardOverview] = await Promise.all([
+        context.audience === "neighborhood"
+            ? buildNeighborhoodOverview({
+                  context,
+                  capabilities,
+                  houses,
+                  households,
+                  latestPccc,
+                  newComplaints,
+                  inProgressComplaints,
+                  requestReport,
+              })
+            : Promise.resolve(undefined),
+        context.audience === "ward"
+            ? buildWardOverview(context, capabilities)
+            : Promise.resolve(undefined),
+    ]);
+
     return {
+        neighborhoodOverview,
+        wardOverview,
         audience: context.audience,
         scopeLabel: context.scopeLabel,
         generatedAt: now,
@@ -622,6 +772,597 @@ async function getComplaintDashboardRows(
         status: String(row._id),
         count: Number(row.count),
     }));
+}
+
+/**
+ * Chi tinh cho audience "neighborhood" (to truong/to pho - xem
+ * dashboardAreaContext). Cong tac vien (neighborhood_collaborator) khong
+ * thuoc audience nay nen khong nhan duoc khoi du lieu toan To o day - ho van
+ * chi thay du lieu duoc giao rieng qua cac man hinh chuyen biet (giong quy
+ * uoc cua areaScopeFilter trong lib/rbac.ts).
+ */
+async function buildNeighborhoodOverview(args: {
+    context: DashboardAreaContext;
+    capabilities: {
+        population: boolean;
+        complaints: boolean;
+        pccc: boolean;
+        business: boolean;
+    };
+    houses: Array<{ _id: unknown; status: HouseRecordStatus }>;
+    households: Array<{
+        _id: unknown;
+        houseId?: unknown;
+        needsSupport?: boolean;
+    }>;
+    latestPccc: Array<{ _id: unknown; riskLevel: string; followUpStatus?: string }>;
+    newComplaints: number;
+    inProgressComplaints: number;
+    requestReport?: RequestReport;
+}): Promise<NeighborhoodOverview> {
+    const {
+        context,
+        capabilities,
+        houses,
+        households,
+        latestPccc,
+        newComplaints,
+        inProgressComplaints,
+        requestReport,
+    } = args;
+    const houseIds = houses.map(house => house._id);
+    const householdIds = households.map(household => household._id);
+    const occupiedHouseIds = new Set(
+        households
+            .map(household => household.houseId && String(household.houseId))
+            .filter((value): value is string => Boolean(value)),
+    );
+
+    const [
+        residenceTypeRows,
+        renterAgg,
+        elderlyCount,
+        childCount,
+        businesses,
+        companies,
+        complaintQuality,
+    ] = await Promise.all([
+        capabilities.population && householdIds.length > 0
+            ? Citizen.aggregate([
+                  { $match: { householdId: { $in: householdIds } } },
+                  { $group: { _id: "$residenceType", count: { $sum: 1 } } },
+              ])
+            : Promise.resolve([]),
+        capabilities.population && houseIds.length > 0
+            ? ResidentRecord.aggregate([
+                  { $match: { houseId: { $in: houseIds } } },
+                  { $group: { _id: null, total: { $sum: "$renterCount" } } },
+              ])
+            : Promise.resolve([]),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  isElderly: true,
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  isChild: true,
+              })
+            : Promise.resolve(0),
+        capabilities.business
+            ? Business.find(context.areaFilter).select(
+                  "_id houseId status businessType",
+              )
+            : Promise.resolve([]),
+        capabilities.business
+            ? Company.find(context.areaFilter).select("_id houseId status active")
+            : Promise.resolve([]),
+        capabilities.complaints
+            ? getComplaintQualityMetrics(context.complaintFilter)
+            : Promise.resolve(null),
+    ]);
+
+    const businessHouseIds = new Set(
+        [...businesses, ...companies]
+            .map(row => row.houseId && String(row.houseId))
+            .filter((value): value is string => Boolean(value)),
+    );
+    const businessIds = businesses.map(business => business._id);
+    const businessDocRows = businessIds.length
+        ? await BusinessDocument.find({
+              businessId: { $in: businessIds },
+              active: true,
+          }).select("businessId expiryDate")
+        : [];
+    const businessIdsWithDoc = new Set(
+        businessDocRows.map(doc => String(doc.businessId)),
+    );
+    const expiryThreshold = new Date();
+    expiryThreshold.setDate(
+        expiryThreshold.getDate() + BUSINESS_LICENSE_EXPIRING_DAYS,
+    );
+    const expiringLicenses = businessDocRows.filter(
+        doc => doc.expiryDate && doc.expiryDate <= expiryThreshold,
+    ).length;
+    const missingLicense = businesses.filter(
+        business => !businessIdsWithDoc.has(String(business._id)),
+    ).length;
+    const needsReview = [...businesses, ...companies].filter(
+        row => row.status === "pending",
+    ).length;
+    const businessTypeIds = businesses
+        .map(business => business.businessType)
+        .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    const businessTypes = businessTypeIds.length
+        ? await BusinessType.find({ _id: { $in: businessTypeIds } }).select(
+              "name",
+          )
+        : [];
+    const businessTypeNameById = new Map(
+        businessTypes.map(type => [String(type._id), type.name]),
+    );
+    const byIndustryMap = new Map<string, number>();
+    for (const business of businesses) {
+        const label = business.businessType
+            ? businessTypeNameById.get(String(business.businessType)) ||
+              "Không xác định"
+            : "Chưa phân loại";
+        byIndustryMap.set(label, (byIndustryMap.get(label) || 0) + 1);
+    }
+
+    const statusCount = (status: HouseRecordStatus) =>
+        houses.filter(house => house.status === status).length;
+    const residenceTypeCount = new Map(
+        residenceTypeRows.map(row => [row._id, Number(row.count)]),
+    );
+
+    return {
+        houses: {
+            total: houses.length,
+            verified: statusCount("verified"),
+            unverified: statusCount("unverified"),
+            pending: statusCount("pending"),
+            needsAttention:
+                statusCount("denied") +
+                statusCount("needs_update") +
+                statusCount("locked"),
+            occupied: occupiedHouseIds.size,
+            business: businessHouseIds.size,
+            vacant: houses.filter(
+                house =>
+                    !occupiedHouseIds.has(String(house._id)) &&
+                    !businessHouseIds.has(String(house._id)),
+            ).length,
+        },
+        population: {
+            households: households.length,
+            citizens: [...residenceTypeCount.values()].reduce(
+                (sum, count) => sum + count,
+                0,
+            ),
+            permanentResidents: residenceTypeCount.get("thuong_tru") || 0,
+            temporaryResidents: residenceTypeCount.get("tam_tru") || 0,
+            renters: renterAgg[0]?.total || 0,
+            elderly: elderlyCount,
+            children: childCount,
+            needsSupport: households.filter(household => household.needsSupport)
+                .length,
+        },
+        business: {
+            dataAvailable: capabilities.business,
+            total: businesses.length,
+            totalCompanies: companies.length,
+            byIndustry: [...byIndustryMap.entries()].map(([label, count]) => ({
+                label,
+                count,
+            })),
+            missingLicense,
+            expiringLicenses,
+            needsReview,
+        },
+        safety: {
+            dataAvailable: capabilities.pccc,
+            housesNotInspected: capabilities.pccc
+                ? Math.max(houseIds.length - latestPccc.length, 0)
+                : 0,
+            highRiskPccc: latestPccc.filter(row => row.riskLevel === "do")
+                .length,
+            urgentSecurity: 0,
+            unresolvedRecommendations: latestPccc.filter(
+                row => row.followUpStatus && row.followUpStatus !== "da_khac_phuc",
+            ).length,
+            openComplaints: newComplaints + inProgressComplaints,
+        },
+        tasks: {
+            newComplaints,
+            inProgressComplaints,
+            overdueRequestAssignments: requestReport?.overdueAssignments || 0,
+            resolvedRequestAssignments: requestReport?.resolvedAssignments || 0,
+            totalRequestAssignments:
+                requestReport?.totalRecipientAssignments || 0,
+            onTimeCompletionRate: complaintQuality?.onTimeRate ?? null,
+            averageSatisfaction: complaintQuality?.averageRating ?? null,
+            ratedComplaintCount: complaintQuality?.ratedCount || 0,
+        },
+    };
+}
+
+async function getComplaintQualityMetrics(
+    complaintFilter: Record<string, unknown>,
+): Promise<{
+    onTimeRate: number | null;
+    averageRating: number | null;
+    ratedCount: number;
+}> {
+    const rows = await Complaint.aggregate([
+        {
+            $match: {
+                ...complaintFilter,
+                status: { $in: COMPLAINT_TERMINAL_STATUSES },
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                completed: { $sum: 1 },
+                onTime: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $ne: ["$expectedCompletionDate", null] },
+                                    { $ne: ["$actualCompletionDate", null] },
+                                    {
+                                        $lte: [
+                                            "$actualCompletionDate",
+                                            "$expectedCompletionDate",
+                                        ],
+                                    },
+                                ],
+                            },
+                            1,
+                            0,
+                        ],
+                    },
+                },
+                withDueDate: {
+                    $sum: {
+                        $cond: [
+                            { $ne: ["$expectedCompletionDate", null] },
+                            1,
+                            0,
+                        ],
+                    },
+                },
+                ratedCount: {
+                    $sum: { $cond: [{ $ne: ["$rating", null] }, 1, 0] },
+                },
+                ratingSum: { $sum: { $ifNull: ["$rating", 0] } },
+            },
+        },
+    ]);
+    const row = rows[0];
+    if (!row) return { onTimeRate: null, averageRating: null, ratedCount: 0 };
+    return {
+        onTimeRate:
+            row.withDueDate > 0
+                ? Number(((row.onTime / row.withDueDate) * 100).toFixed(1))
+                : null,
+        averageRating:
+            row.ratedCount > 0
+                ? Number((row.ratingSum / row.ratedCount).toFixed(2))
+                : null,
+        ratedCount: row.ratedCount || 0,
+    };
+}
+
+/**
+ * Chi tinh cho audience "ward" (bi thu/can bo UBND/vai tro Phuong tuy chinh -
+ * xem dashboardAreaContext). Dung context.neighborhoodIds (danh sach To thuoc
+ * Phuong duoc phan cong) de tong hop tung To va toan Phuong.
+ */
+async function buildWardOverview(
+    context: DashboardAreaContext,
+    capabilities: { population: boolean; complaints: boolean; pccc: boolean; business: boolean },
+): Promise<WardOverview> {
+    const neighborhoodIds = context.neighborhoodIds;
+    if (neighborhoodIds.length === 0) {
+        return {
+            neighborhoods: [],
+            dataQuality: {
+                duplicateAddressGroups: 0,
+                duplicateAddressHouses: 0,
+                otherChecksAvailable: false,
+            },
+            population: {
+                households: 0,
+                citizens: 0,
+                renters: 0,
+                elderly: 0,
+                childrenApprox: 0,
+                needsSupport: 0,
+            },
+            economy: {
+                dataAvailable: capabilities.business,
+                total: 0,
+                totalCompanies: 0,
+                byIndustry: [],
+                expiringLicenses: 0,
+                newInPeriod: 0,
+                inactive: 0,
+            },
+            safety: {
+                dataAvailable: capabilities.pccc,
+                highRiskPccc: 0,
+                urgentSecurity: 0,
+                housesNotInspected: 0,
+                byNeighborhood: [],
+            },
+            digitalServicesAvailable: false,
+            systemSafetyAvailable: false,
+        };
+    }
+
+    const [
+        neighborhoods,
+        houseRows,
+        duplicateAddressRows,
+        householdRows,
+        latestPcccByHouse,
+        complaintByNeighborhood,
+        businesses,
+        companies,
+    ] = await Promise.all([
+        Neighborhood.find({ _id: { $in: neighborhoodIds } }).select("name"),
+        HouseRecord.find({ neighborhoodId: { $in: neighborhoodIds } }).select(
+            "_id neighborhoodId status updatedAt",
+        ),
+        HouseRecord.aggregate([
+            { $match: { neighborhoodId: { $in: neighborhoodIds } } },
+            {
+                $group: {
+                    _id: { neighborhoodId: "$neighborhoodId", address: "$address" },
+                    count: { $sum: 1 },
+                },
+            },
+            { $match: { count: { $gt: 1 } } },
+        ]),
+        capabilities.population
+            ? Household.find({
+                  neighborhoodId: { $in: neighborhoodIds },
+              }).select("_id houseId needsSupport")
+            : Promise.resolve([]),
+        capabilities.pccc
+            ? PcccCheck.aggregate([
+                  {
+                      $lookup: {
+                          from: "houses",
+                          localField: "houseId",
+                          foreignField: "_id",
+                          as: "house",
+                      },
+                  },
+                  { $unwind: "$house" },
+                  {
+                      $match: {
+                          "house.neighborhoodId": { $in: neighborhoodIds },
+                      },
+                  },
+                  { $sort: { houseId: 1, inspectionDate: -1, createdAt: -1 } },
+                  {
+                      $group: {
+                          _id: "$houseId",
+                          riskLevel: { $first: "$riskLevel" },
+                          neighborhoodId: { $first: "$house.neighborhoodId" },
+                      },
+                  },
+              ])
+            : Promise.resolve([]),
+        capabilities.complaints
+            ? Complaint.aggregate([
+                  {
+                      $match: {
+                          neighborhoodId: { $in: neighborhoodIds },
+                          status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+                      },
+                  },
+                  { $group: { _id: "$neighborhoodId", count: { $sum: 1 } } },
+              ])
+            : Promise.resolve([]),
+        capabilities.business
+            ? Business.find({
+                  neighborhoodId: { $in: neighborhoodIds },
+              }).select("_id status businessType active createdAt")
+            : Promise.resolve([]),
+        capabilities.business
+            ? Company.find({
+                  neighborhoodId: { $in: neighborhoodIds },
+              }).select("_id status active createdAt")
+            : Promise.resolve([]),
+    ]);
+
+    const neighborhoodNameById = new Map(
+        neighborhoods.map(neighborhood => [
+            String(neighborhood._id),
+            neighborhood.name,
+        ]),
+    );
+    const householdsByNeighborhood = new Map<string, typeof householdRows>();
+    for (const household of householdRows) {
+        const key = String(household.neighborhoodId || "");
+        const list = householdsByNeighborhood.get(key) || [];
+        list.push(household);
+        householdsByNeighborhood.set(key, list);
+    }
+    const highAlertByNeighborhood = new Map<string, number>();
+    for (const row of latestPcccByHouse) {
+        if (row.riskLevel !== "do") continue;
+        const key = String(row.neighborhoodId || "");
+        highAlertByNeighborhood.set(key, (highAlertByNeighborhood.get(key) || 0) + 1);
+    }
+    const openComplaintsByNeighborhood = new Map(
+        complaintByNeighborhood.map(row => [String(row._id), Number(row.count)]),
+    );
+
+    const housesByNeighborhood = new Map<string, typeof houseRows>();
+    for (const house of houseRows) {
+        const key = String(house.neighborhoodId || "");
+        const list = housesByNeighborhood.get(key) || [];
+        list.push(house);
+        housesByNeighborhood.set(key, list);
+    }
+
+    const neighborhoodRows: WardNeighborhoodRow[] = neighborhoodIds.map(id => {
+        const key = String(id);
+        const rows = housesByNeighborhood.get(key) || [];
+        const verified = rows.filter(row => row.status === "verified").length;
+        const verificationRate =
+            rows.length > 0 ? Number(((verified / rows.length) * 100).toFixed(1)) : 0;
+        const lastUpdatedAt = rows.reduce<Date | null>((latest, row) => {
+            if (!row.updatedAt) return latest;
+            return !latest || row.updatedAt > latest ? row.updatedAt : latest;
+        }, null);
+        const highAlertCount = highAlertByNeighborhood.get(key) || 0;
+        return {
+            neighborhoodId: key,
+            name: neighborhoodNameById.get(key) || "Tổ dân phố",
+            totalHouses: rows.length,
+            verifiedHouses: verified,
+            verificationRate,
+            lastUpdatedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+            isSlow: rows.length > 0 && verificationRate < WARD_SLOW_VERIFICATION_RATE,
+            highAlertCount,
+            isHighAlert: highAlertCount >= WARD_HIGH_ALERT_THRESHOLD,
+        };
+    });
+
+    const duplicateAddressHouses = duplicateAddressRows.reduce(
+        (sum, row) => sum + Number(row.count),
+        0,
+    );
+
+    const householdIdsForWard = householdRows.map(household => household._id);
+    const houseIdsForWard = houseRows.map(house => house._id);
+    const [citizenCount, elderlyCount, childCount, renterAgg] =
+        await Promise.all([
+            capabilities.population && householdIdsForWard.length > 0
+                ? Citizen.countDocuments({
+                      householdId: { $in: householdIdsForWard },
+                  })
+                : Promise.resolve(0),
+            capabilities.population && householdIdsForWard.length > 0
+                ? Citizen.countDocuments({
+                      householdId: { $in: householdIdsForWard },
+                      isElderly: true,
+                  })
+                : Promise.resolve(0),
+            capabilities.population && householdIdsForWard.length > 0
+                ? Citizen.countDocuments({
+                      householdId: { $in: householdIdsForWard },
+                      isChild: true,
+                  })
+                : Promise.resolve(0),
+            capabilities.population && houseIdsForWard.length > 0
+                ? ResidentRecord.aggregate([
+                      { $match: { houseId: { $in: houseIdsForWard } } },
+                      { $group: { _id: null, total: { $sum: "$renterCount" } } },
+                  ])
+                : Promise.resolve([]),
+        ]);
+
+    const businessTypeIds = businesses
+        .map(business => business.businessType)
+        .filter((id): id is NonNullable<typeof id> => Boolean(id));
+    const businessTypes = businessTypeIds.length
+        ? await BusinessType.find({ _id: { $in: businessTypeIds } }).select(
+              "name",
+          )
+        : [];
+    const businessTypeNameById = new Map(
+        businessTypes.map(type => [String(type._id), type.name]),
+    );
+    const byIndustryMap = new Map<string, number>();
+    for (const business of businesses) {
+        const label = business.businessType
+            ? businessTypeNameById.get(String(business.businessType)) ||
+              "Không xác định"
+            : "Chưa phân loại";
+        byIndustryMap.set(label, (byIndustryMap.get(label) || 0) + 1);
+    }
+    const businessIds = businesses.map(business => business._id);
+    const expiryThreshold = new Date();
+    expiryThreshold.setDate(
+        expiryThreshold.getDate() + BUSINESS_LICENSE_EXPIRING_DAYS,
+    );
+    const expiringLicenses = businessIds.length
+        ? await BusinessDocument.countDocuments({
+              businessId: { $in: businessIds },
+              active: true,
+              expiryDate: { $lte: expiryThreshold, $ne: null },
+          })
+        : 0;
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - 30);
+    const newInPeriod = [...businesses, ...companies].filter(
+        row => row.createdAt && row.createdAt >= periodStart,
+    ).length;
+    const inactive = [...businesses, ...companies].filter(
+        row => row.active === false,
+    ).length;
+
+    return {
+        neighborhoods: neighborhoodRows,
+        dataQuality: {
+            duplicateAddressGroups: duplicateAddressRows.length,
+            duplicateAddressHouses,
+            otherChecksAvailable: false,
+        },
+        population: {
+            households: householdRows.length,
+            citizens: citizenCount,
+            renters: renterAgg[0]?.total || 0,
+            elderly: elderlyCount,
+            childrenApprox: childCount,
+            needsSupport: householdRows.filter(
+                (household: { needsSupport?: boolean }) => household.needsSupport,
+            ).length,
+        },
+        economy: {
+            dataAvailable: capabilities.business,
+            total: businesses.length,
+            totalCompanies: companies.length,
+            byIndustry: [...byIndustryMap.entries()].map(([label, count]) => ({
+                label,
+                count,
+            })),
+            expiringLicenses,
+            newInPeriod,
+            inactive,
+        },
+        safety: {
+            dataAvailable: capabilities.pccc,
+            highRiskPccc: latestPcccByHouse.filter(row => row.riskLevel === "do")
+                .length,
+            urgentSecurity: 0,
+            housesNotInspected: capabilities.pccc
+                ? Math.max(houseRows.length - latestPcccByHouse.length, 0)
+                : 0,
+            byNeighborhood: neighborhoodIds.map(id => {
+                const key = String(id);
+                return {
+                    neighborhoodId: key,
+                    name: neighborhoodNameById.get(key) || "Tổ dân phố",
+                    highRiskPccc: highAlertByNeighborhood.get(key) || 0,
+                    urgentSecurity: 0,
+                    openComplaints: openComplaintsByNeighborhood.get(key) || 0,
+                };
+            }),
+        },
+        digitalServicesAvailable: false,
+        systemSafetyAvailable: false,
+    };
 }
 
 async function getInspectionDashboard(

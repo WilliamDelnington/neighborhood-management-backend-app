@@ -392,22 +392,26 @@ export async function getAvailableSlots(serviceId: string, dateStr: string) {
 
 /**
  * BR-01: xac dinh actor co du quyen dat lich cho houseId+citizenUserId nay hay
- * khong, va tra ve citizenUserId/proxy thuc su se ghi vao Appointment.
+ * khong, va tra ve citizenUserId/proxy thuc su se ghi vao Appointment. Trang
+ * thai/pham vi cua nha (verified/in_scope) da duoc kiem tra RIENG o
+ * createAppointment theo AppointmentService.houseStatusRequirement truoc khi
+ * goi ham nay - o day chi con lai cau hoi actor co quyen gan voi house nay
+ * hay khong (bo qua neu house=null, tuc dich vu khong gan nha).
  * - Neu co proxyName+proxyPhone (khong kem citizenUserId): CHI
- *   neighborhood_leader/coleader (hoac admin) moi duoc dat, va nha phai trong
- *   pham vi phu trach cua actor (assertHouseRecordInScope).
+ *   neighborhood_leader/coleader (hoac admin) moi duoc dat, va nha (neu co)
+ *   phai trong pham vi phu trach cua actor (assertHouseRecordInScope).
  * - Neu dat cho CHINH MINH (khong truyen citizenUserId, hoac citizenUserId
- *   trung actor): nha phai "verified" VA actor phai dang so huu/thao tac thay
- *   chu nha (isHouseOwnerActor) HOAC la chu ho (household_head) cua ho dan gan
- *   dung nha nay - household_head khong co HouseOwnership rieng nen khong the
- *   dung isHouseOwnerActor, phai doi chieu qua Household.houseId.
+ *   trung actor): actor phai dang so huu/thao tac thay chu nha (isHouseOwnerActor)
+ *   HOAC la chu ho (household_head) cua ho dan gan dung nha nay - household_head
+ *   khong co HouseOwnership rieng nen khong the dung isHouseOwnerActor, phai
+ *   doi chieu qua Household.houseId. Bo qua neu house=null.
  * - Neu dat cho MOT NGUOI KHAC co tai khoan (citizenUserId khac actor, khong
- *   kem proxy): cung yeu cau vai tro to truong/to pho (hoac admin) + nha trong
- *   pham vi phu trach, tuong tu nhanh proxy.
+ *   kem proxy): cung yeu cau vai tro to truong/to pho (hoac admin) + nha (neu
+ *   co) trong pham vi phu trach, tuong tu nhanh proxy.
  */
 async function resolveBookingSubject(
     actorUser: IUser,
-    house: IHouseRecord,
+    house: IHouseRecord | null,
     input: CreateAppointmentInput,
 ): Promise<{ citizenUserId?: string; proxyName?: string; proxyPhone?: string }> {
     const isActorProxyEligible =
@@ -422,7 +426,7 @@ async function resolveBookingSubject(
                 403,
             );
         }
-        await assertHouseRecordInScope(actorUser, house);
+        if (house) await assertHouseRecordInScope(actorUser, house);
         return { proxyName: input.proxyName, proxyPhone: input.proxyPhone };
     }
 
@@ -430,26 +434,23 @@ async function resolveBookingSubject(
     const isSelf = citizenUserId === String(actorUser._id);
 
     if (isSelf) {
-        if (house.status !== "verified" && !actorUser.roles.includes("admin")) {
-            throw new HttpError(
-                "Nhà số chưa được xác thực, chưa thể đặt lịch hẹn",
-                422,
-            );
-        }
-        const isOwner = await isHouseOwnerActor(house._id, actorUser._id);
-        let isHouseholdHead = false;
-        if (!isOwner && actorUser.householdId) {
-            const household = await Household.findById(actorUser.householdId).select(
-                "houseId",
-            );
-            isHouseholdHead =
-                !!household?.houseId && String(household.houseId) === String(house._id);
-        }
-        if (!isOwner && !isHouseholdHead && !actorUser.roles.includes("admin")) {
-            throw new HttpError(
-                "Bạn không sở hữu/không đại diện hộ dân tại nhà số này",
-                403,
-            );
+        if (house) {
+            const isOwner = await isHouseOwnerActor(house._id, actorUser._id);
+            let isHouseholdHead = false;
+            if (!isOwner && actorUser.householdId) {
+                const household = await Household.findById(
+                    actorUser.householdId,
+                ).select("houseId");
+                isHouseholdHead =
+                    !!household?.houseId &&
+                    String(household.houseId) === String(house._id);
+            }
+            if (!isOwner && !isHouseholdHead && !actorUser.roles.includes("admin")) {
+                throw new HttpError(
+                    "Bạn không sở hữu/không đại diện hộ dân tại nhà số này",
+                    403,
+                );
+            }
         }
         return { citizenUserId };
     }
@@ -457,7 +458,7 @@ async function resolveBookingSubject(
     if (!isActorProxyEligible) {
         throw new HttpError("Bạn không có quyền đặt lịch hộ người khác", 403);
     }
-    await assertHouseRecordInScope(actorUser, house);
+    if (house) await assertHouseRecordInScope(actorUser, house);
     const citizen = await User.findById(citizenUserId).select("status");
     if (!citizen || citizen.status !== "active") {
         throw new HttpError("Tài khoản người dân được chọn không hợp lệ", 422);
@@ -473,8 +474,41 @@ export async function createAppointment(
     if (!service) throw new HttpError("Không tìm thấy dịch vụ đặt lịch hẹn", 404);
     if (!service.active) throw new HttpError("Dịch vụ này đã ngừng hoạt động", 400);
 
-    const house = await HouseRecord.findById(input.houseId);
-    if (!house) throw new HttpError("Không tìm thấy nhà số", 404);
+    // Doc lai voi fallback vi cac AppointmentService tao truoc khi co hai
+    // truong nay se khong co gia tri (mongoose default chi ap dung luc tao
+    // moi, khong "vá" lai cho doc cu doc tu DB).
+    const houseRequirement = service.houseRequirement || "required";
+    const houseStatusRequirement = service.houseStatusRequirement || "verified";
+
+    let house: IHouseRecord | null = null;
+    if (input.houseId) {
+        house = await HouseRecord.findById(input.houseId);
+        if (!house) throw new HttpError("Không tìm thấy nhà số", 404);
+    } else if (houseRequirement === "required") {
+        throw new HttpError("Thiếu nhà số", 422);
+    }
+
+    if (house && !actorUser.roles.includes("admin")) {
+        if (houseStatusRequirement === "verified" && house.status !== "verified") {
+            throw new HttpError(
+                "Nhà số chưa được xác thực, chưa thể đặt lịch hẹn",
+                422,
+            );
+        }
+        if (houseStatusRequirement === "in_scope") {
+            const inScope =
+                service.scope === "neighborhood"
+                    ? String(house.neighborhoodId || "") ===
+                      String(service.neighborhoodId || "")
+                    : house.wardCode === service.wardCode;
+            if (!inScope) {
+                throw new HttpError(
+                    "Nhà số không thuộc phạm vi áp dụng của dịch vụ này",
+                    422,
+                );
+            }
+        }
+    }
 
     const subject = await resolveBookingSubject(actorUser, house, input);
 
@@ -542,14 +576,24 @@ export async function createAppointment(
     }
 
     // BR-02: khong cho dat trung (cung nha + dich vu + khung gio + ngay) khi
-    // con mot lich hen dang hieu luc (cho_xac_nhan/da_xac_nhan).
-    const duplicate = await Appointment.findOne({
+    // con mot lich hen dang hieu luc (cho_xac_nhan/da_xac_nhan). Khi dich vu
+    // khong gan nha, doi chieu theo citizenUserId thay the (bo qua neu ca hai
+    // deu khong co, vd proxy booking khong nha - khong the phat hien trung).
+    const duplicateFilter: Record<string, unknown> = {
         serviceId: service._id,
         timeSlotId: slot._id,
         appointedDate,
-        houseId: house._id,
         status: { $in: ACTIVE_APPOINTMENT_STATUSES },
-    });
+    };
+    if (house) {
+        duplicateFilter.houseId = house._id;
+    } else if (subject.citizenUserId) {
+        duplicateFilter.citizenUserId = subject.citizenUserId;
+    }
+    const duplicate =
+        house || subject.citizenUserId
+            ? await Appointment.findOne(duplicateFilter)
+            : null;
     if (duplicate) {
         throw new HttpError(
             "Nhà số này đã có lịch hẹn cho khung giờ/ngày này, không thể đặt trùng",
@@ -568,7 +612,7 @@ export async function createAppointment(
             code,
             serviceId: service._id,
             timeSlotId: slot._id,
-            houseId: house._id,
+            houseId: house?._id,
             citizenUserId: subject.citizenUserId,
             proxyName: subject.proxyName,
             proxyPhone: subject.proxyPhone,
@@ -879,14 +923,22 @@ export async function rescheduleAppointment(
 
     // BR-02: khong doi sang mot khung gio da co lich hen khac (cung nha) dang
     // hieu luc - loai tru chinh lich hen dang doi.
-    const duplicate = await Appointment.findOne({
+    const rescheduleDuplicateFilter: Record<string, unknown> = {
         _id: { $ne: appointment._id },
         serviceId: service._id,
         timeSlotId: newSlot._id,
         appointedDate: newAppointedDate,
-        houseId: appointment.houseId,
         status: { $in: ACTIVE_APPOINTMENT_STATUSES },
-    });
+    };
+    if (appointment.houseId) {
+        rescheduleDuplicateFilter.houseId = appointment.houseId;
+    } else if (appointment.citizenUserId) {
+        rescheduleDuplicateFilter.citizenUserId = appointment.citizenUserId;
+    }
+    const duplicate =
+        appointment.houseId || appointment.citizenUserId
+            ? await Appointment.findOne(rescheduleDuplicateFilter)
+            : null;
     if (duplicate) {
         throw new HttpError(
             "Nha so nay da co lich hen cho khung gio/ngay nay, khong the doi trung",

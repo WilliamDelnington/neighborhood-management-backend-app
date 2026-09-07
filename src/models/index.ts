@@ -74,6 +74,10 @@ export {
     default as SupportTicket,
     type ISupportTicket,
 } from "./SupportTicket";
+export {
+    default as PasswordResetRequest,
+    type IPasswordResetRequest,
+} from "./PasswordResetRequest";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
 export { default as News, type INews } from "./News";
 export {
@@ -222,7 +226,11 @@ export {
     type IAppointmentService,
     type IAppointmentTimeSlot,
     type AppointmentServiceScope,
+    type AppointmentHouseRequirement,
+    type AppointmentHouseStatusRequirement,
     APPOINTMENT_SERVICE_SCOPES,
+    APPOINTMENT_HOUSE_REQUIREMENTS,
+    APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
 } from "./AppointmentService";
 export {
     default as Appointment,

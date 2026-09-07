@@ -8,6 +8,7 @@ const citizenBaseSchema = z.object({
     birthDate: z.string().datetime().optional(),
     gender: z.enum(GIOI_TINH).default("nam"),
     relationToHead: z.string().optional(),
+    occupation: z.string().optional(),
     householdId: z.string().min(1, "Phải chọn hộ khẩu"),
     residenceType: z.enum(LOAI_CU_TRU).default("thuong_tru"),
     // Bat buoc khi residenceType="tam_tru" (xem refine ben duoi) - ngay het

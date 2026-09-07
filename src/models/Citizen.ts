@@ -29,6 +29,9 @@ export interface ICitizen extends Document {
     birthDate?: Date;
     gender: GioiTinh;
     relationToHead?: string;
+    // Nghe nghiep/noi lam viec - thong tin khai bao thuong, khong nhay cam
+    // nhu phone/cccd nen khong ma hoa.
+    occupation?: string;
     householdId: mongoose.Types.ObjectId;
     residenceType: LoaiCuTru;
     // Bat buoc khi residenceType="tam_tru" (xem validators/citizen.ts) - ngay
@@ -62,6 +65,7 @@ const CitizenSchema = new Schema<ICitizen>(
         birthDate: { type: Date },
         gender: { type: String, enum: GIOI_TINH, default: "nam" },
         relationToHead: { type: String },
+        occupation: { type: String, trim: true },
         householdId: {
             type: Schema.Types.ObjectId,
             ref: "Household",

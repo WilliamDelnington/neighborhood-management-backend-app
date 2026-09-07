@@ -203,6 +203,7 @@ const CITIZEN_COLUMNS = {
     birthDate: "Ngày sinh",
     gender: "Giới tính",
     relationToHead: "Quan hệ với chủ hộ",
+    occupation: "Nghề nghiệp/nơi làm việc",
     householdCode: "Mã hộ",
     // Cot lien ket THAY THE cho householdCode - xem ghi chu "Import nhan
     // khau" o dau file va applyCitizenImportMapping.
@@ -1087,6 +1088,7 @@ export type CitizenColumnMapping = {
     birthDate?: string;
     gender?: string;
     relationToHead?: string;
+    occupation?: string;
     householdCode?: string;
     houseCode?: string;
     residenceType?: string;
@@ -1108,6 +1110,7 @@ const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
     "birthDate",
     "gender",
     "relationToHead",
+    "occupation",
     "householdCode",
     "houseCode",
     "residenceType",
@@ -1357,6 +1360,9 @@ export async function applyCitizenImportMapping(
             relationToHead: mapping.relationToHead
                 ? (v[mapping.relationToHead] || "").trim() || undefined
                 : undefined,
+            occupation: mapping.occupation
+                ? (v[mapping.occupation] || "").trim() || undefined
+                : undefined,
             householdId,
             residenceType,
             isElderly: mapping.isElderly
@@ -1427,6 +1433,7 @@ export async function commitCitizenImport(
                 : undefined,
             gender: row.gender,
             relationToHead: row.relationToHead,
+            occupation: row.occupation,
             householdId: row.householdId,
             residenceType: row.residenceType,
             isElderly: !!row.isElderly,
