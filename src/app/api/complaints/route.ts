@@ -49,6 +49,7 @@ export async function GET(req: Request) {
             category: searchParams.get("category") || undefined,
             search: searchParams.get("search") || undefined,
             relatedAssetId: searchParams.get("relatedAssetId") || undefined,
+            neighborhoodId: searchParams.get("neighborhoodId") || undefined,
             allowedCategories,
             actorUser,
             canReadEscalated,

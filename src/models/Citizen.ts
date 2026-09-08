@@ -16,8 +16,6 @@ import {
     hashForLookup,
     normalizePhone,
     normalizeCccd,
-    maskPhone,
-    maskCccd,
 } from "@/lib/encryption";
 
 export interface ICitizen extends Document {
@@ -106,8 +104,9 @@ const CitizenSchema = new Schema<ICitizen>(
         timestamps: true,
         toJSON: {
             transform(_doc, ret) {
-                if (ret.phone) ret.phone = maskPhone(ret.phone);
-                if (ret.cccd) ret.cccd = maskCccd(ret.cccd);
+                // Nguoi co quyen citizens.read (nhan vien quan ly to dan pho)
+                // can xem day du sdt/cccd de lien he/doi chieu ho dan - khong
+                // che nua, chi an cac truong noi bo (hash tra cuu).
                 delete ret.phoneHash;
                 delete ret.cccdHash;
                 return ret;

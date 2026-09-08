@@ -74,7 +74,7 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         expect(citizens.data.items[0].relationToHead).toBe("Chủ hộ");
         // contactIsHead mac dinh true (khong truyen len) - Citizen "Chủ hộ"
         // duoc gan luon phone cua nguoi lien he.
-        expect(citizens.data.items[0].phone).toBe("*******678");
+        expect(citizens.data.items[0].phone).toBe("0912345678");
     });
 
     it("contactIsHead=false: tao them Citizen 'Người liên hệ' rieng mang phone, chu ho khong co phone", async () => {
@@ -117,7 +117,7 @@ describe("Household.memberCount tu dong +1/-1 khi Citizen duoc them/xoa/chuyen h
         expect(head.fullName).toBe("Nguyễn Văn Test");
         expect(head.phone).toBeUndefined();
         expect(contact.fullName).toBe("Trần Thị Liên Hệ");
-        expect(contact.phone).toBe("*******678");
+        expect(contact.phone).toBe("0912345678");
     });
 
     it("them nhan khau +1, xoa nhan khau -1 (chua tinh Citizen 'Chủ hộ' co san)", async () => {
