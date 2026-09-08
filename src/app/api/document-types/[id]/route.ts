@@ -35,11 +35,37 @@ export async function PATCH(
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "document_types.update");
 
-        const body = updateDocumentTypeSchema.parse(await req.json());
+        const contentType = req.headers.get("content-type") || "";
+        let sampleFile: File | undefined;
+        let removeSampleFile = false;
+        let body;
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await req.formData();
+            const file = formData.get("sampleFile");
+            if (file instanceof File) sampleFile = file;
+            removeSampleFile = formData.get("removeSampleFile") === "true";
+            body = updateDocumentTypeSchema.parse({
+                name: formData.get("name") || undefined,
+                description: formData.get("description") || undefined,
+                hasIssueDate: formData.has("hasIssueDate")
+                    ? formData.get("hasIssueDate") === "true"
+                    : undefined,
+                hasExpiryDate: formData.has("hasExpiryDate")
+                    ? formData.get("hasExpiryDate") === "true"
+                    : undefined,
+                active: formData.has("active")
+                    ? formData.get("active") === "true"
+                    : undefined,
+            });
+        } else {
+            body = updateDocumentTypeSchema.parse(await req.json());
+        }
+
         const documentType = await updateDocumentType(
             String(actorUser._id),
             params.id,
             body,
+            { sampleFile, removeSampleFile },
         );
         return apiSuccess(documentType, "Cập nhật loại giấy tờ thành công");
     } catch (err) {

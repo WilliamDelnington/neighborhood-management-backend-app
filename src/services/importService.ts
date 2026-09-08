@@ -14,6 +14,8 @@ import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { generateStreetCode } from "@/lib/streetSync";
 import { isValidVnPhone } from "@/lib/phone";
+import { hashForLookup, normalizeCccd } from "@/lib/encryption";
+import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import {
     createHouseRecord,
@@ -595,6 +597,10 @@ export async function applyHouseImportMapping(
     const seenCodes = new Set<string>();
 
     const errors: { row: number; message: string }[] = [];
+    // Thong tin cho nguoi dung biet dong nao se duoc "cap nhat bo sung" thay vi
+    // tao moi (existingHouseId), tach rieng khoi rowErrors that su - xem ghi
+    // chu IImportJob.skippedRows.
+    const skipped: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
     for (const row of rows) {
@@ -637,6 +643,12 @@ export async function applyHouseImportMapping(
         // xem mergeIntoExistingHouse) thay vi tao moi. cluster/address vi vay
         // chi bat buoc khi TAO MOI.
         const existingHouseId = code ? existingCodeToId.get(code) : undefined;
+        if (existingHouseId) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Mã "${code}" đã tồn tại - sẽ cập nhật bổ sung thay vì tạo mới`,
+            });
+        }
 
         const cluster = subZone || defaultCluster;
         if (!existingHouseId && !cluster) {
@@ -657,6 +669,7 @@ export async function applyHouseImportMapping(
         const hasValidOwner = !!ownerName && isValidVnPhone(ownerPhone);
 
         previewData.push({
+            rowNumber: row.rowNumber,
             code,
             cluster: cluster || undefined,
             address: cluster ? (subZone ? `${subZone} - ${code}` : code) : undefined,
@@ -678,6 +691,7 @@ export async function applyHouseImportMapping(
 
     job.columnMapping = mapping;
     job.rowErrors = errors;
+    job.skippedRows = skipped;
     job.previewData = previewData;
     job.validRows = previewData.length;
     job.status = errors.length === 0 ? "validated" : "previewing";
@@ -758,11 +772,13 @@ export async function commitHouseImport(
             400,
         );
     }
-    if (job.rowErrors.length > 0) {
-        throw new HttpError(
-            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
-            400,
-        );
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
     }
 
     // Chuyen sang "committing" ngay va tra ve cho client de bat dau polling
@@ -802,163 +818,193 @@ async function processHouseImportRows(
     let householdsCreated = 0;
     let householdsUpdated = 0;
     let headCitizensCreated = 0;
+    // Bat dau tu rowErrors da co san (loi phat hien luc preview) - cong don
+    // them loi phat sinh luc commit (hiem, vd rang buoc DB) de "xem/xuat loi"
+    // sau khi commit xong hien thi day du CA HAI nguon, khong chi rieng loi
+    // preview - xem ghi chu IImportJob.rowErrors. Moi dong duoc boc try/catch
+    // rieng - mot dong loi khong con lam hong ca job (khac truoc day).
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
     for (const row of job.previewData as Record<string, unknown>[]) {
-        const existingHouseId = row.existingHouseId as string | undefined;
-        let houseRecord;
-        if (existingHouseId) {
-            // eslint-disable-next-line no-await-in-loop
-            houseRecord = await mergeIntoExistingHouse(
-                actorUser,
-                existingHouseId,
-                row,
-            );
-            housesMerged += 1;
-        } else {
-            const hasOwner = !!row.ownerName && !!row.ownerPhone;
-            // eslint-disable-next-line no-await-in-loop
-            houseRecord = await createHouseRecord(actorUser, {
-                code: row.code as string,
-                cluster: row.cluster as string,
-                address: row.address as string,
-                note: row.note as string | undefined,
-                neighborhoodId:
-                    (row.neighborhoodId as string | undefined) || undefined,
-                ownerKind: hasOwner ? "individual" : "none",
-                createOwnerAccount: hasOwner,
-                owner: hasOwner
-                    ? {
-                          displayName: row.ownerName as string,
-                          phone: row.ownerPhone as string,
-                          password: defaultPassword,
-                      }
-                    : undefined,
-            });
-            housesCreated += 1;
-        }
-        committedCount += 1;
-
-        // Tao/dien them Household lien ket qua houseId khi nguoi dung bat tuy
-        // chon "Cũng tạo hộ dân" - CHI khi dong co ten chu ho (headOfHousehold
-        // hoac ownerName, xem applyHouseImportMapping), vi
-        // Household.headOfHousehold la truong bat buoc.
-        const headOfHousehold = row.householdHeadOfHousehold as
-            | string
-            | undefined;
-        if (createHouseholds && headOfHousehold) {
-            // Nha da ton tai co the da co san Household (vd tu lan import
-            // truoc) - CHI tao moi khi nha CHUA co Household nao; neu da co
-            // dung 1 Household, chi dien vao truong dang trong (phone/note),
-            // giong nguyen tac cua mergeIntoExistingHouse o tren. Neu nha co
-            // NHIEU HON 1 Household (truong hop hiem, tao thu cong) thi bo
-            // qua - khong ro nen dien vao Household nao.
-            // eslint-disable-next-line no-await-in-loop
-            const existingHouseholds = await Household.find({
-                houseId: houseRecord._id,
-            }).select("status phone note");
-
-            let household;
-            if (existingHouseholds.length === 0) {
+        try {
+            const existingHouseId = row.existingHouseId as string | undefined;
+            let houseRecord;
+            if (existingHouseId) {
                 // eslint-disable-next-line no-await-in-loop
-                const householdCode = await generateSequentialCode(
-                    Household,
-                    "HB",
-                    3,
+                houseRecord = await mergeIntoExistingHouse(
+                    actorUser,
+                    existingHouseId,
+                    row,
                 );
+                housesMerged += 1;
+            } else {
+                const hasOwner = !!row.ownerName && !!row.ownerPhone;
                 // eslint-disable-next-line no-await-in-loop
-                household = await Household.create({
-                    code: householdCode,
-                    cluster: houseRecord.cluster,
-                    streetId: houseRecord.streetId,
-                    neighborhoodId: houseRecord.neighborhoodId,
-                    address: houseRecord.address,
-                    headOfHousehold,
-                    phone: row.householdPhone as string | undefined,
-                    houseId: houseRecord._id,
-                    status: resolveInitialVerificationStatus(houseRecord),
-                    note: row.hasBusinessSignal
-                        ? "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin."
+                houseRecord = await createHouseRecord(actorUser, {
+                    code: row.code as string,
+                    cluster: row.cluster as string,
+                    address: row.address as string,
+                    note: row.note as string | undefined,
+                    neighborhoodId:
+                        (row.neighborhoodId as string | undefined) ||
+                        undefined,
+                    ownerKind: hasOwner ? "individual" : "none",
+                    createOwnerAccount: hasOwner,
+                    owner: hasOwner
+                        ? {
+                              displayName: row.ownerName as string,
+                              phone: row.ownerPhone as string,
+                              password: defaultPassword,
+                          }
                         : undefined,
-                    createdBy: actorUser._id,
-                    updatedBy: actorUser._id,
                 });
-                householdsCreated += 1;
-            } else if (existingHouseholds.length === 1) {
-                [household] = existingHouseholds;
-                if (
-                    household.status === "unverified" ||
-                    household.status === "pending"
-                ) {
-                    const householdPhone = row.householdPhone as
-                        | string
-                        | undefined;
-                    let changed = false;
-                    if (!household.phone && householdPhone) {
-                        household.phone = householdPhone;
-                        changed = true;
-                    }
-                    if (!household.note && row.hasBusinessSignal) {
-                        household.note =
-                            "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin.";
-                        changed = true;
-                    }
-                    if (changed) {
-                        household.updatedBy =
-                            actorUser._id as unknown as typeof household.updatedBy;
-                        // eslint-disable-next-line no-await-in-loop
-                        await household.save();
-                        householdsUpdated += 1;
-                    }
-                }
+                housesCreated += 1;
             }
 
-            // Household (moi hoac da co san) phai co it nhat MOT Citizen "Chủ
-            // hộ", giong bat bien cua householdService.createHousehold - neu
-            // khong, chu ho se khong xuat hien trong danh sach nhan khau cua
-            // ho dan (GET /households/:id/citizens chi doc tu Citizen), va
-            // memberCount se luon thieu 1 so voi thuc te. Ap dung CHO CA
-            // Household da ton tai tu lan import truoc (truoc khi co doan
-            // code nay) MA DANG co 0 nhan khau - bat ke trang thai xac thuc
-            // cua Household, vi day chi la BO SUNG du lieu con thieu (khong
-            // phai sua truong da co san nhu phone/note o tren) - chay lai
-            // (import lai) chinh file da dung se tu dong bo sung chu ho con
-            // thieu cho ho dan da tao truoc do. Bo qua neu nha co nhieu hon 1
-            // Household (household la undefined trong truong hop do) - cung
-            // ly do khong dien phone/note o tren: khong ro nen bo sung vao
-            // Household nao.
-            if (household) {
+            // Tao/dien them Household lien ket qua houseId khi nguoi dung bat
+            // tuy chon "Cũng tạo hộ dân" - CHI khi dong co ten chu ho
+            // (headOfHousehold hoac ownerName, xem applyHouseImportMapping),
+            // vi Household.headOfHousehold la truong bat buoc.
+            const headOfHousehold = row.householdHeadOfHousehold as
+                | string
+                | undefined;
+            if (createHouseholds && headOfHousehold) {
+                // Nha da ton tai co the da co san Household (vd tu lan import
+                // truoc) - CHI tao moi khi nha CHUA co Household nao; neu da
+                // co dung 1 Household, chi dien vao truong dang trong (phone/
+                // note), giong nguyen tac cua mergeIntoExistingHouse o tren.
+                // Neu nha co NHIEU HON 1 Household (truong hop hiem, tao thu
+                // cong) thi bo qua - khong ro nen dien vao Household nao.
                 // eslint-disable-next-line no-await-in-loop
-                const citizenCount = await Citizen.countDocuments({
-                    householdId: household._id,
-                });
-                if (citizenCount === 0) {
+                const existingHouseholds = await Household.find({
+                    houseId: houseRecord._id,
+                }).select("status phone note");
+
+                let household;
+                if (existingHouseholds.length === 0) {
                     // eslint-disable-next-line no-await-in-loop
-                    await Citizen.create({
-                        fullName: headOfHousehold,
+                    const householdCode = await generateSequentialCode(
+                        Household,
+                        "HB",
+                        3,
+                    );
+                    // eslint-disable-next-line no-await-in-loop
+                    household = await Household.create({
+                        code: householdCode,
+                        cluster: houseRecord.cluster,
+                        streetId: houseRecord.streetId,
+                        neighborhoodId: houseRecord.neighborhoodId,
+                        address: houseRecord.address,
+                        headOfHousehold,
                         phone: row.householdPhone as string | undefined,
-                        relationToHead: "Chủ hộ",
-                        householdId: household._id,
+                        houseId: houseRecord._id,
+                        status: resolveInitialVerificationStatus(houseRecord),
+                        note: row.hasBusinessSignal
+                            ? "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin."
+                            : undefined,
                         createdBy: actorUser._id,
                         updatedBy: actorUser._id,
                     });
+                    householdsCreated += 1;
+                } else if (existingHouseholds.length === 1) {
+                    [household] = existingHouseholds;
+                    if (
+                        household.status === "unverified" ||
+                        household.status === "pending"
+                    ) {
+                        const householdPhone = row.householdPhone as
+                            | string
+                            | undefined;
+                        let changed = false;
+                        if (!household.phone && householdPhone) {
+                            household.phone = householdPhone;
+                            changed = true;
+                        }
+                        if (!household.note && row.hasBusinessSignal) {
+                            household.note =
+                                "Có hoạt động kinh doanh tại địa chỉ này - cần bổ sung Hộ kinh doanh nếu đủ thông tin.";
+                            changed = true;
+                        }
+                        if (changed) {
+                            household.updatedBy =
+                                actorUser._id as unknown as typeof household.updatedBy;
+                            // eslint-disable-next-line no-await-in-loop
+                            await household.save();
+                            householdsUpdated += 1;
+                        }
+                    }
+                }
+
+                // Household (moi hoac da co san) phai co it nhat MOT Citizen
+                // "Chủ hộ", giong bat bien cua householdService.createHousehold
+                // - neu khong, chu ho se khong xuat hien trong danh sach nhan
+                // khau cua ho dan (GET /households/:id/citizens chi doc tu
+                // Citizen), va memberCount se luon thieu 1 so voi thuc te. Ap
+                // dung CHO CA Household da ton tai tu lan import truoc (truoc
+                // khi co doan code nay) MA DANG co 0 nhan khau - bat ke trang
+                // thai xac thuc cua Household, vi day chi la BO SUNG du lieu
+                // con thieu (khong phai sua truong da co san nhu phone/note o
+                // tren) - chay lai (import lai) chinh file da dung se tu dong
+                // bo sung chu ho con thieu cho ho dan da tao truoc do. Bo qua
+                // neu nha co nhieu hon 1 Household (household la undefined
+                // trong truong hop do) - cung ly do khong dien phone/note o
+                // tren: khong ro nen bo sung vao Household nao.
+                if (household) {
                     // eslint-disable-next-line no-await-in-loop
-                    await Household.updateOne(
-                        { _id: household._id },
-                        { memberCount: 1 },
-                    );
-                    headCitizensCreated += 1;
+                    const citizenCount = await Citizen.countDocuments({
+                        householdId: household._id,
+                    });
+                    if (citizenCount === 0) {
+                        // eslint-disable-next-line no-await-in-loop
+                        await Citizen.create({
+                            fullName: headOfHousehold,
+                            phone: row.householdPhone as string | undefined,
+                            relationToHead: "Chủ hộ",
+                            householdId: household._id,
+                            createdBy: actorUser._id,
+                            updatedBy: actorUser._id,
+                        });
+                        // eslint-disable-next-line no-await-in-loop
+                        await Household.updateOne(
+                            { _id: household._id },
+                            { memberCount: 1 },
+                        );
+                        headCitizensCreated += 1;
+                    }
                 }
             }
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
         }
+        committedCount += 1;
 
         if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
             // eslint-disable-next-line no-await-in-loop
-            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+            await ImportJob.updateOne(
+                { _id: jobId },
+                {
+                    committedCount,
+                    createdCount: housesCreated,
+                    skippedCount: housesMerged,
+                    rowErrors: commitErrors,
+                },
+            );
         }
     }
 
     await ImportJob.updateOne(
         { _id: jobId },
-        { status: "committed", committedCount },
+        {
+            status: "committed",
+            committedCount,
+            createdCount: housesCreated,
+            skippedCount: housesMerged,
+            rowErrors: commitErrors,
+        },
     );
 
     await writeAuditLog({
@@ -1040,10 +1086,27 @@ export async function previewHouseholdImport(
     fileName: string,
     sheetName?: string,
 ): Promise<IImportJob> {
-    const { rows, availableSheetNames, sourceSheetName } =
+    const { headers, rows, availableSheetNames, sourceSheetName } =
         await readWorksheetRows(fileBuffer, sheetName);
     const errors: { row: number; message: string }[] = [];
+    const skipped: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
+
+    // Doi chieu "Cụm dân cư" + "Địa chỉ" (dong nhat mot don vi o thuc te, vd
+    // "Dãy A - CH-A101") voi Household da co trong DB - dong trung se bi bo
+    // qua (khong tao trung) thay vi tao them mot Household khac cho cung mot
+    // dia chi, giong tinh than cua applyHouseImportMapping/
+    // applyStreetImportMapping. Household khong co truong "code" nhap tay
+    // (server tu sinh) nen day la khoa tu nhien duy nhat co the dung.
+    const normalizeKey = (cluster: string, address: string) =>
+        `${stripDiacritics(cluster).toLowerCase()}|${stripDiacritics(address).toLowerCase()}`;
+    const existingHouseholds = await Household.find({}).select(
+        "cluster address",
+    );
+    const existingKeys = new Set(
+        existingHouseholds.map(h => normalizeKey(h.cluster, h.address)),
+    );
+    const seenKeys = new Set<string>();
 
     for (const row of rows) {
         const v = row.values;
@@ -1080,7 +1143,18 @@ export async function previewHouseholdImport(
             continue;
         }
 
+        const key = normalizeKey(cluster, address);
+        if (existingKeys.has(key) || seenKeys.has(key)) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Hộ dân tại "${address}" (${cluster}) đã tồn tại`,
+            });
+            continue;
+        }
+        seenKeys.add(key);
+
         previewData.push({
+            rowNumber: row.rowNumber,
             cluster,
             address,
             headOfHousehold,
@@ -1097,9 +1171,12 @@ export async function previewHouseholdImport(
         fileName,
         totalRows: rows.length,
         validRows: previewData.length,
+        headers,
+        rawRows: rows,
         availableSheetNames,
         sourceSheetName,
         rowErrors: errors,
+        skippedRows: skipped,
         previewData,
         committedCount: 0,
         createdBy: actorId,
@@ -1120,11 +1197,13 @@ export async function commitHouseholdImport(
     if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
-    if (job.rowErrors.length > 0) {
-        throw new HttpError(
-            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
-            400,
-        );
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
     }
 
     job.status = "committing";
@@ -1148,47 +1227,76 @@ async function processHouseholdImportRows(
     if (!job) return;
 
     let committedCount = 0;
+    let createdCount = 0;
+    // Cac dong "da ton tai" (trung cụm+địa chỉ) da bi loai khoi previewData
+    // ngay tu buoc preview (xem previewHouseholdImport) nen khong can xu ly gi
+    // them o day - skippedCount lay thang tu skippedRows.length.
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
     for (const row of job.previewData as Record<string, unknown>[]) {
-        // eslint-disable-next-line no-await-in-loop
-        const code = await generateSequentialCode(Household, "HB", 3);
-        // eslint-disable-next-line no-await-in-loop
-        const household = await Household.create({
-            code,
-            cluster: row.cluster,
-            address: row.address,
-            headOfHousehold: row.headOfHousehold,
-            phone: row.phone,
-            ownershipType: row.ownershipType,
-            needsSupport: row.needsSupport,
-            note: row.note,
-            createdBy: actorId,
-            updatedBy: actorId,
-        });
-        // Ho dan phai co it nhat MOT Citizen "Chủ hộ" ngay khi tao (giong bat
-        // bien cua householdService.createHousehold va processHouseImportRows)
-        // - neu khong, chu ho se khong xuat hien trong danh sach nhan khau
-        // cua ho dan nay, va memberCount se luon thieu 1 so voi thuc te.
-        // eslint-disable-next-line no-await-in-loop
-        await Citizen.create({
-            fullName: row.headOfHousehold,
-            phone: row.phone,
-            relationToHead: "Chủ hộ",
-            householdId: household._id,
-            createdBy: actorId,
-            updatedBy: actorId,
-        });
-        // eslint-disable-next-line no-await-in-loop
-        await Household.updateOne({ _id: household._id }, { memberCount: 1 });
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const code = await generateSequentialCode(Household, "HB", 3);
+            // eslint-disable-next-line no-await-in-loop
+            const household = await Household.create({
+                code,
+                cluster: row.cluster,
+                address: row.address,
+                headOfHousehold: row.headOfHousehold,
+                phone: row.phone,
+                ownershipType: row.ownershipType,
+                needsSupport: row.needsSupport,
+                note: row.note,
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            // Ho dan phai co it nhat MOT Citizen "Chủ hộ" ngay khi tao (giong
+            // bat bien cua householdService.createHousehold va
+            // processHouseImportRows) - neu khong, chu ho se khong xuat hien
+            // trong danh sach nhan khau cua ho dan nay, va memberCount se
+            // luon thieu 1 so voi thuc te.
+            // eslint-disable-next-line no-await-in-loop
+            await Citizen.create({
+                fullName: row.headOfHousehold,
+                phone: row.phone,
+                relationToHead: "Chủ hộ",
+                householdId: household._id,
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            // eslint-disable-next-line no-await-in-loop
+            await Household.updateOne(
+                { _id: household._id },
+                { memberCount: 1 },
+            );
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
         committedCount += 1;
         if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
             // eslint-disable-next-line no-await-in-loop
-            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+            await ImportJob.updateOne(
+                { _id: jobId },
+                { committedCount, createdCount, skippedCount, rowErrors: commitErrors },
+            );
         }
     }
 
     await ImportJob.updateOne(
         { _id: jobId },
-        { status: "committed", committedCount },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
     );
 
     await writeAuditLog({
@@ -1196,7 +1304,7 @@ async function processHouseholdImportRows(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: jobId,
-        metadata: { type: "household", count: committedCount },
+        metadata: { type: "household", count: committedCount, createdCount, skippedCount },
     });
 }
 
@@ -1392,12 +1500,37 @@ export async function applyCitizenImportMapping(
         houseIdToHouseholdIds.set(key, list);
     }
 
+    // Doi chieu CCCD trung lap (voi DB va giua cac dong trong file) - CCCD la
+    // khoa duy nhat dang tin cay duy nhat cho mot nguoi that, dung cccdHash de
+    // tim kiem exact-match (xem hook pre("save") cua Citizen - cccd goc duoc
+    // ma hoa nen khong the $regex/so sanh truc tiep). Dong khong co gia tri
+    // CCCD (khong chon cot, hoac o rong) khong co khoa dang tin cay nen KHONG
+    // bi doi chieu - luon la tao moi hoac loi hop le nhu truoc.
+    const cccdHashesInFile = new Set<string>();
+    if (mapping.cccd) {
+        for (const row of rows) {
+            const cccd = (row.values[mapping.cccd] || "").trim();
+            if (cccd) cccdHashesInFile.add(hashForLookup(normalizeCccd(cccd)));
+        }
+    }
+    const existingCitizensByCccd = mapping.cccd
+        ? await Citizen.find({
+              cccdHash: { $in: Array.from(cccdHashesInFile) },
+          }).select("cccdHash")
+        : [];
+    const existingCccdHashes = new Set(
+        existingCitizensByCccd.map(c => c.cccdHash),
+    );
+    const seenCccdHashes = new Set<string>();
+
     const errors: { row: number; message: string }[] = [];
+    const skipped: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
     for (const row of rows) {
         const v = row.values;
         const fullName = (v[mapping.fullName] || "").trim();
+        const cccd = mapping.cccd ? (v[mapping.cccd] || "").trim() : "";
         const genderRaw = mapping.gender ? (v[mapping.gender] || "").trim() : "";
         const residenceRaw = mapping.residenceType
             ? (v[mapping.residenceType] || "").trim()
@@ -1472,10 +1605,26 @@ export async function applyCitizenImportMapping(
             continue;
         }
 
+        if (cccd) {
+            const cccdHash = hashForLookup(normalizeCccd(cccd));
+            if (
+                existingCccdHashes.has(cccdHash) ||
+                seenCccdHashes.has(cccdHash)
+            ) {
+                skipped.push({
+                    row: row.rowNumber,
+                    message: `Nhân khẩu với CCCD "${cccd}" đã tồn tại`,
+                });
+                continue;
+            }
+            seenCccdHashes.add(cccdHash);
+        }
+
         previewData.push({
+            rowNumber: row.rowNumber,
             fullName,
             phone: mapping.phone ? (v[mapping.phone] || "").trim() || undefined : undefined,
-            cccd: mapping.cccd ? (v[mapping.cccd] || "").trim() || undefined : undefined,
+            cccd: cccd || undefined,
             birthDate: mapping.birthDate
                 ? parseDateCell(v[mapping.birthDate])?.toISOString()
                 : undefined,
@@ -1506,6 +1655,7 @@ export async function applyCitizenImportMapping(
 
     job.columnMapping = mapping;
     job.rowErrors = errors;
+    job.skippedRows = skipped;
     job.previewData = previewData;
     job.validRows = previewData.length;
     job.status = errors.length === 0 ? "validated" : "previewing";
@@ -1532,11 +1682,13 @@ export async function commitCitizenImport(
             400,
         );
     }
-    if (job.rowErrors.length > 0) {
-        throw new HttpError(
-            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
-            400,
-        );
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
     }
 
     job.status = "committing";
@@ -1560,41 +1712,63 @@ async function processCitizenImportRows(
     if (!job) return;
 
     let committedCount = 0;
+    let createdCount = 0;
+    // Cac dong "da ton tai" (trung CCCD) da bi loai khoi previewData ngay tu
+    // buoc mapping (xem applyCitizenImportMapping) nen khong can xu ly gi them
+    // o day - skippedCount lay thang tu skippedRows.length.
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
     // memberCount cua ho dan lien quan duoc +1 cho moi Citizen import thanh
     // cong - gom theo householdId roi cap nhat 1 lan bang bulkWrite (thay vi
     // recompute/update rieng le cho tung dong) de tranh O(n) update khi import
     // nhieu nhan khau cung luc.
     const memberCountDeltas = new Map<string, number>();
     for (const row of job.previewData as Record<string, unknown>[]) {
-        // eslint-disable-next-line no-await-in-loop
-        await Citizen.create({
-            fullName: row.fullName,
-            phone: row.phone,
-            cccd: row.cccd,
-            birthDate: row.birthDate
-                ? new Date(row.birthDate as string)
-                : undefined,
-            gender: row.gender,
-            relationToHead: row.relationToHead,
-            occupation: row.occupation,
-            householdId: row.householdId,
-            residenceType: row.residenceType,
-            isElderly: !!row.isElderly,
-            isChild: !!row.isChild,
-            isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
-            isPartyMember: !!row.isPartyMember,
-            isUnionMember: !!row.isUnionMember,
-            createdBy: actorId,
-            updatedBy: actorId,
-        });
-        committedCount += 1;
-        if (row.householdId) {
-            const key = String(row.householdId);
-            memberCountDeltas.set(key, (memberCountDeltas.get(key) || 0) + 1);
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await Citizen.create({
+                fullName: row.fullName,
+                phone: row.phone,
+                cccd: row.cccd,
+                birthDate: row.birthDate
+                    ? new Date(row.birthDate as string)
+                    : undefined,
+                gender: row.gender,
+                relationToHead: row.relationToHead,
+                occupation: row.occupation,
+                householdId: row.householdId,
+                residenceType: row.residenceType,
+                isElderly: !!row.isElderly,
+                isChild: !!row.isChild,
+                isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
+                isPartyMember: !!row.isPartyMember,
+                isUnionMember: !!row.isUnionMember,
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            createdCount += 1;
+            if (row.householdId) {
+                const key = String(row.householdId);
+                memberCountDeltas.set(
+                    key,
+                    (memberCountDeltas.get(key) || 0) + 1,
+                );
+            }
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
         }
+        committedCount += 1;
         if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
             // eslint-disable-next-line no-await-in-loop
-            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+            await ImportJob.updateOne(
+                { _id: jobId },
+                { committedCount, createdCount, skippedCount, rowErrors: commitErrors },
+            );
         }
     }
 
@@ -1613,7 +1787,13 @@ async function processCitizenImportRows(
 
     await ImportJob.updateOne(
         { _id: jobId },
-        { status: "committed", committedCount },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
     );
 
     await writeAuditLog({
@@ -1621,7 +1801,7 @@ async function processCitizenImportRows(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: jobId,
-        metadata: { type: "citizen", count: committedCount },
+        metadata: { type: "citizen", count: committedCount, createdCount, skippedCount },
     });
 }
 
@@ -1990,6 +2170,10 @@ export async function applyStreetImportMapping(
     const seenCodes = new Set<string>();
 
     const errors: { row: number; message: string }[] = [];
+    // Trung ten/ma (voi DB hoac voi dong khac trong file) khong con bi coi la
+    // loi/chan commit nhu truoc - chi bi bo qua (khong tao trung), tach rieng
+    // khoi rowErrors that su - xem ghi chu IImportJob.skippedRows.
+    const skipped: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
     for (const row of rows) {
@@ -1999,28 +2183,29 @@ export async function applyStreetImportMapping(
             ? parseStreetActiveCell(row.values[mapping.active])
             : true;
 
-        const rowErrors: string[] = [];
-        if (!name) rowErrors.push("Thiếu 'Tên đường/phố'");
+        if (!name) {
+            errors.push({ row: row.rowNumber, message: "Thiếu 'Tên đường/phố'" });
+            continue;
+        }
 
-        if (name) {
-            if (existingNames.has(name) || seenNames.has(name)) {
-                rowErrors.push(`Tên đường/phố "${name}" đã tồn tại`);
-            } else {
-                seenNames.add(name);
-            }
+        const skipReasons: string[] = [];
+        if (existingNames.has(name) || seenNames.has(name)) {
+            skipReasons.push(`Tên đường/phố "${name}" đã tồn tại`);
+        } else {
+            seenNames.add(name);
         }
 
         let code = codeInput.trim();
         if (code) {
             if (existingCodes.has(code) || seenCodes.has(code)) {
-                rowErrors.push(`Mã đường/phố "${code}" đã tồn tại`);
+                skipReasons.push(`Mã đường/phố "${code}" đã tồn tại`);
             } else {
                 seenCodes.add(code);
             }
         }
 
-        if (rowErrors.length > 0) {
-            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+        if (skipReasons.length > 0) {
+            skipped.push({ row: row.rowNumber, message: skipReasons.join("; ") });
             continue;
         }
 
@@ -2037,11 +2222,12 @@ export async function applyStreetImportMapping(
             seenCodes.add(code);
         }
 
-        previewData.push({ name, code, active });
+        previewData.push({ rowNumber: row.rowNumber, name, code, active });
     }
 
     job.columnMapping = mapping;
     job.rowErrors = errors;
+    job.skippedRows = skipped;
     job.previewData = previewData;
     job.validRows = previewData.length;
     job.status = errors.length === 0 ? "validated" : "previewing";
@@ -2068,11 +2254,13 @@ export async function commitStreetImport(
             400,
         );
     }
-    if (job.rowErrors.length > 0) {
-        throw new HttpError(
-            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
-            400,
-        );
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
     }
 
     job.status = "committing";
@@ -2096,25 +2284,50 @@ async function processStreetImportRows(
     if (!job) return;
 
     let committedCount = 0;
+    let createdCount = 0;
+    // Cac dong "da ton tai" (trung ten/ma) da bi loai khoi previewData ngay tu
+    // buoc mapping (xem applyStreetImportMapping) nen khong can xu ly gi them
+    // o day - skippedCount lay thang tu skippedRows.length.
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
     for (const row of job.previewData as Record<string, unknown>[]) {
-        // eslint-disable-next-line no-await-in-loop
-        await Street.create({
-            name: row.name,
-            code: row.code,
-            active: row.active,
-            createdBy: actorId,
-            updatedBy: actorId,
-        });
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await Street.create({
+                name: row.name,
+                code: row.code,
+                active: row.active,
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
         committedCount += 1;
         if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
             // eslint-disable-next-line no-await-in-loop
-            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+            await ImportJob.updateOne(
+                { _id: jobId },
+                { committedCount, createdCount, skippedCount, rowErrors: commitErrors },
+            );
         }
     }
 
     await ImportJob.updateOne(
         { _id: jobId },
-        { status: "committed", committedCount },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
     );
 
     await writeAuditLog({
@@ -2122,7 +2335,7 @@ async function processStreetImportRows(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: jobId,
-        metadata: { type: "street", count: committedCount },
+        metadata: { type: "street", count: committedCount, createdCount, skippedCount },
     });
 }
 
@@ -2290,6 +2503,10 @@ export async function applyBusinessImportMapping(
     const seenTaxCodes = new Set<string>();
 
     const errors: { row: number; message: string }[] = [];
+    // Trung ma so thue khong con bi coi la loi/chan commit nhu truoc - chi bi
+    // bo qua (khong tao trung), tach rieng khoi rowErrors that su - xem ghi
+    // chu IImportJob.skippedRows.
+    const skipped: { row: number; message: string }[] = [];
     const previewData: Record<string, unknown>[] = [];
 
     for (const row of rows) {
@@ -2333,20 +2550,24 @@ export async function applyBusinessImportMapping(
             }
         }
 
-        if (taxCode) {
-            if (existingTaxCodes.has(taxCode) || seenTaxCodes.has(taxCode)) {
-                rowErrors.push(`Mã số thuế "${taxCode}" đã tồn tại`);
-            } else {
-                seenTaxCodes.add(taxCode);
-            }
-        }
-
         if (rowErrors.length > 0) {
             errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
             continue;
         }
 
+        if (taxCode) {
+            if (existingTaxCodes.has(taxCode) || seenTaxCodes.has(taxCode)) {
+                skipped.push({
+                    row: row.rowNumber,
+                    message: `Mã số thuế "${taxCode}" đã tồn tại`,
+                });
+                continue;
+            }
+            seenTaxCodes.add(taxCode);
+        }
+
         previewData.push({
+            rowNumber: row.rowNumber,
             name,
             houseCode,
             houseId,
@@ -2364,6 +2585,7 @@ export async function applyBusinessImportMapping(
 
     job.columnMapping = mapping;
     job.rowErrors = errors;
+    job.skippedRows = skipped;
     job.previewData = previewData;
     job.validRows = previewData.length;
     job.status = errors.length === 0 ? "validated" : "previewing";
@@ -2390,11 +2612,13 @@ export async function commitBusinessImport(
             400,
         );
     }
-    if (job.rowErrors.length > 0) {
-        throw new HttpError(
-            "Dữ liệu còn lỗi, vui lòng sửa và tạo lại preview trước khi commit",
-            400,
-        );
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
     }
 
     job.status = "committing";
@@ -2418,28 +2642,54 @@ async function processBusinessImportRows(
     if (!job) return;
 
     let committedCount = 0;
+    let createdCount = 0;
+    // Cac dong "da ton tai" (trung ma so thue) da bi loai khoi previewData
+    // ngay tu buoc mapping (xem applyBusinessImportMapping) nen khong can xu
+    // ly gi them o day - skippedCount lay thang tu skippedRows.length.
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
     for (const row of job.previewData as Record<string, unknown>[]) {
-        // eslint-disable-next-line no-await-in-loop
-        await createBusiness(actorUser, {
-            name: row.name as string,
-            houseId: row.houseId as string,
-            businessType: (row.businessTypeId as string | undefined) || null,
-            ownerName: row.ownerName as string | undefined,
-            taxCode: row.taxCode as string | undefined,
-            phone: row.phone as string | undefined,
-            active: row.active as boolean,
-            note: row.note as string | undefined,
-        });
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await createBusiness(actorUser, {
+                name: row.name as string,
+                houseId: row.houseId as string,
+                businessType:
+                    (row.businessTypeId as string | undefined) || null,
+                ownerName: row.ownerName as string | undefined,
+                taxCode: row.taxCode as string | undefined,
+                phone: row.phone as string | undefined,
+                active: row.active as boolean,
+                note: row.note as string | undefined,
+            });
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
         committedCount += 1;
         if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
             // eslint-disable-next-line no-await-in-loop
-            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+            await ImportJob.updateOne(
+                { _id: jobId },
+                { committedCount, createdCount, skippedCount, rowErrors: commitErrors },
+            );
         }
     }
 
     await ImportJob.updateOne(
         { _id: jobId },
-        { status: "committed", committedCount },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
     );
 
     await writeAuditLog({
@@ -2447,7 +2697,7 @@ async function processBusinessImportRows(
         action: "import.commit",
         targetModel: "ImportJob",
         targetId: jobId,
-        metadata: { type: "business", count: committedCount },
+        metadata: { type: "business", count: committedCount, createdCount, skippedCount },
     });
 }
 
@@ -2459,4 +2709,45 @@ export async function getImportJobById(id: string): Promise<IImportJob> {
     const job = await ImportJob.findById(id);
     if (!job) throw new HttpError("Không tìm thấy import job", 404);
     return job;
+}
+
+/**
+ * Xuat TOAN BO rowErrors cua mot import job ra file Excel - dung chung cho ca
+ * 5 loai import (khong can biet job.type, chi doc headers/rawRows/rowErrors
+ * da co san tren IImportJob). Doi chieu lai gia tri goc cua dong qua rawRows
+ * (theo rowNumber) de nguoi dung thay dung du lieu ho da nhap, khong chi ma
+ * loi - job cu truoc khi co truong headers/rawRows (vd Household import truoc
+ * ban nay) se chi hien duoc so dong + thong bao loi.
+ */
+export function buildImportErrorsWorkbook(job: IImportJob): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const headers = job.headers || [];
+    const rawRowByNumber = new Map(
+        (job.rawRows || []).map(r => [r.rowNumber, r.values]),
+    );
+
+    const columns: TableColumn[] = [
+        { header: "Dòng", key: "__row", width: 10 },
+        ...headers.map((header, idx) => ({
+            header,
+            key: `col${idx}`,
+            width: 20,
+        })),
+        { header: "Lỗi", key: "__error", width: 50 },
+    ];
+
+    const rows = job.rowErrors.map(rowError => {
+        const values = rawRowByNumber.get(rowError.row);
+        const row: Record<string, unknown> = {
+            __row: rowError.row,
+            __error: rowError.message,
+        };
+        headers.forEach((header, idx) => {
+            row[`col${idx}`] = values ? values[header] || "" : "";
+        });
+        return row;
+    });
+
+    addTableSheet(workbook, "Dòng lỗi", columns, rows);
+    return workbook;
 }

@@ -19,6 +19,7 @@
         "seed:request-types": "tsx scripts/seed-request-types.ts",
         "seed:appointment-holidays": "tsx scripts/seed-appointment-holidays.ts",
         "roles:backfill": "tsx scripts/backfill-roles.ts",
+        "roles:backfill-scope": "tsx scripts/backfill-role-scope-config.ts",
         "inspections:backfill-roles": "tsx scripts/backfill-inspection-roles.ts",
         "roles:migrate-house-owner": "tsx scripts/backfill-resident-to-house-owner.ts",
         "complaints:migrate-legacy-statuses": "tsx scripts/migrate-legacy-complaint-statuses.ts",

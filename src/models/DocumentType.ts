@@ -7,6 +7,11 @@ export interface IDocumentType extends Document {
     hasIssueDate: boolean;
     hasExpiryDate: boolean;
     active: boolean;
+    // Tep mau (khong bat buoc) minh hoa giay to nay trong thuc te - giup ca
+    // chu nha (nguoi nop) lan can bo duyet (nguoi xem xet) hinh dung ro hon
+    // ngoai ten/mo ta, xem documentTypeService.ts.
+    sampleFileUrl?: string;
+    sampleFileName?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -27,6 +32,8 @@ const DocumentTypeSchema = new Schema<IDocumentType>(
         hasIssueDate: { type: Boolean, default: false },
         hasExpiryDate: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
+        sampleFileUrl: { type: String },
+        sampleFileName: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

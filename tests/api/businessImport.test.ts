@@ -143,9 +143,12 @@ describe("Import hộ kinh doanh từ Excel", () => {
         });
 
         expect(mapped.validRows).toBe(0);
-        expect(mapped.rowErrors).toHaveLength(3);
+        expect(mapped.rowErrors).toHaveLength(2);
         expect(mapped.rowErrors[0].message).toMatch(/Không tìm thấy nhà số/);
         expect(mapped.rowErrors[1].message).toMatch(/Không tìm thấy loại hình kinh doanh/);
-        expect(mapped.rowErrors[2].message).toMatch(/Mã số thuế .* đã tồn tại/);
+        // Ma so thue trung khong con la loi - dong do duoc bo qua (skippedRows)
+        // thay vi chan ca file, xem ghi chu IImportJob.skippedRows.
+        expect(mapped.skippedRows).toHaveLength(1);
+        expect(mapped.skippedRows[0].message).toMatch(/Mã số thuế .* đã tồn tại/);
     });
 });
