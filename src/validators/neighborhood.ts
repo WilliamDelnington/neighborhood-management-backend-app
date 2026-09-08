@@ -63,30 +63,20 @@ export const updateNeighborhoodSchema = createNeighborhoodSchema
     .partial();
 export type UpdateNeighborhoodInput = z.infer<typeof updateNeighborhoodSchema>;
 
-// leaderUserId: null = huy gan (khong can chon nhiem ky, chi go lien ket).
-// leaderUserId co gia tri = gan moi, BAT BUOC phai kem termId - to truong
-// khong con la mot phan cong "doc lap" voi nhiem ky nua (xem
-// neighborhoodService.assignNeighborhoodLeader).
-export const assignLeaderSchema = z
-    .object({
-        leaderUserId: z.string().nullable(),
-        note: z.string().optional(),
-        termId: z.string().optional(),
-        endAt: optionalDate,
-    })
-    .refine(data => data.leaderUserId === null || !!data.termId, {
-        message: "Vui lòng chọn nhiệm kỳ đang áp dụng trước khi phân công tổ trưởng",
-        path: ["termId"],
-    });
+// leaderUserId: null = huy gan (chi go lien ket). leaderUserId co gia tri =
+// gan moi, thay the ngay lap tuc (khong con khai niem nhiem ky/khoang thoi
+// gian - xem neighborhoodService.assignNeighborhoodLeader).
+export const assignLeaderSchema = z.object({
+    leaderUserId: z.string().nullable(),
+    note: z.string().optional(),
+});
 export type AssignLeaderInput = z.infer<typeof assignLeaderSchema>;
 
 // Khac assignLeaderSchema: schema nay CHI dung cho gan moi (huy gan to pho
-// dung unassignColeaderSchema rieng ben duoi), nen termId luon bat buoc.
+// dung unassignColeaderSchema rieng ben duoi).
 export const assignColeaderSchema = z.object({
     coleaderUserId: z.string(),
     note: z.string().optional(),
-    termId: z.string().min(1, "Vui lòng chọn nhiệm kỳ đang áp dụng"),
-    endAt: optionalDate,
 });
 export type AssignColeaderInput = z.infer<typeof assignColeaderSchema>;
 
@@ -94,61 +84,6 @@ export const unassignColeaderSchema = z.object({
     coleaderUserId: z.string(),
 });
 export type UnassignColeaderInput = z.infer<typeof unassignColeaderSchema>;
-
-// "saveAsDraft" la lua chon giua 2 nut o man tao nhiem ky - KHONG phai
-// status truc tiep: true -> luon DRAFT; false/khong gui -> he thong tu tinh
-// NOT_STARTED/IN_PROGRESS (hoac ENDED neu ca khoang thoi gian da qua) dua
-// theo startAt/endAt, xem resolveTermStatusByDate trong neighborhoodService.ts.
-// leaderUserId/coleaderUserId: chi dinh to truong/to pho NGAY LUC TAO nhiem
-// ky - null/khong gui = chua chi dinh. Chi thuc su tao phan cong (goi
-// assignNeighborhoodLeader/assignNeighborhoodColeader) khi nhiem ky IN_PROGRESS
-// (ngay lap tuc neu startAt <= hom nay, hoac sau nay khi den ngay bat dau/
-// finalize) - xem ghi chu tren models/NeighborhoodTerm.ts.
-export const createNeighborhoodTermSchema = z
-    .object({
-        name: z.string().trim().min(1, "Tên nhiệm kỳ là bắt buộc"),
-        startAt: z.coerce.date(),
-        endAt: z.coerce.date(),
-        notes: z.string().trim().optional(),
-        saveAsDraft: z.boolean().default(false),
-        leaderUserId: z.string().nullable().optional(),
-        coleaderUserId: z.string().nullable().optional(),
-    })
-    .refine(value => value.endAt >= value.startAt, {
-        path: ["endAt"],
-        message: "Ngày kết thúc nhiệm kỳ phải sau ngày bắt đầu",
-    });
-export type CreateNeighborhoodTermInput = z.infer<
-    typeof createNeighborhoodTermSchema
->;
-
-// Chi sua duoc thong tin khi nhiem ky dang DRAFT hoac NOT_STARTED (kiem tra o
-// service, khong the bieu dat bang zod don thuan) - cac chuyen trang thai
-// (huy/ket thuc/xoa) dung endpoint rieng, KHONG con truong "status" o day nua
-// (khac ban cu: cho phep PATCH status tuy y, khong co state machine).
-// "finalize": CHI co y nghia khi nhiem ky dang DRAFT - true = luu thong tin
-// VA chuyen luon sang NOT_STARTED/IN_PROGRESS (nut "Tạo" khi sua mot ban
-// nhap); false/khong gui = chi luu thong tin, van la DRAFT (nut "Lưu nháp").
-export const updateNeighborhoodTermSchema = z
-    .object({
-        name: z.string().trim().min(1).optional(),
-        startAt: optionalDate,
-        endAt: optionalDate,
-        notes: z.string().trim().optional(),
-        finalize: z.boolean().optional(),
-        leaderUserId: z.string().nullable().optional(),
-        coleaderUserId: z.string().nullable().optional(),
-    });
-export type UpdateNeighborhoodTermInput = z.infer<
-    typeof updateNeighborhoodTermSchema
->;
-
-export const endNeighborhoodTermEarlySchema = z.object({
-    reason: z.string().trim().min(1, "Vui lòng nhập lý do kết thúc sớm"),
-});
-export type EndNeighborhoodTermEarlyInput = z.infer<
-    typeof endNeighborhoodTermEarlySchema
->;
 
 export const assignNeighborhoodCollaboratorSchema = z
     .object({

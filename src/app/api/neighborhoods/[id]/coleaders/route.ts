@@ -47,7 +47,6 @@ export async function POST(
             params.id,
             body.coleaderUserId,
             body.note,
-            { termId: body.termId, endAt: body.endAt },
         );
         return apiSuccess(null, "Đã gán Tổ phó thành công");
     } catch (err) {

@@ -25,7 +25,6 @@ export async function PUT(
             params.id,
             body.leaderUserId,
             body.note,
-            { termId: body.termId, endAt: body.endAt },
         );
         return apiSuccess(neighborhood, "Cập nhật tổ trưởng thành công");
     } catch (err) {

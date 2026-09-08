@@ -66,9 +66,17 @@ async function validateHeadOfHouseholdUser(userId: string): Promise<IUser> {
             422,
         );
     }
-    if (!user.roles.includes("house_owner")) {
+    // household_head la vai tro dung cho chuc nang nay (xem
+    // userService.createHouseholdHeadByOwner) - van chap nhan house_owner de
+    // tuong thich nguoc (du lieu cu chi cho phep house_owner, truoc khi
+    // household_head duoc gan dung y nghia rieng cua no - xem ke hoach
+    // "Config-Driven Account Scope System").
+    if (
+        !user.roles.includes("household_head") &&
+        !user.roles.includes("house_owner")
+    ) {
         throw new HttpError(
-            "Người dùng được chọn phải có vai trò Chủ sở hữu",
+            "Người dùng được chọn phải có vai trò Chủ hộ hoặc Chủ sở hữu",
             422,
         );
     }
@@ -276,7 +284,7 @@ export async function listHouseholds(params: {
         // To truong duoc scope theo Neighborhood, khong phai cluster - bo/thay
         // cluster/streetId query param (neu co) chi la loc bo sung, khong phai
         // co che phan quyen (khac voi nhanh cluster/streetId ben duoi).
-        Object.assign(filter, areaScopeFilter(params.actorUser));
+        Object.assign(filter, await areaScopeFilter(params.actorUser));
         if (params.streetId) filter.streetId = params.streetId;
         else if (params.cluster) filter.cluster = params.cluster;
     } else if ((params.cluster || params.streetId) && !isHouseOwnerUser) {

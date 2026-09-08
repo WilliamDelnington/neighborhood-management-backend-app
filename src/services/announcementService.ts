@@ -237,7 +237,7 @@ export async function listAnnouncements(params: {
         (params.actorUser?.roles.includes("neighborhood_leader") ||
             params.actorUser?.roles.includes("neighborhood_coleader"))
     ) {
-        Object.assign(filter, areaScopeFilter(params.actorUser));
+        Object.assign(filter, await areaScopeFilter(params.actorUser));
     }
 
     const [items, total] = await Promise.all([

@@ -52,6 +52,9 @@ export async function GET(req: Request) {
             cluster: searchParams.get("cluster") || undefined,
             streetId: searchParams.get("streetId") || undefined,
             neighborhoodId: searchParams.get("neighborhoodId") || undefined,
+            provinceCode: searchParams.get("provinceCode")
+                ? Number(searchParams.get("provinceCode"))
+                : undefined,
             wardCode: searchParams.get("wardCode")
                 ? Number(searchParams.get("wardCode"))
                 : undefined,

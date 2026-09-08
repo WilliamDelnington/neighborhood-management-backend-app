@@ -1,5 +1,8 @@
 import { Role as RoleModel, User, type IUser } from "@/models";
-import { SYSTEM_ROLE_PERMISSIONS } from "@/lib/systemRoles";
+import {
+    SYSTEM_ROLE_PERMISSIONS,
+    SYSTEM_ROLE_SCOPE_CONFIG,
+} from "@/lib/systemRoles";
 import type { Role } from "@/types";
 
 let counter = 0;
@@ -24,6 +27,7 @@ async function ensureSystemRoleDocs(roleKeys: Role[]): Promise<void> {
                         key,
                         name: key,
                         permissions: SYSTEM_ROLE_PERMISSIONS[key],
+                        ...SYSTEM_ROLE_SCOPE_CONFIG[key],
                         system: true,
                         active: true,
                     },

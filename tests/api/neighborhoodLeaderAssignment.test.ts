@@ -3,7 +3,6 @@ import {
     GET as listNeighborhoodsRoute,
     POST as createNeighborhoodRoute,
 } from "@/app/api/neighborhoods/route";
-import { POST as createTermRoute } from "@/app/api/neighborhoods/[id]/terms/route";
 import { PUT as assignLeaderRoute } from "@/app/api/neighborhoods/[id]/leader/route";
 import { GET as leaderHistoryRoute } from "@/app/api/neighborhoods/[id]/leader-history/route";
 import { Neighborhood, NeighborhoodLeaderAssignment, User } from "@/models";
@@ -31,32 +30,6 @@ async function createNeighborhood(
             }),
         ),
     );
-}
-
-// Gan to truong/to pho gio bat buoc phai kem mot nhiem ky dang IN_PROGRESS
-// (xem assignLeaderSchema/assignNeighborhoodLeader) - helper tao san nhiem ky
-// nay cho cac test chi quan tam den hanh vi gan/huy gan, khong phai ban than
-// nhiem ky. startAt o qua khu -> tu dong IN_PROGRESS (xem
-// resolveTermStatusByDate), khong con truyen status truc tiep nua.
-async function createActiveTerm(
-    headers: Record<string, string>,
-    neighborhoodId: string,
-    startAt = "2026-01-01",
-    endAt = "2028-12-31",
-) {
-    const res = await createTermRoute(
-        makeRequest(`/api/neighborhoods/${neighborhoodId}/terms`, {
-            method: "POST",
-            headers,
-            body: {
-                name: `Nhiệm kỳ ${neighborhoodId}`,
-                startAt,
-                endAt,
-            },
-        }),
-        { params: { id: neighborhoodId } },
-    );
-    return readJson(res);
 }
 
 describe("Neighborhood: tao va gan to truong", () => {
@@ -101,40 +74,16 @@ describe("Neighborhood: tao va gan to truong", () => {
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-02", 2);
         const notLeader = await createTestUser({ roles: ["house_owner"] });
-        const term = await createActiveTerm(headers, created.data._id);
 
         const res = await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${created.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(notLeader._id),
-                    termId: term.data._id,
-                },
+                body: { leaderUserId: String(notLeader._id) },
             }),
             { params: { id: created.data._id } },
         );
         expect(res.status).toBe(422);
-    });
-
-    it("tu choi gan to truong khi chua chon nhiem ky dang IN_PROGRESS", async () => {
-        const admin = await createTestUser({ roles: ["admin"] });
-        const headers = await authHeaders(admin);
-        const created = await createNeighborhood(headers, "TDP-02B", 21);
-        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-
-        const res = await assignLeaderRoute(
-            makeRequest(`/api/neighborhoods/${created.data._id}/leader`, {
-                method: "PUT",
-                headers,
-                body: { leaderUserId: String(leader._id) },
-            }),
-            { params: { id: created.data._id } },
-        );
-        expect(res.status).toBe(422);
-
-        const neighborhood = await Neighborhood.findById(created.data._id);
-        expect(neighborhood!.leaderUserId).toBeUndefined();
     });
 
     it("gan to truong: cap nhat Neighborhood.leaderUserId, User.neighborhoodId va tao lich su phan cong", async () => {
@@ -142,16 +91,12 @@ describe("Neighborhood: tao va gan to truong", () => {
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-03", 3);
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const term = await createActiveTerm(headers, created.data._id);
 
         const res = await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${created.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: term.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: created.data._id } },
         );
@@ -174,23 +119,18 @@ describe("Neighborhood: tao va gan to truong", () => {
         expect(String(activeAssignment!.leaderUserId)).toBe(String(leader._id));
     });
 
-    it("to truong dang co nhiem ky active o to khac, trung thoi gian -> tu choi gan (409), khong tu dong chuyen", async () => {
+    it("to truong dang lam to truong o to khac -> tu dong chuyen (khong con khai niem nhiem ky de tu choi)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const neighborhoodA = await createNeighborhood(headers, "TDP-04", 4);
         const neighborhoodB = await createNeighborhood(headers, "TDP-05", 5);
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const termA = await createActiveTerm(headers, neighborhoodA.data._id);
-        const termB = await createActiveTerm(headers, neighborhoodB.data._id);
 
         await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodA.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: termA.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: neighborhoodA.data._id } },
         );
@@ -199,46 +139,35 @@ describe("Neighborhood: tao va gan to truong", () => {
             makeRequest(`/api/neighborhoods/${neighborhoodB.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: termB.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: neighborhoodB.data._id } },
         );
-        expect(res.status).toBe(409);
+        expect(res.status).toBe(200);
 
         const oldNeighborhood = await Neighborhood.findById(neighborhoodA.data._id);
-        expect(String(oldNeighborhood!.leaderUserId)).toBe(String(leader._id));
+        expect(oldNeighborhood!.leaderUserId).toBeUndefined();
 
         const newNeighborhood = await Neighborhood.findById(neighborhoodB.data._id);
-        expect(newNeighborhood!.leaderUserId).toBeUndefined();
-    });
+        expect(String(newNeighborhood!.leaderUserId)).toBe(String(leader._id));
 
-    // Luu y: khong the dung route gan truc tiep (PUT .../leader) de test truong
-    // hop "khong trung thoi gian van cung ton tai" - vi route nay doi hoi ca
-    // hai nhiem ky dang IN_PROGRESS CUNG LUC (status IN_PROGRESS nghia la
-    // startAt <= hien tai <= endAt), ma hai khoang thoi gian nao cung chua
-    // "hien tai" thi chac chan giao nhau. Truong hop "khong trung thoi gian"
-    // chi xay ra khi nhiem ky thu hai con o tuong lai (NOT_STARTED) va chi
-    // duoc CHI DINH (khong gan truc tiep) - xem
-    // tests/api/neighborhoodTermOverlap.test.ts.
+        const oldAssignment = await NeighborhoodLeaderAssignment.findOne({
+            neighborhoodId: neighborhoodA.data._id,
+        });
+        expect(oldAssignment?.unassignedAt).toBeDefined();
+    });
 
     it("go gan to truong (leaderUserId=null): dong phan cong, xoa lien ket user", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-06", 6);
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const term = await createActiveTerm(headers, created.data._id);
 
         await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${created.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: term.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: created.data._id } },
         );
@@ -277,16 +206,12 @@ describe("Neighborhood: tao va gan to truong", () => {
         const neighborhoodA = await createNeighborhood(headers, "TDP-07", 7);
         await createNeighborhood(headers, "TDP-08", 8);
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
-        const term = await createActiveTerm(headers, neighborhoodA.data._id);
 
         await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodA.data._id}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: term.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: neighborhoodA.data._id } },
         );

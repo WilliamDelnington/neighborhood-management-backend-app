@@ -251,7 +251,7 @@ async function appointmentScopeFilter(
         actorUser.roles.includes("neighborhood_leader") ||
         actorUser.roles.includes("neighborhood_coleader")
     ) {
-        return areaScopeFilter(actorUser);
+        return await areaScopeFilter(actorUser);
     }
     return wardScopeFilter(actorUser, "neighborhoodId");
 }
