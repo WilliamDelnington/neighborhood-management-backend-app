@@ -573,6 +573,7 @@ export async function listComplaints(params: {
     category?: string;
     search?: string;
     relatedAssetId?: string;
+    neighborhoodId?: string;
     allowedCategories?: string[] | null;
     actorUser: IUser;
     canReadEscalated: boolean;
@@ -581,6 +582,9 @@ export async function listComplaints(params: {
     if (params.status) clauses.push({ status: params.status });
     if (params.relatedAssetId) {
         clauses.push({ relatedAssetId: params.relatedAssetId });
+    }
+    if (params.neighborhoodId) {
+        clauses.push({ neighborhoodId: params.neighborhoodId });
     }
     if (params.allowedCategories) {
         const categories = params.category
@@ -609,7 +613,8 @@ export async function listComplaints(params: {
             .limit(params.limit)
             .populate("createdByUserId", "displayName phone")
             .populate("assigneeId", "displayName")
-            .populate("targetHouseId", "code address"),
+            .populate("targetHouseId", "code address")
+            .populate("neighborhoodId", "name code"),
         Complaint.countDocuments(filter),
     ]);
     return {
