@@ -4,6 +4,31 @@ export const APPOINTMENT_SERVICE_SCOPES = ["ward", "neighborhood"] as const;
 export type AppointmentServiceScope =
     (typeof APPOINTMENT_SERVICE_SCOPES)[number];
 
+// Nha so co bat buoc de dat lich hay khong: "none" - dich vu khong gan voi
+// nha so nao (an luon buoc chon nha o form dat lich), "optional" - cho phep
+// dat khong can nha, "required" - bat buoc chon nha (hanh vi mac dinh, giu
+// nguyen tuong thich nguoc voi cac dich vu da tao truoc khi co truong nay).
+export const APPOINTMENT_HOUSE_REQUIREMENTS = [
+    "none",
+    "optional",
+    "required",
+] as const;
+export type AppointmentHouseRequirement =
+    (typeof APPOINTMENT_HOUSE_REQUIREMENTS)[number];
+
+// Ap dung KHI co nha so duoc chon (houseRequirement != "none" va co houseId):
+// "any" - khong kiem tra trang thai/pham vi, "in_scope" - nha phai thuoc pham
+// vi cua dich vu (cung to dan pho neu scope="neighborhood", cung phuong/xa
+// neu scope="ward"), "verified" - nha phai o trang thai da xac thuc (hanh vi
+// mac dinh, giu nguyen tuong thich nguoc - xem resolveBookingSubject cu).
+export const APPOINTMENT_HOUSE_STATUS_REQUIREMENTS = [
+    "any",
+    "in_scope",
+    "verified",
+] as const;
+export type AppointmentHouseStatusRequirement =
+    (typeof APPOINTMENT_HOUSE_STATUS_REQUIREMENTS)[number];
+
 // Khung gio trong tuan cua mot dich vu - gioi han theo THU (dayOfWeek, 1=Thu
 // Hai...7=Chu Nhat, quy uoc ISO 8601), khong theo ngay cu the: cung mot khung
 // gio ap dung lap lai hang tuan, so cho (bookedCount) cho tung NGAY cu the
@@ -30,6 +55,8 @@ export interface IAppointmentService extends Document {
     wardCode?: number;
     wardName?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
+    houseRequirement: AppointmentHouseRequirement;
+    houseStatusRequirement: AppointmentHouseStatusRequirement;
     slotDurationMinutes: number;
     autoApprove: boolean;
     // Danh sach can bo duoc phan cong phu trach RIENG dich vu nay - chi nhung
@@ -75,6 +102,16 @@ const AppointmentServiceSchema = new Schema<IAppointmentService>(
             type: Schema.Types.ObjectId,
             ref: "Neighborhood",
             index: true,
+        },
+        houseRequirement: {
+            type: String,
+            enum: APPOINTMENT_HOUSE_REQUIREMENTS,
+            default: "required",
+        },
+        houseStatusRequirement: {
+            type: String,
+            enum: APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
+            default: "verified",
         },
         slotDurationMinutes: { type: Number, default: 30, min: 5 },
         autoApprove: { type: Boolean, default: true },

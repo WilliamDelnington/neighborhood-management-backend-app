@@ -14,7 +14,10 @@ const dateOnlySchema = z
 export const createAppointmentSchema = z
     .object({
         serviceId: z.string().min(1, "Thiếu dịch vụ"),
-        houseId: z.string().min(1, "Thiếu nhà số"),
+        // "Thieu nha so" khi dich vu bat buoc chon nha duoc kiem tra o
+        // createAppointment (phu thuoc AppointmentService.houseRequirement),
+        // khong the kiem tra thuan hinh thuc o day.
+        houseId: z.string().optional(),
         timeSlotId: z.string().min(1, "Thiếu khung giờ"),
         appointedDate: dateOnlySchema,
         note: z.string().trim().max(1000).optional(),

@@ -1,5 +1,8 @@
 import { Role as RoleModel, User, type IUser } from "@/models";
-import { SYSTEM_ROLE_PERMISSIONS } from "@/lib/systemRoles";
+import {
+    SYSTEM_ROLE_PERMISSIONS,
+    SYSTEM_ROLE_SCOPE_CONFIG,
+} from "@/lib/systemRoles";
 import type { Role } from "@/types";
 
 let counter = 0;
@@ -24,6 +27,7 @@ async function ensureSystemRoleDocs(roleKeys: Role[]): Promise<void> {
                         key,
                         name: key,
                         permissions: SYSTEM_ROLE_PERMISSIONS[key],
+                        ...SYSTEM_ROLE_SCOPE_CONFIG[key],
                         system: true,
                         active: true,
                     },
@@ -95,4 +99,32 @@ export function makeRequest(
 
 export async function readJson<T = any>(res: Response): Promise<T> {
     return res.json();
+}
+
+/**
+ * Cac ham commitXImport gio chay xu ly thuc su (ghi DB) o background (khong
+ * await) va tra ve ngay voi status="committing" de client bat dau polling
+ * tien do - xem processHouseImportRows/... o importService.ts. Test can cho
+ * den khi job "on dinh" (khong con "committing") truoc khi kiem tra ket qua
+ * cuoi cung, giong nhu frontend se polling qua GET /api/import/jobs/:id.
+ */
+export async function waitForImportJobSettled(
+    jobId: string,
+    timeoutMs = 5000,
+): Promise<any> {
+    const { getImportJobById } = await import("@/services/importService");
+    const start = Date.now();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const job = await getImportJobById(jobId);
+        if (job.status !== "committing") return job;
+        if (Date.now() - start > timeoutMs) {
+            throw new Error(
+                `Import job ${jobId} không ổn định sau ${timeoutMs}ms (vẫn "committing")`,
+            );
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
 }

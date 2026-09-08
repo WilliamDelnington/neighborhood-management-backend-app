@@ -40,3 +40,10 @@ export const loginRateLimiter = createRateLimiter(5, 15 * 60 * 1000);
 // hon, khong mat khi restart process) - xem services/otpService.ts.
 export const otpRequestRateLimiter = createRateLimiter(3, 10 * 60 * 1000);
 export const otpVerifyRateLimiter = createRateLimiter(10, 10 * 60 * 1000);
+
+// Gioi han so lan gui yeu cau dat lai mat khau (public, khong dang nhap) theo
+// tung so dien thoai - chong spam lam day danh sach cho nhan vien xu ly.
+export const passwordResetRequestRateLimiter = createRateLimiter(
+    3,
+    60 * 60 * 1000,
+);

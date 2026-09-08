@@ -20,7 +20,7 @@ async function setupAdminWithHousehold() {
     return { admin, headers, household };
 }
 
-describe("Ma hoa va che sdt/cccd cua Citizen", () => {
+describe("Ma hoa sdt/cccd cua Citizen (luu tru ma hoa, tra ve day du qua API)", () => {
     it("luu phone/cccd da ma hoa AES-256-GCM trong DB, khong luu plaintext", async () => {
         const { headers, household } = await setupAdminWithHousehold();
 
@@ -51,7 +51,7 @@ describe("Ma hoa va che sdt/cccd cua Citizen", () => {
         expect(typeof rawDoc!.cccdHash).toBe("string");
     });
 
-    it("che phone/cccd trong JSON response cua API, chi giu lai vai ky tu cuoi", async () => {
+    it("tra ve day du phone/cccd (da giai ma) trong JSON response cua API, khong tra ve hash noi bo", async () => {
         const { headers, household } = await setupAdminWithHousehold();
 
         const res = await createCitizenRoute(
@@ -68,8 +68,8 @@ describe("Ma hoa va che sdt/cccd cua Citizen", () => {
         );
         const created = (await readJson(res)).data;
 
-        expect(created.phone).toBe("*******678");
-        expect(created.cccd).toBe("********8910");
+        expect(created.phone).toBe("0912345678");
+        expect(created.cccd).toBe("012345678910");
         expect(created.phoneHash).toBeUndefined();
         expect(created.cccdHash).toBeUndefined();
     });

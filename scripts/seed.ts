@@ -122,7 +122,10 @@ let resolveStreetForCluster: typeof import("@/lib/streetSync").resolveStreetForC
 // (admin web) chan truy cap vi thieu neighborhoodId.
 let assignNeighborhoodLeader: typeof import("../src/services/neighborhoodService").assignNeighborhoodLeader;
 
-import { SYSTEM_ROLE_PERMISSIONS } from "../src/lib/systemRoles";
+import {
+    SYSTEM_ROLE_PERMISSIONS,
+    SYSTEM_ROLE_SCOPE_CONFIG,
+} from "../src/lib/systemRoles";
 import { ROLE_LABEL } from "../src/types";
 
 // Anh xa cum dan cu tu do (du lieu mau cu) sang so thu tu to dan pho chinh
@@ -171,6 +174,7 @@ async function seedRoles(actorId: string) {
             key,
             name: ROLE_LABEL[key] || key,
             permissions: SYSTEM_ROLE_PERMISSIONS[key],
+            ...SYSTEM_ROLE_SCOPE_CONFIG[key],
             system: true,
             active: true,
             sortOrder: index,

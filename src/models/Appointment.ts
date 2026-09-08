@@ -22,7 +22,9 @@ export interface IAppointment extends Document {
     // mot ref rieng (khong co collection rieng cho time slot, xem
     // AppointmentService.ts).
     timeSlotId: mongoose.Types.ObjectId;
-    houseId: mongoose.Types.ObjectId;
+    // Rong khi dich vu co houseRequirement="none" (khong gan nha) hoac
+    // "optional" va nguoi dat khong chon nha - xem AppointmentService.
+    houseId?: mongoose.Types.ObjectId;
     // Tuy chon: rong khi day la lich dat HO mot cong dan khong co tai khoan
     // (proxy booking, chi to truong/to pho moi duoc dat theo cach nay) - luc
     // do bat buoc phai co proxyName+proxyPhone (xem validators/appointment.ts
@@ -85,7 +87,6 @@ const AppointmentSchema = new Schema<IAppointment>(
         houseId: {
             type: Schema.Types.ObjectId,
             ref: "House",
-            required: true,
             index: true,
         },
         citizenUserId: {

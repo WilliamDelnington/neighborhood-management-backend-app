@@ -74,6 +74,10 @@ export {
     default as SupportTicket,
     type ISupportTicket,
 } from "./SupportTicket";
+export {
+    default as PasswordResetRequest,
+    type IPasswordResetRequest,
+} from "./PasswordResetRequest";
 export { default as Announcement, type IAnnouncement } from "./Announcement";
 export { default as News, type INews } from "./News";
 export {
@@ -150,10 +154,6 @@ export {
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
 export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
 export {
-    default as NeighborhoodTerm,
-    type INeighborhoodTerm,
-} from "./NeighborhoodTerm";
-export {
     default as NeighborhoodHistory,
     type INeighborhoodHistory,
 } from "./NeighborhoodHistory";
@@ -170,6 +170,10 @@ export {
     default as NeighborhoodCollaboratorAssignment,
     type INeighborhoodCollaboratorAssignment,
 } from "./NeighborhoodCollaboratorAssignment";
+export {
+    default as ScopeAssignment,
+    type IScopeAssignment,
+} from "./ScopeAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
 export {
@@ -222,7 +226,11 @@ export {
     type IAppointmentService,
     type IAppointmentTimeSlot,
     type AppointmentServiceScope,
+    type AppointmentHouseRequirement,
+    type AppointmentHouseStatusRequirement,
     APPOINTMENT_SERVICE_SCOPES,
+    APPOINTMENT_HOUSE_REQUIREMENTS,
+    APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
 } from "./AppointmentService";
 export {
     default as Appointment,

@@ -361,7 +361,7 @@ async function houseRecordScopeFilter(
         const houseIds = await getHouseIdsForActingOwner(user._id);
         return { _id: { $in: houseIds } };
     }
-    return areaScopeFilter(user);
+    return await areaScopeFilter(user);
 }
 
 /**
@@ -427,6 +427,41 @@ function resolveAdministrativeDivisions(
  */
 export async function getOwnedHouseRecordIds(userId: unknown) {
     return getHouseIdsForActingOwner(userId);
+}
+
+/**
+ * Kiem tra tai khoan duoc chon lam nguoi dai dien Ho kinh doanh/Cong ty
+ * (Business/Company.representativeUserId) hop le - dang hoat dong VA co dung
+ * vai tro yeu cau (business_representative/company_representative), chap
+ * nhan house_owner de tuong thich nguoc (truoc khi 2 vai tro dai dien nay
+ * duoc tach rieng, representativeUserId khong doi hoi vai tro gi ca - xem ke
+ * hoach "Config-Driven Account Scope System"). Dung chung boi
+ * businessService.ts/companyService.ts, ten vai tro hien thi trong thong bao
+ * loi duoc truyen vao de rieng cho tung loai.
+ */
+export async function validateRepresentativeUser(
+    userId: string,
+    requiredRoleKey: "business_representative" | "company_representative",
+    requiredRoleLabel: string,
+): Promise<IUser> {
+    const user = await User.findById(userId);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
+    if (user.status !== "active") {
+        throw new HttpError(
+            "Chỉ có thể gán tài khoản đang hoạt động làm người đại diện",
+            422,
+        );
+    }
+    if (
+        !user.roles.includes(requiredRoleKey) &&
+        !user.roles.includes("house_owner")
+    ) {
+        throw new HttpError(
+            `Người dùng được chọn phải có vai trò ${requiredRoleLabel} hoặc Chủ sở hữu`,
+            422,
+        );
+    }
+    return user;
 }
 
 /**
@@ -724,6 +759,7 @@ export async function listHouseRecords(params: {
     cluster?: string;
     streetId?: string;
     neighborhoodId?: string;
+    provinceCode?: number;
     wardCode?: number;
     status?: HouseRecordStatus | HouseRecordStatus[];
     actorUser: IUser;
@@ -756,7 +792,7 @@ export async function listHouseRecords(params: {
     // nha trong to dan pho ho phu trach - khong the bo mot phia, vi khong co
     // man hinh nao khac de xem phia con lai.
     if (isNeighborhoodLeader) {
-        const neighborhoodFilter = areaScopeFilter(params.actorUser);
+        const neighborhoodFilter = await areaScopeFilter(params.actorUser);
         if (isHouseOwnerUser) {
             const ownedHouseIds = await getHouseIdsForActingOwner(
                 params.actorUser._id,
@@ -797,9 +833,12 @@ export async function listHouseRecords(params: {
         filter.neighborhoodId = params.neighborhoodId;
     }
 
-    // Phuong/xa - loc doc lap (AND), khong gan voi RBAC/pham vi nao (khac
-    // cluster/neighborhoodId ben tren) - chi phuc vu tim kiem/loc danh sach
-    // khi ung dung quan ly nhieu phuong/xa cung luc.
+    // Tinh/thanh pho va Phuong/xa - loc doc lap (AND), khong gan voi
+    // RBAC/pham vi nao (khac cluster/neighborhoodId ben tren) - chi phuc vu
+    // tim kiem/loc danh sach khi ung dung quan ly nhieu tinh/phuong cung luc.
+    if (params.provinceCode) {
+        filter.provinceCode = params.provinceCode;
+    }
     if (params.wardCode) {
         filter.wardCode = params.wardCode;
     }

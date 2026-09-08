@@ -37,6 +37,7 @@ export async function GET(req: Request) {
             limit,
             search: searchParams.get("search") || undefined,
             householdId: searchParams.get("householdId") || undefined,
+            neighborhoodId: searchParams.get("neighborhoodId") || undefined,
             actorUser: user,
         });
         return apiSuccess(result);

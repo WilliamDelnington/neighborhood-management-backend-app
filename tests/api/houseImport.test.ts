@@ -4,7 +4,13 @@ import { POST as uploadRoute } from "@/app/api/import/houses/route";
 import { PUT as mappingRoute } from "@/app/api/import/houses/[jobId]/mapping/route";
 import { POST as commitRoute } from "@/app/api/import/houses/[jobId]/commit/route";
 import { HouseRecord, User } from "@/models";
-import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
+import {
+    createTestUser,
+    authHeaders,
+    makeRequest,
+    readJson,
+    waitForImportJobSettled,
+} from "../helpers";
 
 async function buildWorkbookFile(
     headers: string[],
@@ -62,7 +68,13 @@ async function commit(adminHeaders: Record<string, string>, jobId: string) {
         }),
         { params: { jobId } },
     );
-    return { res, json: await readJson(res) };
+    const initialJson = await readJson(res);
+    // Commit gio chay background (xem processHouseImportRows) - cho den khi
+    // job on dinh truoc khi tra ket qua cuoi cung cho test kiem tra.
+    const settled = initialJson.data
+        ? await waitForImportJobSettled(jobId)
+        : initialJson.data;
+    return { res, json: { ...initialJson, data: settled || initialJson.data } };
 }
 
 // Header "la" cua he thong - dung de kiem tra goi y mapping tu dong khop.

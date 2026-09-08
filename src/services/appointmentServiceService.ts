@@ -126,6 +126,8 @@ export async function createAppointmentService(
         wardCode,
         wardName,
         neighborhoodId,
+        houseRequirement: input.houseRequirement,
+        houseStatusRequirement: input.houseStatusRequirement,
         slotDurationMinutes: input.slotDurationMinutes,
         autoApprove: input.autoApprove,
         assignedOfficerUserIds: input.assignedOfficerUserIds,

@@ -33,6 +33,8 @@ export type PermissionKey = string;
 export const ROLE_LABEL: Record<string, string> = {
     house_owner: "Chủ sở hữu",
     household_head: "Chủ hộ",
+    business_representative: "Đại diện hộ kinh doanh",
+    company_representative: "Đại diện công ty/doanh nghiệp",
     neighborhood_leader: "Tổ trưởng",
     neighborhood_coleader: "Tổ phó",
     neighborhood_collaborator: "Cộng tác viên Tổ dân phố",
@@ -536,6 +538,29 @@ export const TRANG_THAI_YEU_CAU_HO_TRO_LABEL: Record<
 };
 
 // ---------------------------------------------------------------------------
+// Yeu cau dat lai mat khau (public, khong dang nhap - nguoi dung quen mat
+// khau nen khong the goi cac API can requireUser). Chi 3 trang thai, khong
+// can "can_bo_sung" nhu SupportTicket vi khong co qua lai voi nguoi gui - nhan
+// vien tu xu ly (goi dien xac minh roi dat lai mat khau qua man Nguoi dung)
+// roi danh dau lai o day.
+// ---------------------------------------------------------------------------
+export const TRANG_THAI_YEU_CAU_DAT_LAI_MAT_KHAU = [
+    "moi",
+    "da_xu_ly",
+    "dong",
+] as const;
+export type TrangThaiYeuCauDatLaiMatKhau =
+    typeof TRANG_THAI_YEU_CAU_DAT_LAI_MAT_KHAU[number];
+export const TRANG_THAI_YEU_CAU_DAT_LAI_MAT_KHAU_LABEL: Record<
+    TrangThaiYeuCauDatLaiMatKhau,
+    string
+> = {
+    moi: "Mới",
+    da_xu_ly: "Đã xử lý",
+    dong: "Đóng",
+};
+
+// ---------------------------------------------------------------------------
 // PCCC
 // ---------------------------------------------------------------------------
 export const MUC_NGUY_CO_PCCC = ["xanh", "vang", "do"] as const;
@@ -795,6 +820,7 @@ export const IMPORT_JOB_STATUS = [
     "awaiting_mapping",
     "previewing",
     "validated",
+    "committing",
     "committed",
     "failed",
 ] as const;

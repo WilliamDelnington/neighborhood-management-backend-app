@@ -1,4 +1,7 @@
 import {
+    Business,
+    Company,
+    Household,
     HouseRecord,
     Role as RoleModel,
     RoleAssignment,
@@ -10,11 +13,15 @@ import { HttpError } from "@/lib/response";
 import { hashPassword } from "@/lib/auth";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
-import { getActingOwnerUserIdsForHouses } from "@/services/houseOwnershipService";
+import {
+    getActingOwnerUserIdsForHouses,
+    getHouseIdsForActingOwner,
+} from "@/services/houseOwnershipService";
 import {
     ACCOUNT_CREATION_RESERVED_ROLE_KEYS,
     type AssignRoleInput,
     type CreateHouseOwnerInput,
+    type CreateOwnerManagedAccountInput,
     type LockUserStatusInput,
     type ResetUserPasswordInput,
     type UpdateUserInput,
@@ -253,11 +260,14 @@ export async function createHouseOwnerByStaff(
             address: input.address,
             idNumber: input.idNumber,
             passwordHash,
-            // Mat khau nay do nhan vien dat thay - bat buoc doi ngay lan
-            // dang nhap dau tien (xem User.mustChangePassword va ghi chu
-            // tuong tu o houseRecordService.resolveOrCreateHouseOwner). Chi
-            // bat khi thuc su co dat mat khau.
-            mustChangePassword: !!passwordHash,
+            // Mat khau nay do nhan vien dat thay - bat buoc doi ngay lan dang
+            // nhap dau tien (xem User.mustChangePassword va ghi chu tuong tu
+            // o houseRecordService.resolveOrCreateHouseOwner). CHI ap dung
+            // cho house_owner (dang nhap resident-web-app/mini app) - cac
+            // vai tro nhan vien/quan tri (dang nhap admin-web-app) khong bi
+            // buoc doi mat khau lan dau, du admin/to truong co dat san mat
+            // khau khi tao tai khoan thay.
+            mustChangePassword: role === "house_owner" && !!passwordHash,
             roles: [role],
             primaryRole: role,
             status: "active",
@@ -276,6 +286,216 @@ export async function createHouseOwnerByStaff(
         targetModel: "User",
         targetId: user._id,
         metadata: { role },
+    });
+
+    return sanitizeUser(user);
+}
+
+/**
+ * Chu nha (house_owner) tu tao tai khoan chu ho cho MOT ho dan cu the ma minh
+ * dang so huu (truc tiep hoac qua nha to chuc dai dien) - mot buoc "tao +
+ * gan" (khac createHouseOwnerByStaff: to truong tao roi lien ket rieng qua
+ * man Tổ dân phố sau). household_head bi liet ke trong
+ * ACCOUNT_CREATION_RESERVED_ROLE_KEYS (khong xuat hien trong "Tạo tài khoản"
+ * o admin-web-app) - ham nay la duong duy nhat de mot tai khoan household_head
+ * thuc su duoc tao ra (thay vi chi gan household_head len mot tai khoan da co
+ * san qua man Ho dan, xem householdService.validateHeadOfHouseholdUser).
+ */
+export async function createHouseholdHeadByOwner(
+    actorUser: IUser,
+    householdId: string,
+    input: CreateOwnerManagedAccountInput,
+) {
+    const household = await Household.findById(householdId);
+    if (!household) throw new HttpError("Không tìm thấy hộ dân", 404);
+    if (household.headOfHouseholdUserId) {
+        throw new HttpError("Hộ dân này đã có tài khoản chủ hộ", 409);
+    }
+    if (!household.houseId) {
+        throw new HttpError(
+            "Hộ dân chưa gắn với Nhà số nào, không thể tạo tài khoản chủ hộ",
+            422,
+        );
+    }
+    const ownedHouseIds = await getHouseIdsForActingOwner(actorUser._id);
+    if (!ownedHouseIds.some(houseId => String(houseId) === String(household.houseId))) {
+        throw new HttpError(
+            "Bạn không có quyền tạo tài khoản chủ hộ cho hộ dân này",
+            403,
+        );
+    }
+
+    const existing = await User.findOne({ phone: input.phone });
+    if (existing) throw new HttpError("Số điện thoại đã được sử dụng", 409);
+
+    const passwordHash = input.password
+        ? await hashPassword(input.password)
+        : undefined;
+
+    let user: IUser;
+    try {
+        user = await User.create({
+            phone: input.phone,
+            displayName: input.displayName,
+            address: input.address,
+            idNumber: input.idNumber,
+            passwordHash,
+            mustChangePassword: !!passwordHash,
+            roles: ["household_head"],
+            primaryRole: "household_head",
+            status: "active",
+            householdId: household._id,
+            createdBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
+        }
+        throw err;
+    }
+
+    household.headOfHouseholdUserId = user._id as any;
+    household.headOfHousehold = user.displayName;
+    household.updatedBy = actorUser._id as any;
+    await household.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.create_household_head",
+        targetModel: "User",
+        targetId: user._id,
+        metadata: { householdId },
+    });
+
+    return sanitizeUser(user);
+}
+
+/**
+ * Chu nha tu tao tai khoan dai dien cho MOT ho kinh doanh cu the ma minh dang
+ * so huu - cung mo hinh voi createHouseholdHeadByOwner. business_representative
+ * la vai tro moi (khac REQUEST_HOUSE_ROLES."business_head" - do chi la nhan
+ * dinh tuyen yeu cau, khong lien quan den vai tro he thong nay).
+ */
+export async function createBusinessRepresentativeByOwner(
+    actorUser: IUser,
+    businessId: string,
+    input: CreateOwnerManagedAccountInput,
+) {
+    const business = await Business.findById(businessId);
+    if (!business) throw new HttpError("Không tìm thấy hộ kinh doanh", 404);
+    if (business.representativeUserId) {
+        throw new HttpError("Hộ kinh doanh này đã có người đại diện", 409);
+    }
+    const ownedHouseIds = await getHouseIdsForActingOwner(actorUser._id);
+    if (!ownedHouseIds.some(houseId => String(houseId) === String(business.houseId))) {
+        throw new HttpError(
+            "Bạn không có quyền tạo tài khoản đại diện cho hộ kinh doanh này",
+            403,
+        );
+    }
+
+    const existing = await User.findOne({ phone: input.phone });
+    if (existing) throw new HttpError("Số điện thoại đã được sử dụng", 409);
+
+    const passwordHash = input.password
+        ? await hashPassword(input.password)
+        : undefined;
+
+    let user: IUser;
+    try {
+        user = await User.create({
+            phone: input.phone,
+            displayName: input.displayName,
+            address: input.address,
+            idNumber: input.idNumber,
+            passwordHash,
+            mustChangePassword: !!passwordHash,
+            roles: ["business_representative"],
+            primaryRole: "business_representative",
+            status: "active",
+            createdBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
+        }
+        throw err;
+    }
+
+    business.representativeUserId = user._id as any;
+    business.updatedBy = actorUser._id as any;
+    await business.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.create_business_representative",
+        targetModel: "User",
+        targetId: user._id,
+        metadata: { businessId },
+    });
+
+    return sanitizeUser(user);
+}
+
+/**
+ * Nhu createBusinessRepresentativeByOwner, ap dung cho Company thay vi Business.
+ */
+export async function createCompanyRepresentativeByOwner(
+    actorUser: IUser,
+    companyId: string,
+    input: CreateOwnerManagedAccountInput,
+) {
+    const company = await Company.findById(companyId);
+    if (!company) throw new HttpError("Không tìm thấy công ty", 404);
+    if (company.representativeUserId) {
+        throw new HttpError("Công ty này đã có người đại diện", 409);
+    }
+    const ownedHouseIds = await getHouseIdsForActingOwner(actorUser._id);
+    if (!ownedHouseIds.some(houseId => String(houseId) === String(company.houseId))) {
+        throw new HttpError(
+            "Bạn không có quyền tạo tài khoản đại diện cho công ty này",
+            403,
+        );
+    }
+
+    const existing = await User.findOne({ phone: input.phone });
+    if (existing) throw new HttpError("Số điện thoại đã được sử dụng", 409);
+
+    const passwordHash = input.password
+        ? await hashPassword(input.password)
+        : undefined;
+
+    let user: IUser;
+    try {
+        user = await User.create({
+            phone: input.phone,
+            displayName: input.displayName,
+            address: input.address,
+            idNumber: input.idNumber,
+            passwordHash,
+            mustChangePassword: !!passwordHash,
+            roles: ["company_representative"],
+            primaryRole: "company_representative",
+            status: "active",
+            createdBy: actorUser._id,
+        });
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError("Số điện thoại đã được sử dụng", 409);
+        }
+        throw err;
+    }
+
+    company.representativeUserId = user._id as any;
+    company.updatedBy = actorUser._id as any;
+    await company.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.create_company_representative",
+        targetModel: "User",
+        targetId: user._id,
+        metadata: { companyId },
     });
 
     return sanitizeUser(user);
@@ -392,8 +612,12 @@ export async function resetUserPasswordByAdmin(
     target.passwordHash = await hashPassword(input.password);
     // Mat khau nay do admin/to truong dat thay, khong phai chinh chu tai
     // khoan tu chon - bat buoc doi ngay lan dang nhap ke tiep (xem
-    // User.mustChangePassword).
-    target.mustChangePassword = true;
+    // User.mustChangePassword). CHI ap dung cho house_owner, cung quy uoc
+    // voi createHouseOwnerByStaff - nhan vien/quan tri dang nhap
+    // admin-web-app khong bi buoc doi mat khau lan dau. Gan tuong minh (khong
+    // chi bat khi true) de lan dat lai mat khau nay cung tu sua duoc tai
+    // khoan nhan vien lo bi bat nham flag nay truoc khi co quy uoc nay.
+    target.mustChangePassword = target.roles.includes("house_owner");
     target.sessionVersion += 1;
     target.updatedBy = actorUser._id as any;
     await target.save();

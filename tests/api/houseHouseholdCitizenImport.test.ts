@@ -11,7 +11,7 @@ import {
     type HouseColumnMapping,
     type CitizenColumnMapping,
 } from "@/services/importService";
-import { createTestUser } from "../helpers";
+import { createTestUser, waitForImportJobSettled } from "../helpers";
 
 /**
  * Kiem tra tuy chon "createHouseholds" moi cua Import nha so (tao them
@@ -56,7 +56,8 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const mapped = await applyHouseImportMapping(String(uploaded._id), mapping);
         expect(mapped.rowErrors).toHaveLength(0);
 
-        const committed = await commitHouseImport(admin, String(mapped._id));
+        await commitHouseImport(admin, String(mapped._id));
+        const committed = await waitForImportJobSettled(String(mapped._id));
         expect(committed.status).toBe("committed");
         expect(committed.committedCount).toBe(2);
 
@@ -123,6 +124,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         });
         expect(mapped.rowErrors).toHaveLength(0);
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
 
         // Van chi co 1 Household (khong tao trung ban thu hai).
         expect(await Household.countDocuments({ houseId: house._id })).toBe(1);
@@ -179,6 +181,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
             createHouseholds: true,
         });
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
 
         const citizens = await Citizen.find({ householdId: household._id });
         expect(citizens).toHaveLength(1); // khong them ban thu hai
@@ -200,6 +203,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
             headOfHousehold: "Chủ hộ",
         });
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
 
         const house = await HouseRecord.findOne({ code: "B06-L02" });
         const household = await Household.findOne({ houseId: house!._id });
@@ -227,6 +231,7 @@ describe("Import nhà số kèm mật khẩu mặc định cho chủ nhà mới 
         const mapped = await applyHouseImportMapping(String(uploaded._id), mapping);
         expect(mapped.rowErrors).toHaveLength(0);
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
 
         const owner = await User.findOne({ phone: "0966000111" }).select("+passwordHash");
         expect(owner).not.toBeNull();
@@ -250,6 +255,7 @@ describe("Import nhà số kèm mật khẩu mặc định cho chủ nhà mới 
             ownerPhone: "SĐT chủ sở hữu",
         });
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
 
         const owner = await User.findOne({ phone: "0966000222" }).select("+passwordHash");
         expect(owner).not.toBeNull();
@@ -275,6 +281,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
             subZone: "Phân khu/dãy",
         });
         await commitHouseImport(admin, String(firstMapped._id));
+        await waitForImportJobSettled(String(firstMapped._id));
         const beforeCount = await HouseRecord.countDocuments({ code: "H01-L19" });
         expect(beforeCount).toBe(1);
 
@@ -295,7 +302,8 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         expect(secondMapped.rowErrors).toHaveLength(0);
         expect(secondMapped.validRows).toBe(1);
 
-        const committed = await commitHouseImport(admin, String(secondMapped._id));
+        await commitHouseImport(admin, String(secondMapped._id));
+        const committed = await waitForImportJobSettled(String(secondMapped._id));
         expect(committed.committedCount).toBe(1);
 
         const afterCount = await HouseRecord.countDocuments({ code: "H01-L19" });
@@ -322,6 +330,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
             note: "Ghi chú",
         });
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
         const house = await HouseRecord.findOne({ code: "H01-L24" });
         house!.status = "verified";
         await house!.save();
@@ -341,6 +350,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         });
         expect(reMapped.rowErrors).toHaveLength(0);
         await commitHouseImport(admin, String(reMapped._id));
+        await waitForImportJobSettled(String(reMapped._id));
 
         const refreshed = await HouseRecord.findOne({ code: "H01-L24" });
         // note van la ghi chu goc - khong bi ghi de, va cung khong bi ghi de
@@ -367,6 +377,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
             createHouseholds: true,
         });
         await commitHouseImport(admin, String(firstMapped._id));
+        await waitForImportJobSettled(String(firstMapped._id));
         expect(await Household.countDocuments({})).toBe(1);
         const householdBefore = await Household.findOne({});
         expect(householdBefore!.phone).toBeUndefined();
@@ -387,6 +398,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
             createHouseholds: true,
         });
         await commitHouseImport(admin, String(secondMapped._id));
+        await waitForImportJobSettled(String(secondMapped._id));
 
         expect(await Household.countDocuments({})).toBe(1); // van chi co 1
         const householdAfter = await Household.findOne({});
@@ -411,6 +423,7 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
             createHouseholds: true,
         });
         await commitHouseImport(admin, String(mapped._id));
+        await waitForImportJobSettled(String(mapped._id));
         const house = await HouseRecord.findOne({ code: "Y01-L19" });
         const household = await Household.findOne({ houseId: house!._id });
         return { house: house!, household: household! };
@@ -420,9 +433,15 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         const admin = await createTestUser({ roles: ["admin"] });
         const { house, household } = await createHouseWithHousehold(admin);
 
-        const headers = ["Họ và tên", "Mã căn/hộ", "Giới tính", "Quan hệ với chủ hộ"];
+        const headers = [
+            "Họ và tên",
+            "Mã căn/hộ",
+            "Giới tính",
+            "Quan hệ với chủ hộ",
+            "Nghề nghiệp/nơi làm việc",
+        ];
         const buffer = await buildWorkbookBuffer(headers, [
-            ["Hồ Thị Thiên", house.code, "Nữ", "Vợ"],
+            ["Hồ Thị Thiên", house.code, "Nữ", "Vợ", "Nhân viên văn phòng"],
         ]);
 
         const uploaded = await uploadCitizenImportFile(String(admin._id), buffer, "members.xlsx");
@@ -433,19 +452,25 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
             houseCode: "Mã căn/hộ",
             gender: "Giới tính",
             relationToHead: "Quan hệ với chủ hộ",
+            occupation: "Nghề nghiệp/nơi làm việc",
         };
         const mapped = await applyCitizenImportMapping(String(uploaded._id), mapping);
         expect(mapped.rowErrors).toHaveLength(0);
         expect((mapped.previewData[0] as Record<string, unknown>).householdId).toBe(
             String(household._id),
         );
+        expect((mapped.previewData[0] as Record<string, unknown>).occupation).toBe(
+            "Nhân viên văn phòng",
+        );
 
-        const committed = await commitCitizenImport(String(admin._id), String(mapped._id));
+        await commitCitizenImport(String(admin._id), String(mapped._id));
+        const committed = await waitForImportJobSettled(String(mapped._id));
         expect(committed.committedCount).toBe(1);
 
         const citizen = await Citizen.findOne({ fullName: "Hồ Thị Thiên" });
         expect(citizen).not.toBeNull();
         expect(String(citizen!.householdId)).toBe(String(household._id));
+        expect(citizen!.occupation).toBe("Nhân viên văn phòng");
 
         const refreshed = await Household.findById(household._id);
         // 1 (Citizen "Chủ hộ" tu dong tao khi Household duoc tao - xem

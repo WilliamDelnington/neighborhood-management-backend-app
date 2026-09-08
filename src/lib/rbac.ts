@@ -78,11 +78,12 @@ export async function requireUser(req: Request): Promise<IUser> {
             );
         }
     }
-    // Ngay ket thuc nhiem ky/phan cong la rang buoc quyen: thu hoi scope
-    // truoc khi bat ky bo loc nghiep vu nao doc neighborhoodId tu User.
+    // Chi Cong tac vien (neighborhood_collaborator/cooperator) con co endAt
+    // rieng tren tung phan cong de tu dong het han (xem
+    // expireNeighborhoodOfficerAssignments) - To truong/To pho la "active cho
+    // den khi duoc go tay" tu khi bo khai niem nhiem ky, khong con gi de quet
+    // o day cho hai vai tro do nua.
     if (
-        user.roles.includes("neighborhood_leader") ||
-        user.roles.includes("neighborhood_coleader") ||
         user.roles.includes("neighborhood_collaborator") ||
         user.roles.includes("cooperator")
     ) {
@@ -333,40 +334,82 @@ export async function wardScopeFilter(
 }
 
 /**
- * Diem goi chung cho scope theo khu vuc: to truong (neighborhood_leader) VA to
- * pho (neighborhood_coleader) duoc loc theo Neighborhood duoc gan
- * (neighborhoodScopeFilter doc tu user.neighborhoodId/assignedNeighborhoodIds -
- * ca hai vai tro deu duoc gan vao assignedNeighborhoodIds, xem
- * neighborhoodService.assignNeighborhoodColeader). Cong tac vien (cooperator)
- * KHONG duoc cap scope rong o day theo thiet ke (BR-NB-003) - ho chi thay du
- * lieu duoc phan cong rieng (loc theo userId, vd RequestRecipient.userId).
- * QUAN TRONG: khong the dua vao nhanh clusterScopeFilter mac dinh de "tu choi"
- * cho cooperator - quy uoc cua clusterScopeFilter la NGUOC LAI, assignedClusters
- * rong nghia la KHONG GIOI HAN (xem toan bo), khong phai tu choi. Vi vay
- * cooperator can mot nhanh rieng, tu choi ro rang (giong quy uoc cua
- * neighborhoodScopeFilter) truoc khi roi vao clusterScopeFilter. Cac vai tro
- * con lai giu nguyen hanh vi loc theo cluster nhu truoc.
+ * Diem goi chung cho scope theo khu vuc - PHIEN BAN SOFT-CODED: doc
+ * Role.scopeType/scopeMechanism/subScopeKinds (xem models/Role.ts) thay vi
+ * hardcode theo TEN vai tro, de them/doi mot vai tro "dia ly" (WARD hoac
+ * NEIGHBORHOOD) qua man Quan ly vai tro co hieu luc ngay, khong can sua code.
+ *
+ * QUAN TRONG - day cung la lan DAU TIEN cac vai tro cap PHUONG (secretary/
+ * people_committee_official/regional_police, scopeType=WARD) duoc loc theo
+ * Phuong/Xa (wardCode) O TAT CA cac module goi ham nay (Complaint/Business/
+ * Company/Household/HouseRecord/Report/Pccc/Resident/Request/Announcement...).
+ * TRUOC DAY, ham cu (dua hoan toan vao clusterScopeFilter mac dinh - rong =
+ * KHONG GIOI HAN) khien 3 vai tro nay THAY TOAN BO du lieu khong gioi han
+ * theo Phuong o hau het cac module nay (CHI rieng Appointment la co goi rieng
+ * wardScopeFilter them de bu) - day la mot LO HONG PHAN QUYEN duoc phat hien
+ * va sua trong lan refactor nay, khong phai thay doi hanh vi ngoai y muon.
+ *
+ * Cong tac vien (cooperator - vai tro CU, KHONG con Role doc/scope config,
+ * khac neighborhood_collaborator) van GIU NGUYEN nhanh rieng nhu truoc (tu
+ * choi neu chua duoc gan cluster, cung khong duoc gop vao co che config moi).
+ *
+ * Neu user giu NHIEU vai tro ASSIGNED cung luc (vd vua to truong vua bi thu -
+ * hiem nhung co the xay ra), hop (OR) pham vi cua tung vai tro lai thay vi chi
+ * lay mot vai tro. Vai tro dang "Cong tac vien" (co subScopeKinds - scope hep
+ * hon NEIGHBORHOOD, xem BR-NB-003) khong dong gop pham vi rong nao ca; neu do
+ * la TOAN BO cac vai tro ASSIGNED cua user (khong co vai tro nao khac cho
+ * pham vi rong hon), ket qua la tu choi ro (khong lam gi ca), khong roi xuong
+ * clusterScopeFilter (quy uoc rong = xem tat ca cua ham do se sai o day).
  */
-export function areaScopeFilter(
+export async function areaScopeFilter(
     user: IUser,
     opts: { clusterField?: string; neighborhoodField?: string } = {},
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
     if (user.roles.includes("admin")) return {};
-    if (
-        user.roles.includes("neighborhood_leader") ||
-        user.roles.includes("neighborhood_coleader")
-    ) {
-        return neighborhoodScopeFilter(user, opts.neighborhoodField ?? "neighborhoodId");
-    }
+
     if (
         user.roles.includes("cooperator") &&
         (!user.assignedClusters || user.assignedClusters.length === 0)
     ) {
         return { _id: { $in: [] } };
     }
-    if (user.roles.includes("neighborhood_collaborator")) {
-        // Cong tac vien chi thay ban ghi duoc giao tai service chuyen biet
-        // (vd InspectionTarget); khong duoc suy rong thanh toan bo To.
+
+    const neighborhoodField = opts.neighborhoodField ?? "neighborhoodId";
+    const assignedRoles = await RoleModel.find({
+        key: { $in: user.roles },
+        active: true,
+        scopeMechanism: "ASSIGNED",
+    });
+
+    if (assignedRoles.length === 0) {
+        return clusterScopeFilter(user, opts.clusterField ?? "cluster");
+    }
+
+    const grantsBroadNeighborhood = assignedRoles.some(
+        r => r.scopeType === "NEIGHBORHOOD" && !r.subScopeKinds,
+    );
+    const hasWardRole = assignedRoles.some(r => r.scopeType === "WARD");
+    const hasDenyOnlyRole = assignedRoles.some(
+        r => r.scopeType === "NEIGHBORHOOD" && r.subScopeKinds,
+    );
+
+    const orClauses: Record<string, unknown>[] = [];
+    if (grantsBroadNeighborhood) {
+        orClauses.push(neighborhoodScopeFilter(user, neighborhoodField));
+    }
+    if (hasWardRole && user.wardCode) {
+        const neighborhoodIds = await NeighborhoodModel.distinct("_id", {
+            wardCode: user.wardCode,
+        });
+        if (neighborhoodIds.length > 0) {
+            orClauses.push({ [neighborhoodField]: { $in: neighborhoodIds } });
+        }
+    }
+
+    if (orClauses.length === 1) return orClauses[0];
+    if (orClauses.length > 1) return { $or: orClauses };
+
+    if (hasDenyOnlyRole || hasWardRole) {
         return { _id: { $in: [] } };
     }
     return clusterScopeFilter(user, opts.clusterField ?? "cluster");

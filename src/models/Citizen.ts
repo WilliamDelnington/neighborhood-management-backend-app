@@ -16,8 +16,6 @@ import {
     hashForLookup,
     normalizePhone,
     normalizeCccd,
-    maskPhone,
-    maskCccd,
 } from "@/lib/encryption";
 
 export interface ICitizen extends Document {
@@ -29,6 +27,9 @@ export interface ICitizen extends Document {
     birthDate?: Date;
     gender: GioiTinh;
     relationToHead?: string;
+    // Nghe nghiep/noi lam viec - thong tin khai bao thuong, khong nhay cam
+    // nhu phone/cccd nen khong ma hoa.
+    occupation?: string;
     householdId: mongoose.Types.ObjectId;
     residenceType: LoaiCuTru;
     // Bat buoc khi residenceType="tam_tru" (xem validators/citizen.ts) - ngay
@@ -62,6 +63,7 @@ const CitizenSchema = new Schema<ICitizen>(
         birthDate: { type: Date },
         gender: { type: String, enum: GIOI_TINH, default: "nam" },
         relationToHead: { type: String },
+        occupation: { type: String, trim: true },
         householdId: {
             type: Schema.Types.ObjectId,
             ref: "Household",
@@ -102,8 +104,9 @@ const CitizenSchema = new Schema<ICitizen>(
         timestamps: true,
         toJSON: {
             transform(_doc, ret) {
-                if (ret.phone) ret.phone = maskPhone(ret.phone);
-                if (ret.cccd) ret.cccd = maskCccd(ret.cccd);
+                // Nguoi co quyen citizens.read (nhan vien quan ly to dan pho)
+                // can xem day du sdt/cccd de lien he/doi chieu ho dan - khong
+                // che nua, chi an cac truong noi bo (hash tra cuu).
                 delete ret.phoneHash;
                 delete ret.cccdHash;
                 return ret;

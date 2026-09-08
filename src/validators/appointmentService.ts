@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { APPOINTMENT_SERVICE_SCOPES } from "@/models";
+import {
+    APPOINTMENT_SERVICE_SCOPES,
+    APPOINTMENT_HOUSE_REQUIREMENTS,
+    APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
+} from "@/models";
 
 const timeSlotTimeSchema = z
     .string()
@@ -35,6 +39,12 @@ const appointmentServiceBaseSchema = z.object({
     wardCode: z.number().optional(),
     // Bat buoc khi scope="neighborhood" - kiem tra o refine ben duoi.
     neighborhoodId: z.string().optional(),
+    houseRequirement: z
+        .enum(APPOINTMENT_HOUSE_REQUIREMENTS)
+        .default("required"),
+    houseStatusRequirement: z
+        .enum(APPOINTMENT_HOUSE_STATUS_REQUIREMENTS)
+        .default("verified"),
     slotDurationMinutes: z.number().int().min(5).max(480).default(30),
     autoApprove: z.boolean().default(true),
     assignedOfficerUserIds: z.array(z.string()).default([]),
