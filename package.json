@@ -33,6 +33,7 @@
         "businesses:backfill-status": "tsx scripts/backfill-business-status.ts",
         "records:backfill-declared-status": "tsx scripts/backfill-declared-record-status.ts",
         "streets:backfill": "tsx scripts/backfill-streets.ts",
+        "houses:backfill-province-ward": "tsx scripts/backfill-house-province-ward.ts",
         "neighborhoods:backfill-scoped-records": "tsx scripts/backfill-neighborhood-ids.ts",
         "neighborhoods:migrate-organization": "tsx scripts/migrate-neighborhood-organization.ts",
         "digital:migrate-foundation": "tsx scripts/migrate-digital-foundation.ts",
