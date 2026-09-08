@@ -818,6 +818,7 @@ export const IMPORT_JOB_STATUS = [
     "awaiting_mapping",
     "previewing",
     "validated",
+    "committing",
     "committed",
     "failed",
 ] as const;

@@ -8,7 +8,13 @@ import {
     commitBusinessImport,
     type BusinessColumnMapping,
 } from "@/services/importService";
-import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
+import {
+    createTestUser,
+    authHeaders,
+    makeRequest,
+    readJson,
+    waitForImportJobSettled,
+} from "../helpers";
 
 /**
  * Kiem tra pipeline "Nhap ho kinh doanh tu Excel" (upload -> chon cot ->
@@ -93,7 +99,8 @@ describe("Import hộ kinh doanh từ Excel", () => {
         expect(previewRow.houseId).toBe(String(house._id));
         expect(previewRow.businessTypeId).toBe(String(businessType._id));
 
-        const committed = await commitBusinessImport(admin, String(mapped._id));
+        await commitBusinessImport(admin, String(mapped._id));
+        const committed = await waitForImportJobSettled(String(mapped._id));
         expect(committed.status).toBe("committed");
         expect(committed.committedCount).toBe(1);
 
