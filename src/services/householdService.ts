@@ -243,6 +243,7 @@ export async function listHouseholds(params: {
     cluster?: string;
     streetId?: string;
     houseId?: string;
+    neighborhoodId?: string;
     unassigned?: boolean;
     status?: VerificationStatus;
     actorUser: IUser;
@@ -297,6 +298,29 @@ export async function listHouseholds(params: {
         }
     } else if (!isHouseOwnerUser) {
         Object.assign(filter, clusterScopeFilter(params.actorUser));
+    }
+
+    if (params.neighborhoodId) {
+        // Loc bo sung theo to dan pho (chon tu dropdown o frontend) - ket hop
+        // voi dieu kien scope neighborhoodId da co (vd neighborhood_leader o
+        // nhanh isNeighborhoodLeader ben tren) thay vi ghi de, tranh no rong
+        // pham vi xem cua nguoi dung.
+        const existingNeighborhoodFilter = filter.neighborhoodId as
+            | { $in?: unknown[] }
+            | string
+            | undefined;
+        if (
+            existingNeighborhoodFilter &&
+            typeof existingNeighborhoodFilter === "object" &&
+            Array.isArray(existingNeighborhoodFilter.$in)
+        ) {
+            const allowedIds = existingNeighborhoodFilter.$in.map(String);
+            filter.neighborhoodId = allowedIds.includes(params.neighborhoodId)
+                ? params.neighborhoodId
+                : { $in: [] };
+        } else {
+            filter.neighborhoodId = params.neighborhoodId;
+        }
     }
 
     if (params.search) {

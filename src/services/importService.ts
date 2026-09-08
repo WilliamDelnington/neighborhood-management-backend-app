@@ -735,6 +735,11 @@ async function mergeIntoExistingHouse(
     return houseRecord;
 }
 
+// So dong xu ly giua moi lan ghi committedCount xuong DB trong luc commit
+// (chay background) - can bang giua tan suat cap nhat progress cho frontend
+// poll (xem getImportJobById) va so lan ghi DB khi import nhieu dong.
+const IMPORT_PROGRESS_BATCH = 5;
+
 export async function commitHouseImport(
     actorUser: IUser,
     importJobId: string,
@@ -744,7 +749,7 @@ export async function commitHouseImport(
     if (job.type !== "house") {
         throw new HttpError("Import job này không phải loại nhà số", 400);
     }
-    if (job.status === "committed") {
+    if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.status === "awaiting_mapping") {
@@ -759,6 +764,30 @@ export async function commitHouseImport(
             400,
         );
     }
+
+    // Chuyen sang "committing" ngay va tra ve cho client de bat dau polling
+    // tien do (xem getImportJobById) - vong lap ghi du lieu thuc su (co the
+    // nhieu tram/nghin dong) chay o background (khong await response nay) de
+    // tranh timeout HTTP khi import nhieu du lieu.
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processHouseImportRows(String(job._id), actorUser).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] House job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processHouseImportRows(
+    jobId: string,
+    actorUser: IUser,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
 
     // KHONG phai cot trong file - co/khong tick chon MOT LAN cho ca file luc
     // "chon cot" (xem applyHouseImportMapping) - luu trong columnMapping da
@@ -920,17 +949,23 @@ export async function commitHouseImport(
                 }
             }
         }
+
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+        }
     }
 
-    job.status = "committed";
-    job.committedCount = committedCount;
-    await job.save();
+    await ImportJob.updateOne(
+        { _id: jobId },
+        { status: "committed", committedCount },
+    );
 
     await writeAuditLog({
         actorId: String(actorUser._id),
         action: "import.commit",
         targetModel: "ImportJob",
-        targetId: job._id,
+        targetId: jobId,
         metadata: {
             type: "house",
             count: committedCount,
@@ -941,13 +976,63 @@ export async function commitHouseImport(
             headCitizensCreated,
         },
     });
-
-    return job;
 }
 
 // ---------------------------------------------------------------------------
 // Import ho dan
 // ---------------------------------------------------------------------------
+
+/**
+ * File mau cho Import ho dan - khac House/Citizen/Street/Business, luong nay
+ * CHUA nang cap sang "chon cot" (xem previewHouseholdImport) nen ten cot
+ * trong file phai khop CHINH XAC voi HOUSEHOLD_COLUMNS (khong phan biet
+ * hoa/thuong/dau).
+ */
+export function buildHouseholdImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Hộ dân");
+    worksheet.columns = [
+        { header: HOUSEHOLD_COLUMNS.cluster, key: "cluster", width: 18 },
+        { header: HOUSEHOLD_COLUMNS.address, key: "address", width: 30 },
+        {
+            header: HOUSEHOLD_COLUMNS.headOfHousehold,
+            key: "headOfHousehold",
+            width: 22,
+        },
+        { header: HOUSEHOLD_COLUMNS.phone, key: "phone", width: 16 },
+        {
+            header: HOUSEHOLD_COLUMNS.ownershipType,
+            key: "ownershipType",
+            width: 16,
+        },
+        {
+            header: HOUSEHOLD_COLUMNS.needsSupport,
+            key: "needsSupport",
+            width: 14,
+        },
+        { header: HOUSEHOLD_COLUMNS.note, key: "note", width: 24 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        cluster: "Dãy A",
+        address: "Dãy A - CH-A101",
+        headOfHousehold: "Nguyễn Văn A",
+        phone: "0912345678",
+        ownershipType: "Chính chủ",
+        needsSupport: "Không",
+        note: "",
+    });
+    worksheet.addRow({
+        cluster: "Dãy A",
+        address: "Dãy A - CH-A102",
+        headOfHousehold: "Trần Thị B",
+        phone: "0987654321",
+        ownershipType: "Cho thuê",
+        needsSupport: "Có",
+        note: "Người cao tuổi sống một mình",
+    });
+    return workbook;
+}
 
 export async function previewHouseholdImport(
     actorId: string,
@@ -1032,7 +1117,7 @@ export async function commitHouseholdImport(
     if (job.type !== "household") {
         throw new HttpError("Import job này không phải loại hộ dân", 400);
     }
-    if (job.status === "committed") {
+    if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.rowErrors.length > 0) {
@@ -1042,12 +1127,32 @@ export async function commitHouseholdImport(
         );
     }
 
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processHouseholdImportRows(String(job._id), actorId).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] Household job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processHouseholdImportRows(
+    jobId: string,
+    actorId: string,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
     let committedCount = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
         // eslint-disable-next-line no-await-in-loop
         const code = await generateSequentialCode(Household, "HB", 3);
         // eslint-disable-next-line no-await-in-loop
-        await Household.create({
+        const household = await Household.create({
             code,
             cluster: row.cluster,
             address: row.address,
@@ -1059,22 +1164,40 @@ export async function commitHouseholdImport(
             createdBy: actorId,
             updatedBy: actorId,
         });
+        // Ho dan phai co it nhat MOT Citizen "Chủ hộ" ngay khi tao (giong bat
+        // bien cua householdService.createHousehold va processHouseImportRows)
+        // - neu khong, chu ho se khong xuat hien trong danh sach nhan khau
+        // cua ho dan nay, va memberCount se luon thieu 1 so voi thuc te.
+        // eslint-disable-next-line no-await-in-loop
+        await Citizen.create({
+            fullName: row.headOfHousehold,
+            phone: row.phone,
+            relationToHead: "Chủ hộ",
+            householdId: household._id,
+            createdBy: actorId,
+            updatedBy: actorId,
+        });
+        // eslint-disable-next-line no-await-in-loop
+        await Household.updateOne({ _id: household._id }, { memberCount: 1 });
         committedCount += 1;
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+        }
     }
 
-    job.status = "committed";
-    job.committedCount = committedCount;
-    await job.save();
+    await ImportJob.updateOne(
+        { _id: jobId },
+        { status: "committed", committedCount },
+    );
 
     await writeAuditLog({
         actorId,
         action: "import.commit",
         targetModel: "ImportJob",
-        targetId: job._id,
+        targetId: jobId,
         metadata: { type: "household", count: committedCount },
     });
-
-    return job;
 }
 
 // ---------------------------------------------------------------------------
@@ -1400,7 +1523,7 @@ export async function commitCitizenImport(
     if (job.type !== "citizen") {
         throw new HttpError("Import job này không phải loại nhân khẩu", 400);
     }
-    if (job.status === "committed") {
+    if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.status === "awaiting_mapping") {
@@ -1415,6 +1538,26 @@ export async function commitCitizenImport(
             400,
         );
     }
+
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processCitizenImportRows(String(job._id), actorId).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] Citizen job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processCitizenImportRows(
+    jobId: string,
+    actorId: string,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
 
     let committedCount = 0;
     // memberCount cua ho dan lien quan duoc +1 cho moi Citizen import thanh
@@ -1449,6 +1592,10 @@ export async function commitCitizenImport(
             const key = String(row.householdId);
             memberCountDeltas.set(key, (memberCountDeltas.get(key) || 0) + 1);
         }
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+        }
     }
 
     if (memberCountDeltas.size > 0) {
@@ -1464,19 +1611,18 @@ export async function commitCitizenImport(
         );
     }
 
-    job.status = "committed";
-    job.committedCount = committedCount;
-    await job.save();
+    await ImportJob.updateOne(
+        { _id: jobId },
+        { status: "committed", committedCount },
+    );
 
     await writeAuditLog({
         actorId,
         action: "import.commit",
         targetModel: "ImportJob",
-        targetId: job._id,
+        targetId: jobId,
         metadata: { type: "citizen", count: committedCount },
     });
-
-    return job;
 }
 
 // ---------------------------------------------------------------------------
@@ -1512,6 +1658,204 @@ export function buildStreetImportTemplateWorkbook(): ExcelJS.Workbook {
         name: "Lê Lợi",
         code: "LELOI",
         active: "Ngừng hoạt động",
+    });
+    return workbook;
+}
+
+/**
+ * File mau cho Import nha so - cac cot chi mang tinh goi y (buoc upload van
+ * chap nhan bat ky ten cot nao, nguoi dung chon lai o buoc mapping), xem
+ * HOUSE_COLUMNS/uploadHouseImportFile.
+ */
+export function buildHouseImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Nhà số");
+    worksheet.columns = [
+        { header: HOUSE_COLUMNS.code, key: "code", width: 16 },
+        { header: HOUSE_COLUMNS.subZone, key: "subZone", width: 16 },
+        { header: HOUSE_COLUMNS.ownerName, key: "ownerName", width: 22 },
+        { header: HOUSE_COLUMNS.ownerPhone, key: "ownerPhone", width: 16 },
+        {
+            header: HOUSE_COLUMNS.headOfHousehold,
+            key: "headOfHousehold",
+            width: 22,
+        },
+        { header: HOUSE_COLUMNS.contactPhone, key: "contactPhone", width: 16 },
+        { header: HOUSE_COLUMNS.usageType, key: "usageType", width: 18 },
+        {
+            header: HOUSE_COLUMNS.residenceStatus,
+            key: "residenceStatus",
+            width: 18,
+        },
+        { header: HOUSE_COLUMNS.hasBusiness, key: "hasBusiness", width: 14 },
+        { header: HOUSE_COLUMNS.memberCount, key: "memberCount", width: 14 },
+        { header: HOUSE_COLUMNS.landStatus, key: "landStatus", width: 18 },
+        {
+            header: HOUSE_COLUMNS.lotCodeCrossCheck,
+            key: "lotCodeCrossCheck",
+            width: 16,
+        },
+        { header: HOUSE_COLUMNS.note, key: "note", width: 24 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        code: "CH-A101",
+        subZone: "Dãy A",
+        ownerName: "Nguyễn Văn A",
+        ownerPhone: "0912345678",
+        headOfHousehold: "Nguyễn Văn A",
+        contactPhone: "0912345678",
+        usageType: "Để ở",
+        residenceStatus: "Thường trú",
+        hasBusiness: "Không",
+        memberCount: "4",
+        landStatus: "Đã cấp GCN",
+        lotCodeCrossCheck: "Khớp",
+        note: "",
+    });
+    worksheet.addRow({
+        code: "CH-A102",
+        subZone: "Dãy A",
+        ownerName: "Trần Thị B",
+        ownerPhone: "0987654321",
+        headOfHousehold: "Trần Thị B (thuê)",
+        contactPhone: "0987654321",
+        usageType: "Để ở, Kinh doanh",
+        residenceStatus: "Tạm trú",
+        hasBusiness: "Có",
+        memberCount: "2",
+        landStatus: "Chưa cấp GCN",
+        lotCodeCrossCheck: "Chưa đối chiếu",
+        note: "Bán tạp hóa",
+    });
+    return workbook;
+}
+
+/**
+ * File mau cho Import nhan khau - "Mã hộ" hoac "Mã căn/hộ" phai khop voi Ho
+ * dan/Nha so DA TON TAI trong he thong (xem applyCitizenImportMapping), chi
+ * dien MOT trong hai cot nay la du.
+ */
+export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Nhân khẩu");
+    worksheet.columns = [
+        { header: CITIZEN_COLUMNS.fullName, key: "fullName", width: 22 },
+        { header: CITIZEN_COLUMNS.phone, key: "phone", width: 16 },
+        { header: CITIZEN_COLUMNS.cccd, key: "cccd", width: 16 },
+        { header: CITIZEN_COLUMNS.birthDate, key: "birthDate", width: 14 },
+        { header: CITIZEN_COLUMNS.gender, key: "gender", width: 12 },
+        {
+            header: CITIZEN_COLUMNS.relationToHead,
+            key: "relationToHead",
+            width: 18,
+        },
+        { header: CITIZEN_COLUMNS.occupation, key: "occupation", width: 22 },
+        { header: CITIZEN_COLUMNS.householdCode, key: "householdCode", width: 14 },
+        { header: CITIZEN_COLUMNS.houseCode, key: "houseCode", width: 14 },
+        {
+            header: CITIZEN_COLUMNS.residenceType,
+            key: "residenceType",
+            width: 18,
+        },
+        { header: CITIZEN_COLUMNS.isElderly, key: "isElderly", width: 14 },
+        { header: CITIZEN_COLUMNS.isChild, key: "isChild", width: 12 },
+        {
+            header: CITIZEN_COLUMNS.isDisabledOrSupportNeeded,
+            key: "isDisabledOrSupportNeeded",
+            width: 16,
+        },
+        {
+            header: CITIZEN_COLUMNS.isPartyMember,
+            key: "isPartyMember",
+            width: 14,
+        },
+        {
+            header: CITIZEN_COLUMNS.isUnionMember,
+            key: "isUnionMember",
+            width: 14,
+        },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        fullName: "Nguyễn Văn A",
+        phone: "0912345678",
+        cccd: "001099001234",
+        birthDate: "15/05/1985",
+        gender: "Nam",
+        relationToHead: "Chủ hộ",
+        occupation: "Kỹ sư",
+        householdCode: "HB001",
+        houseCode: "",
+        residenceType: "Thường trú",
+        isElderly: "Không",
+        isChild: "Không",
+        isDisabledOrSupportNeeded: "Không",
+        isPartyMember: "Không",
+        isUnionMember: "Có",
+    });
+    worksheet.addRow({
+        fullName: "Nguyễn Thị Bé",
+        phone: "",
+        cccd: "",
+        birthDate: "20/03/2015",
+        gender: "Nữ",
+        relationToHead: "Con",
+        occupation: "",
+        householdCode: "HB001",
+        houseCode: "",
+        residenceType: "Thường trú",
+        isElderly: "Không",
+        isChild: "Có",
+        isDisabledOrSupportNeeded: "Không",
+        isPartyMember: "Không",
+        isUnionMember: "Không",
+    });
+    return workbook;
+}
+
+/**
+ * File mau cho Import ho kinh doanh - "Mã nhà" phai khop voi Nha so DA TON
+ * TAI trong he thong, "Loại hình kinh doanh" (neu co dien) phai khop voi mot
+ * loai hinh da tao san (xem Quản lý > Loại hình kinh doanh).
+ */
+export function buildBusinessImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Hộ kinh doanh");
+    worksheet.columns = [
+        { header: BUSINESS_COLUMNS.name, key: "name", width: 26 },
+        { header: BUSINESS_COLUMNS.houseCode, key: "houseCode", width: 14 },
+        {
+            header: BUSINESS_COLUMNS.businessTypeName,
+            key: "businessTypeName",
+            width: 20,
+        },
+        { header: BUSINESS_COLUMNS.ownerName, key: "ownerName", width: 22 },
+        { header: BUSINESS_COLUMNS.taxCode, key: "taxCode", width: 16 },
+        { header: BUSINESS_COLUMNS.phone, key: "phone", width: 16 },
+        { header: BUSINESS_COLUMNS.active, key: "active", width: 18 },
+        { header: BUSINESS_COLUMNS.note, key: "note", width: 24 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        name: "Tạp hóa Cô Ba",
+        houseCode: "CH-A101",
+        businessTypeName: "Bán lẻ",
+        ownerName: "Nguyễn Văn A",
+        taxCode: "",
+        phone: "0912345678",
+        active: "Đang hoạt động",
+        note: "",
+    });
+    worksheet.addRow({
+        name: "Quán ăn Hương Việt",
+        houseCode: "CH-A102",
+        businessTypeName: "Ăn uống",
+        ownerName: "Trần Thị B",
+        taxCode: "8012345678",
+        phone: "0987654321",
+        active: "Ngừng hoạt động",
+        note: "Tạm nghỉ sửa chữa",
     });
     return workbook;
 }
@@ -1715,7 +2059,7 @@ export async function commitStreetImport(
     if (job.type !== "street") {
         throw new HttpError("Import job này không phải loại đường/phố", 400);
     }
-    if (job.status === "committed") {
+    if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.status === "awaiting_mapping") {
@@ -1731,6 +2075,26 @@ export async function commitStreetImport(
         );
     }
 
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processStreetImportRows(String(job._id), actorId).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] Street job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processStreetImportRows(
+    jobId: string,
+    actorId: string,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
     let committedCount = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
         // eslint-disable-next-line no-await-in-loop
@@ -1742,21 +2106,24 @@ export async function commitStreetImport(
             updatedBy: actorId,
         });
         committedCount += 1;
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+        }
     }
 
-    job.status = "committed";
-    job.committedCount = committedCount;
-    await job.save();
+    await ImportJob.updateOne(
+        { _id: jobId },
+        { status: "committed", committedCount },
+    );
 
     await writeAuditLog({
         actorId,
         action: "import.commit",
         targetModel: "ImportJob",
-        targetId: job._id,
+        targetId: jobId,
         metadata: { type: "street", count: committedCount },
     });
-
-    return job;
 }
 
 // ---------------------------------------------------------------------------
@@ -2014,7 +2381,7 @@ export async function commitBusinessImport(
     if (job.type !== "business") {
         throw new HttpError("Import job này không phải loại hộ kinh doanh", 400);
     }
-    if (job.status === "committed") {
+    if (job.status === "committed" || job.status === "committing") {
         throw new HttpError("Import job này đã được commit trước đó", 400);
     }
     if (job.status === "awaiting_mapping") {
@@ -2030,6 +2397,26 @@ export async function commitBusinessImport(
         );
     }
 
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processBusinessImportRows(String(job._id), actorUser).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] Business job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processBusinessImportRows(
+    jobId: string,
+    actorUser: IUser,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
     let committedCount = 0;
     for (const row of job.previewData as Record<string, unknown>[]) {
         // eslint-disable-next-line no-await-in-loop
@@ -2044,21 +2431,24 @@ export async function commitBusinessImport(
             note: row.note as string | undefined,
         });
         committedCount += 1;
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne({ _id: jobId }, { committedCount });
+        }
     }
 
-    job.status = "committed";
-    job.committedCount = committedCount;
-    await job.save();
+    await ImportJob.updateOne(
+        { _id: jobId },
+        { status: "committed", committedCount },
+    );
 
     await writeAuditLog({
         actorId: String(actorUser._id),
         action: "import.commit",
         targetModel: "ImportJob",
-        targetId: job._id,
+        targetId: jobId,
         metadata: { type: "business", count: committedCount },
     });
-
-    return job;
 }
 
 // ---------------------------------------------------------------------------

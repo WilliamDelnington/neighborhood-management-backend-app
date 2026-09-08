@@ -5,7 +5,13 @@ import { PUT as mappingRoute } from "@/app/api/import/streets/[jobId]/mapping/ro
 import { POST as commitRoute } from "@/app/api/import/streets/[jobId]/commit/route";
 import { POST as createStreetRoute } from "@/app/api/streets/route";
 import { Street } from "@/models";
-import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
+import {
+    createTestUser,
+    authHeaders,
+    makeRequest,
+    readJson,
+    waitForImportJobSettled,
+} from "../helpers";
 
 async function buildWorkbookFile(
     headers: string[],
@@ -296,8 +302,8 @@ describe("Import Excel: duong/pho (Street)", () => {
             { params: { jobId: goodUpload.data._id } },
         );
         expect(firstCommit.status).toBe(200);
-        const firstCommitJson = await readJson(firstCommit);
-        expect(firstCommitJson.data.committedCount).toBe(1);
+        const settledJob = await waitForImportJobSettled(goodUpload.data._id);
+        expect(settledJob.committedCount).toBe(1);
 
         const secondCommit = await commitRoute(
             makeRequest(

@@ -110,6 +110,7 @@ export async function listCitizens(params: {
     limit: number;
     search?: string;
     householdId?: string;
+    neighborhoodId?: string;
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
@@ -138,6 +139,37 @@ export async function listCitizens(params: {
         }
     }
 
+    if (params.neighborhoodId) {
+        // Loc bo sung theo to dan pho (chon tu dropdown o frontend) - Citizen
+        // khong co truong neighborhoodId truc tiep nen phai tra qua Household
+        // truoc, roi ket hop (giao) voi dieu kien householdId da co o tren
+        // (neu co) thay vi ghi de, tranh no rong pham vi xem cua nguoi dung.
+        const householdsInNeighborhood = await Household.find({
+            neighborhoodId: params.neighborhoodId,
+        }).select("_id");
+        const idsInNeighborhood = householdsInNeighborhood.map(h =>
+            String(h._id),
+        );
+        const existingHouseholdFilter = filter.householdId as
+            | { $in?: unknown[] }
+            | string
+            | undefined;
+        if (existingHouseholdFilter === undefined) {
+            filter.householdId = { $in: idsInNeighborhood };
+        } else if (typeof existingHouseholdFilter === "string") {
+            filter.householdId = idsInNeighborhood.includes(
+                existingHouseholdFilter,
+            )
+                ? existingHouseholdFilter
+                : { $in: [] };
+        } else if (Array.isArray(existingHouseholdFilter.$in)) {
+            const existingIds = existingHouseholdFilter.$in.map(String);
+            filter.householdId = {
+                $in: existingIds.filter(id => idsInNeighborhood.includes(id)),
+            };
+        }
+    }
+
     if (params.search) {
         // phone/cccd la ma hoa AES-256-GCM trong DB nen khong the $regex truc
         // tiep - tim exact-match qua cot bam HMAC (phoneHash/cccdHash) thay vi
@@ -152,6 +184,20 @@ export async function listCitizens(params: {
         const normalizedCccd = normalizeCccd(params.search);
         if (normalizedCccd) {
             orConditions.push({ cccdHash: hashForLookup(normalizedCccd) });
+        }
+        // Cho tim nhan khau qua thong tin ho dan (chu ho/ma ho/dia chi) - vd
+        // go ten chu ho de tim tat ca nhan khau trong ho do.
+        const matchingHouseholds = await Household.find({
+            $or: [
+                { code: { $regex: params.search, $options: "i" } },
+                { headOfHousehold: { $regex: params.search, $options: "i" } },
+                { address: { $regex: params.search, $options: "i" } },
+            ],
+        }).select("_id");
+        if (matchingHouseholds.length > 0) {
+            orConditions.push({
+                householdId: { $in: matchingHouseholds.map(h => h._id) },
+            });
         }
         filter.$or = orConditions;
     }

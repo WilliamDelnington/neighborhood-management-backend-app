@@ -45,6 +45,7 @@ export async function GET(req: Request) {
             search: searchParams.get("search") || undefined,
             cluster: searchParams.get("cluster") || undefined,
             streetId: searchParams.get("streetId") || undefined,
+            neighborhoodId: searchParams.get("neighborhoodId") || undefined,
             unassigned: searchParams.get("unassigned") === "true",
             status,
             actorUser: user,
