@@ -17,6 +17,12 @@ import { isValidVnPhone } from "@/lib/phone";
 export const ACCOUNT_CREATION_RESERVED_ROLE_KEYS = [
     "admin",
     "household_head",
+    // Cung ly do voi household_head: gan vao Business/Company.representativeUserId
+    // tro ve mot tai khoan da co (hoac tao qua createBusinessRepresentativeByOwner/
+    // createCompanyRepresentativeByOwner do chu nha thuc hien), khong tao qua
+    // man "Tạo tài khoản" nay.
+    "business_representative",
+    "company_representative",
     "secretary",
     "regional_police",
     "people_committee_official",
@@ -46,6 +52,28 @@ export const createHouseOwnerSchema = z.object({
         .optional(),
 });
 export type CreateHouseOwnerInput = z.infer<typeof createHouseOwnerSchema>;
+
+// Chu nha (house_owner) tu tao tai khoan cho nguoi quan ly thay MOT thuc the
+// cu the cua minh (chu ho cua 1 ho dan, dai dien cua 1 ho kinh doanh/cong ty) -
+// cung dinh dang voi createHouseOwnerSchema nhung KHONG co truong role (vai
+// tro co dinh theo tung ham goi - xem userService.createHouseholdHeadByOwner/
+// createBusinessRepresentativeByOwner/createCompanyRepresentativeByOwner).
+export const createOwnerManagedAccountSchema = z.object({
+    phone: z
+        .string()
+        .min(1, "Thiếu số điện thoại")
+        .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
+    displayName: z.string().min(1, "Thiếu họ tên"),
+    address: z.string().optional(),
+    idNumber: z.string().min(1, "Thiếu số CMND/CCCD"),
+    password: z
+        .string()
+        .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
+        .optional(),
+});
+export type CreateOwnerManagedAccountInput = z.infer<
+    typeof createOwnerManagedAccountSchema
+>;
 
 export const updateUserSchema = z
     .object({

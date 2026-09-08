@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POST as createNeighborhoodRoute } from "@/app/api/neighborhoods/route";
 import { PATCH as updateNeighborhoodRoute } from "@/app/api/neighborhoods/[id]/route";
-import {
-    POST as createTermRoute,
-} from "@/app/api/neighborhoods/[id]/terms/route";
-import { POST as endTermEarlyRoute } from "@/app/api/neighborhoods/[id]/terms/[termId]/end-early/route";
 import { PUT as assignLeaderRoute } from "@/app/api/neighborhoods/[id]/leader/route";
 import {
     DELETE as unassignCollaboratorRoute,
@@ -90,56 +86,32 @@ describe("Neighborhood organization", () => {
         expect(denied.status).toBe(403);
     });
 
-    it("ket thuc nhiem ky thu hoi scope nhung giu lich su phan cong", async () => {
+    it("go phan cong to truong thu hoi scope nhung giu lich su phan cong (khong con khai niem nhiem ky)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const created = await createNeighborhood(headers, "TDP-T", 906);
         const neighborhoodId = created.data._id as string;
         const leader = await createTestUser({ roles: ["neighborhood_leader"] });
 
-        const termResponse = await createTermRoute(
-            makeRequest(`/api/neighborhoods/${neighborhoodId}/terms`, {
-                method: "POST",
-                headers,
-                body: {
-                    name: "Nhiệm kỳ kiểm thử",
-                    startAt: "2026-01-01",
-                    endAt: "2028-12-31",
-                },
-            }),
-            { params: { id: neighborhoodId } },
-        );
-        const term = await readJson(termResponse);
-        expect(termResponse.status).toBe(201);
-        // startAt da qua, endAt con o tuong lai -> tu dong IN_PROGRESS (xem
-        // resolveTermStatusByDate), khong con truyen status truc tiep nua.
-        expect(term.data.status).toBe("IN_PROGRESS");
-
         const assignmentResponse = await assignLeaderRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodId}/leader`, {
                 method: "PUT",
                 headers,
-                body: {
-                    leaderUserId: String(leader._id),
-                    termId: term.data._id,
-                },
+                body: { leaderUserId: String(leader._id) },
             }),
             { params: { id: neighborhoodId } },
         );
         expect(assignmentResponse.status).toBe(200);
 
-        const endResponse = await endTermEarlyRoute(
-            makeRequest(
-                `/api/neighborhoods/${neighborhoodId}/terms/${term.data._id}/end-early`,
-                {
-                    method: "POST",
-                    headers,
-                    body: { reason: "Kết thúc kiểm thử" },
-                },
-            ),
-            { params: { id: neighborhoodId, termId: term.data._id } },
+        const unassignResponse = await assignLeaderRoute(
+            makeRequest(`/api/neighborhoods/${neighborhoodId}/leader`, {
+                method: "PUT",
+                headers,
+                body: { leaderUserId: null },
+            }),
+            { params: { id: neighborhoodId } },
         );
-        expect(endResponse.status).toBe(200);
+        expect(unassignResponse.status).toBe(200);
 
         const [neighborhood, refreshedLeader, assignment] = await Promise.all([
             Neighborhood.findById(neighborhoodId),
@@ -149,7 +121,6 @@ describe("Neighborhood organization", () => {
         expect(neighborhood?.leaderUserId).toBeUndefined();
         expect(refreshedLeader?.assignedNeighborhoodIds).toHaveLength(0);
         expect(assignment?.unassignedAt).toBeDefined();
-        expect(String(assignment?.termId)).toBe(term.data._id);
     });
 
     it("phan cong cong tac vien co scope rieng va ket thuc khong xoa tai khoan", async () => {
@@ -178,7 +149,7 @@ describe("Neighborhood organization", () => {
 
         const refreshed = await User.findById(collaborator._id);
         expect(refreshed?.assignedNeighborhoodIds.map(String)).toContain(neighborhoodId);
-        expect(areaScopeFilter(refreshed!)).toEqual({ _id: { $in: [] } });
+        expect(await areaScopeFilter(refreshed!)).toEqual({ _id: { $in: [] } });
 
         const unassignedResponse = await unassignCollaboratorRoute(
             makeRequest(`/api/neighborhoods/${neighborhoodId}/collaborators`, {

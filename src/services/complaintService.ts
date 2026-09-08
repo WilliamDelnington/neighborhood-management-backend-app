@@ -176,10 +176,10 @@ export async function resolveComplaintWardCode(
  * khong gioi han, giu nguyen hanh vi hien tai cho cac tai khoan chua duoc gan
  * cum).
  */
-function complaintScopeFilter(
+async function complaintScopeFilter(
     actorUser: IUser,
     canReadEscalated: boolean,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
     if (actorUser.roles.includes("admin")) return {};
     if (canReadEscalated) {
         const clusters = actorUser.assignedClusters || [];
@@ -192,7 +192,7 @@ function complaintScopeFilter(
         if (clusters.length) or.push({ cluster: { $in: clusters } });
         return { $or: or };
     }
-    return areaScopeFilter(actorUser);
+    return await areaScopeFilter(actorUser);
 }
 
 /**
@@ -598,7 +598,7 @@ export async function listComplaints(params: {
             ],
         });
     }
-    const scope = complaintScopeFilter(params.actorUser, params.canReadEscalated);
+    const scope = await complaintScopeFilter(params.actorUser, params.canReadEscalated);
     if (Object.keys(scope).length > 0) clauses.push(scope);
     const filter: Record<string, unknown> =
         clauses.length > 0 ? { $and: clauses } : {};

@@ -33,6 +33,8 @@ export type PermissionKey = string;
 export const ROLE_LABEL: Record<string, string> = {
     house_owner: "Chủ sở hữu",
     household_head: "Chủ hộ",
+    business_representative: "Đại diện hộ kinh doanh",
+    company_representative: "Đại diện công ty/doanh nghiệp",
     neighborhood_leader: "Tổ trưởng",
     neighborhood_coleader: "Tổ phó",
     neighborhood_collaborator: "Cộng tác viên Tổ dân phố",

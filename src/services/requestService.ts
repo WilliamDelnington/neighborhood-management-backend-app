@@ -603,7 +603,7 @@ export async function listRequests(params: {
             { createdBy: params.actorUser._id },
         ];
 
-        const scopeFilter = areaScopeFilter(params.actorUser);
+        const scopeFilter = await areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
             orClauses.push({ houseId: { $in: houses.map(h => h._id) } });

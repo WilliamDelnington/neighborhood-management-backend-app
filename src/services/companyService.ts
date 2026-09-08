@@ -17,6 +17,7 @@ import {
     assertVerificationEditable,
     getOwnedHouseRecordIds,
     resolveInitialVerificationStatus,
+    validateRepresentativeUser,
 } from "@/services/houseRecordService";
 import {
     isHouseOwnerActor,
@@ -68,6 +69,13 @@ export async function createCompany(
     assertHouseRecordAllowsDeclaration(actorUser, houseRecord);
     await assertBusinessTypesExist(input.businessTypeIds);
     await assertCompanyTypeExists(input.companyTypeId || undefined);
+    if (input.representativeUserId) {
+        await validateRepresentativeUser(
+            input.representativeUserId,
+            "company_representative",
+            "Đại diện công ty/doanh nghiệp",
+        );
+    }
 
     const company = await Company.create({
         name: input.name,
@@ -145,7 +153,7 @@ export async function listCompanies(params: {
             );
             filter.houseId = { $in: ownedHouseIds };
         } else if (!isAdminUser) {
-            Object.assign(filter, areaScopeFilter(params.actorUser));
+            Object.assign(filter, await areaScopeFilter(params.actorUser));
         }
     }
 
@@ -207,6 +215,13 @@ export async function updateCompany(
     }
     if (patch.companyTypeId !== undefined) {
         await assertCompanyTypeExists(patch.companyTypeId || undefined);
+    }
+    if (patch.representativeUserId) {
+        await validateRepresentativeUser(
+            patch.representativeUserId,
+            "company_representative",
+            "Đại diện công ty/doanh nghiệp",
+        );
     }
 
     for (const [key, value] of Object.entries(patch)) {

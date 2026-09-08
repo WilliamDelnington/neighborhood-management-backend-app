@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { isValidPermissionKey } from "@/lib/permissionRegistry";
+import { ACCESS_SCOPE_TIERS, SCOPE_ASSIGNMENT_MECHANISMS } from "@/models/Role";
+import { NEIGHBORHOOD_COLLABORATOR_SCOPES } from "@/models/NeighborhoodCollaboratorAssignment";
 
 const permissionsField = z
     .array(z.string())
@@ -27,6 +29,20 @@ const creatableRolesField = z.array(
     z.string().regex(/^[a-z][a-z0-9_]*$/, "Vai trò không hợp lệ"),
 );
 
+// Pham vi du lieu vai tro nay quan ly - xem Role.ts de biet y nghia tung
+// truong va rang buoc phu thuoc lan nhau (kiem lai o Mongoose pre("validate"),
+// o day chi kiem hinh dang co ban).
+const scopeFields = {
+    // Mac dinh "ALL" (giong Role.ts) thay vi bat buoc - de khong pha vo man
+    // "Tạo vai trò tùy chỉnh" hien tai (chua co UI chon scope) cho den khi UI
+    // duoc cap nhat o Phase 2; admin co the sua lai sau qua man Quan ly vai tro.
+    scopeType: z.enum(ACCESS_SCOPE_TIERS).default("ALL"),
+    scopeMechanism: z.enum(SCOPE_ASSIGNMENT_MECHANISMS).optional(),
+    maxActivePerScope: z.number().int().positive().nullable().optional(),
+    maxActiveScopesPerUser: z.number().int().positive().nullable().optional(),
+    subScopeKinds: z.array(z.enum(NEIGHBORHOOD_COLLABORATOR_SCOPES)).optional(),
+};
+
 export const createRoleSchema = z.object({
     key: z
         .string()
@@ -47,6 +63,7 @@ export const createRoleSchema = z.object({
     allowedCreatableRoles: creatableRolesField.default([]),
     active: z.boolean().default(true),
     sortOrder: z.number().default(0),
+    ...scopeFields,
 });
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 
@@ -62,5 +79,9 @@ export const updateRoleSchema = z.object({
     allowedCreatableRoles: creatableRolesField.optional(),
     active: z.boolean().optional(),
     sortOrder: z.number().optional(),
+    ...scopeFields,
+    // scopeType bat buoc o createRoleSchema (scopeFields.scopeType) nhung o day
+    // phai la optional - cap nhat mot vai tro khong nhat thiet doi pham vi.
+    scopeType: scopeFields.scopeType.optional(),
 });
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;

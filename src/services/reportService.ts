@@ -100,7 +100,7 @@ export async function getPopulationReport(
     params: ReportDateRangeParams = {},
 ): Promise<PopulationReport> {
     const householdFilter = {
-        ...areaScopeFilter(actorUser),
+        ...(await areaScopeFilter(actorUser)),
         ...dateRangeMatch("createdAt", params),
     };
     const isScoped = Object.keys(householdFilter).length > 0;
@@ -241,7 +241,7 @@ export async function getComplaintReport(
     actorUser: IUser,
     params: ComplaintReportParams,
 ): Promise<ComplaintReport> {
-    const match: Record<string, unknown> = { ...areaScopeFilter(actorUser) };
+    const match: Record<string, unknown> = { ...(await areaScopeFilter(actorUser)) };
     if (params.fromDate || params.toDate) {
         const range: Record<string, Date> = {};
         if (params.fromDate) range.$gte = params.fromDate;
@@ -375,7 +375,7 @@ export async function getPcccReport(
 ): Promise<PcccReport> {
     // PcccCheck chi co houseId, khong co cluster/neighborhoodId truc tiep nen
     // phai loc gian tiep qua HouseRecord trong pham vi phu trach.
-    const scope = areaScopeFilter(actorUser);
+    const scope = await areaScopeFilter(actorUser);
     const isAreaScoped = Object.keys(scope).length > 0;
     const scopedHouseIds = isAreaScoped
         ? (await HouseRecord.find(scope).select("_id")).map(h => h._id)
@@ -498,7 +498,7 @@ export async function getSecurityReport(
     actorUser: IUser,
     params: ReportDateRangeParams = {},
 ): Promise<SecurityReport> {
-    const scope = areaScopeFilter(actorUser);
+    const scope = await areaScopeFilter(actorUser);
     const isAreaScoped = Object.keys(scope).length > 0;
     // SecurityRecord/ResidentRecord chi co houseId, khong co cluster/neighborhoodId
     // truc tiep nen phai loc gian tiep qua HouseRecord trong pham vi phu trach.
@@ -871,7 +871,7 @@ export async function getHouseholdReport(
         } else if (actorUser.wardCode) {
             scopeFilter = await wardScopeFilter(actorUser);
         } else {
-            scopeFilter = areaScopeFilter(actorUser);
+            scopeFilter = await areaScopeFilter(actorUser);
         }
     }
     const filter = {
@@ -974,7 +974,7 @@ async function requestReportScopeFilter(actorUser: IUser): Promise<Record<string
 
     const houseFilter = neighborhoodIds.length > 0
         ? { neighborhoodId: { $in: neighborhoodIds } }
-        : areaScopeFilter(actorUser);
+        : await areaScopeFilter(actorUser);
     const houseIds = Object.keys(houseFilter).length > 0
         ? await HouseRecord.distinct("_id", houseFilter)
         : [];
@@ -1122,7 +1122,7 @@ export async function getHouseReport(
     params: ReportDateRangeParams = {},
 ): Promise<HouseReport> {
     const filter = {
-        ...areaScopeFilter(actorUser),
+        ...(await areaScopeFilter(actorUser)),
         ...dateRangeMatch("createdAt", params),
     };
     const isScoped = Object.keys(filter).length > 0;
@@ -1221,7 +1221,7 @@ export async function getBusinessReport(
     params: ReportDateRangeParams = {},
 ): Promise<BusinessReport> {
     const filter = {
-        ...areaScopeFilter(actorUser),
+        ...(await areaScopeFilter(actorUser)),
         ...dateRangeMatch("createdAt", params),
     };
     const isScoped = Object.keys(filter).length > 0;

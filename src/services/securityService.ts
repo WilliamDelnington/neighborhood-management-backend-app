@@ -87,7 +87,7 @@ export async function listSecurityRecords(params: {
     if (params.houseId) {
         filter.houseId = params.houseId;
     } else if (!params.actorUser.roles.includes("admin")) {
-        const scopeFilter = areaScopeFilter(params.actorUser);
+        const scopeFilter = await areaScopeFilter(params.actorUser);
         if (Object.keys(scopeFilter).length > 0) {
             const houses = await HouseRecord.find(scopeFilter).select("_id");
             filter.houseId = { $in: houses.map(h => h._id) };

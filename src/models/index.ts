@@ -154,10 +154,6 @@ export {
 export { default as AuditLog, type IAuditLog } from "./AuditLog";
 export { default as Neighborhood, type INeighborhood } from "./Neighborhood";
 export {
-    default as NeighborhoodTerm,
-    type INeighborhoodTerm,
-} from "./NeighborhoodTerm";
-export {
     default as NeighborhoodHistory,
     type INeighborhoodHistory,
 } from "./NeighborhoodHistory";
@@ -174,6 +170,10 @@ export {
     default as NeighborhoodCollaboratorAssignment,
     type INeighborhoodCollaboratorAssignment,
 } from "./NeighborhoodCollaboratorAssignment";
+export {
+    default as ScopeAssignment,
+    type IScopeAssignment,
+} from "./ScopeAssignment";
 export { default as Setting, type ISetting } from "./Setting";
 export { default as ImportJob, type IImportJob } from "./ImportJob";
 export {

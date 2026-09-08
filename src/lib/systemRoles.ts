@@ -477,4 +477,112 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // Chu ho dat lich hen cho nha minh dang o - xem appointmentService.ts.
         "appointments.create",
     ],
+    // Nguoi dai dien ho kinh doanh - tuong tu household_head (tai khoan rieng,
+    // do chu nha tao qua createBusinessRepresentativeByOwner va gan vao
+    // Business.representativeUserId), nhung pham vi la 1 ho kinh doanh cu the
+    // thay vi 1 ho dan. Truoc day representativeUserId khong doi hoi vai tro gi
+    // (bat ky tai khoan nao cung gan duoc) - vai tro nay la de tai khoan dai
+    // dien co quyen thao tac thuc su tren chinh ho kinh doanh cua minh, khong
+    // chi la mot nhan tuy dinh tuyen yeu cau (xem REQUEST_HOUSE_ROLES trong
+    // types/index.ts - do la khai niem KHAC, chi la nhan dinh tuyen).
+    business_representative: [
+        "houses.read",
+        "business_types.read",
+        "businesses.read",
+        "businesses.update",
+        "complaints.create",
+        "complaints.read_own",
+        "complaints.update_own",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "meetings.register",
+        "surveys.respond",
+        "files.read",
+        "notifications.read",
+        "change_requests.create",
+        "appointments.create",
+    ],
+    // Nguoi dai dien cong ty/doanh nghiep - cung mo hinh voi business_representative
+    // o tren, ap dung cho Company thay vi Business.
+    company_representative: [
+        "houses.read",
+        "company_types.read",
+        "companies.read",
+        "companies.update",
+        "complaints.create",
+        "complaints.read_own",
+        "complaints.update_own",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "meetings.register",
+        "surveys.respond",
+        "files.read",
+        "notifications.read",
+        "change_requests.create",
+        "appointments.create",
+    ],
+};
+
+// Pham vi du lieu mac dinh cho tung vai tro he thong (xem Role.scopeType/
+// scopeMechanism/maxActivePerScope/maxActiveScopesPerUser/subScopeKinds) -
+// dung chung boi scripts/seed.ts va tests/helpers.ts, cung ly do/quy uoc voi
+// SYSTEM_ROLE_PERMISSIONS o tren (mot noi duy nhat, tranh drift). Day CHI la
+// gia tri KHOI TAO - mot khi da seed vao Role collection, admin co the doi lai
+// tung vai tro (ke ca vai tro he thong) qua man Quan ly vai tro ma KHONG can
+// sua code, dung y nghia "soft-coded" cua tinh nang nay.
+export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
+    string,
+    {
+        scopeType: "ALL" | "WARD" | "NEIGHBORHOOD" | "HOUSE" | "HOUSEHOLD" | "BUSINESS" | "COMPANY";
+        scopeMechanism?: "ASSIGNED" | "OWNED";
+        maxActivePerScope?: number | null;
+        maxActiveScopesPerUser?: number | null;
+        subScopeKinds?: string[];
+    }
+> = {
+    admin: { scopeType: "ALL" },
+    neighborhood_leader: {
+        scopeType: "NEIGHBORHOOD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: 1,
+    },
+    // Xem NeighborhoodColeaderAssignment.ts:48-51 - 1 nguoi chi duoc active To
+    // pho o 1 To dan pho cung luc, nhung 1 To dan pho co the co nhieu To pho.
+    neighborhood_coleader: {
+        scopeType: "NEIGHBORHOOD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+        maxActiveScopesPerUser: 1,
+    },
+    neighborhood_collaborator: {
+        scopeType: "NEIGHBORHOOD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+        subScopeKinds: [
+            "WHOLE_NEIGHBORHOOD",
+            "STREET",
+            "HOUSE_GROUP",
+            "CAMPAIGN",
+        ],
+    },
+    // Truoc day khong co gioi han nao (User.wardCode gan tu do) - tu day chi 1
+    // Bi thu duoc active tren 1 Phuong/Xa cung luc, giong quy uoc To truong.
+    secretary: { scopeType: "WARD", scopeMechanism: "ASSIGNED", maxActivePerScope: 1 },
+    people_committee_official: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    // Truoc day khong the gan theo Phuong/Xa qua man Quan ly Phuong (nang luc
+    // moi hoan toan) - mac dinh khong gioi han so Cong an khu vuc/Phuong, giong
+    // Can bo UBND; dieu chinh lai qua man Quan ly vai tro neu can khac.
+    regional_police: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    house_owner: { scopeType: "HOUSE", scopeMechanism: "OWNED" },
+    household_head: { scopeType: "HOUSEHOLD", scopeMechanism: "OWNED" },
+    business_representative: { scopeType: "BUSINESS", scopeMechanism: "OWNED" },
+    company_representative: { scopeType: "COMPANY", scopeMechanism: "OWNED" },
 };
