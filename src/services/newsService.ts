@@ -82,7 +82,8 @@ export async function listNews(params: {
         News.find(filter)
             .sort({ pinned: -1, publishedAt: -1, createdAt: -1 })
             .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
+            .limit(params.limit)
+            .populate("createdBy", "displayName"),
         News.countDocuments(filter),
     ]);
 
@@ -96,7 +97,7 @@ export async function listNews(params: {
 }
 
 export async function getNewsById(id: string, publicOnly: boolean) {
-    const news = await News.findById(id);
+    const news = await News.findById(id).populate("createdBy", "displayName");
     if (!news) throw new HttpError("Khong tim thay tin tuc", 404);
     if (publicOnly && news.status !== "da_dang") {
         throw new HttpError("Khong tim thay tin tuc", 404);
