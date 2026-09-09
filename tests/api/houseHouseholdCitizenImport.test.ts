@@ -508,4 +508,48 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         expect(mapped.rowErrors[0].message).toMatch(/Không tìm thấy nhà số/);
         expect(mapped.rowErrors[1].message).toMatch(/nhiều hộ dân/);
     });
+
+    it("trùng CCCD với Citizen đã có sẵn (hoặc trùng trong cùng file): bị bỏ qua (không còn tạo trùng)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const { house, household } = await createHouseWithHousehold(admin);
+        await Citizen.create({
+            fullName: "Người đã có sẵn",
+            cccd: "001099001234",
+            householdId: household._id,
+            createdBy: admin._id,
+            updatedBy: admin._id,
+        });
+
+        const headers = ["Họ và tên", "Mã căn/hộ", "CCCD"];
+        const buffer = await buildWorkbookBuffer(headers, [
+            // Trung CCCD voi Citizen da co san trong DB.
+            ["Trùng với DB", house.code, "001099001234"],
+            // Trung CCCD voi dong khac trong CUNG file (dong sau bi bo qua).
+            ["Người mới A", house.code, "001099005678"],
+            ["Trùng trong file", house.code, "001099005678"],
+        ]);
+
+        const uploaded = await uploadCitizenImportFile(String(admin._id), buffer, "members.xlsx");
+        const mapped = await applyCitizenImportMapping(String(uploaded._id), {
+            fullName: "Họ và tên",
+            houseCode: "Mã căn/hộ",
+            cccd: "CCCD",
+        });
+
+        expect(mapped.rowErrors).toHaveLength(0);
+        expect(mapped.skippedRows).toHaveLength(2);
+        expect(mapped.validRows).toBe(1);
+
+        await commitCitizenImport(String(admin._id), String(mapped._id));
+        const committed = await waitForImportJobSettled(String(mapped._id));
+        expect(committed.createdCount).toBe(1);
+        expect(committed.skippedCount).toBe(2);
+
+        // Van chi co 1 Citizen cho moi CCCD (khong tao trung).
+        const created = await Citizen.find({ fullName: "Người mới A" });
+        expect(created).toHaveLength(1);
+        expect(
+            await Citizen.countDocuments({ householdId: household._id }),
+        ).toBe(3); // "Chủ hộ" tu dong tao khi lap Household + "Người đã có sẵn" + "Người mới A"
+    });
 });

@@ -7,11 +7,11 @@ import {
     HouseOwnership,
     HouseRecord,
     Neighborhood,
-    NeighborhoodColeaderAssignment,
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
     RequestTypeDefinition,
+    ScopeAssignment,
     SecurityRecord,
     User,
     type IRequest,
@@ -393,11 +393,13 @@ async function resolveHouseLeaderRecipientIds(
     ).select("leaderUserId");
     if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
 
-    const coleaderAssignments = await NeighborhoodColeaderAssignment.find({
-        neighborhoodId: house.neighborhoodId,
+    const coleaderAssignments = await ScopeAssignment.find({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: house.neighborhoodId,
         unassignedAt: { $exists: false },
-    }).select("coleaderUserId");
-    coleaderAssignments.forEach(a => ids.add(String(a.coleaderUserId)));
+    }).select("userId");
+    coleaderAssignments.forEach(a => ids.add(String(a.userId)));
 
     return ids;
 }

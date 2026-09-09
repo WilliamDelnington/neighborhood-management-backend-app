@@ -3,6 +3,10 @@ import { HttpError } from "@/lib/response";
 import UserModel, { type IUser } from "@/models/User";
 import RoleModel from "@/models/Role";
 import NeighborhoodModel from "@/models/Neighborhood";
+import {
+    LEGACY_COOPERATOR_ROLE_KEY,
+    isCollaboratorOrLegacyCooperator,
+} from "@/lib/systemRoles";
 import type { Role, SessionTokenPayload } from "@/types";
 
 /**
@@ -83,10 +87,7 @@ export async function requireUser(req: Request): Promise<IUser> {
     // expireNeighborhoodOfficerAssignments) - To truong/To pho la "active cho
     // den khi duoc go tay" tu khi bo khai niem nhiem ky, khong con gi de quet
     // o day cho hai vai tro do nua.
-    if (
-        user.roles.includes("neighborhood_collaborator") ||
-        user.roles.includes("cooperator")
-    ) {
+    if (isCollaboratorOrLegacyCooperator(user.roles)) {
         const { expireNeighborhoodOfficerAssignments } = await import(
             "@/services/neighborhoodService"
         );
@@ -368,7 +369,7 @@ export async function areaScopeFilter(
     if (user.roles.includes("admin")) return {};
 
     if (
-        user.roles.includes("cooperator") &&
+        user.roles.includes(LEGACY_COOPERATOR_ROLE_KEY) &&
         (!user.assignedClusters || user.assignedClusters.length === 0)
     ) {
         return { _id: { $in: [] } };

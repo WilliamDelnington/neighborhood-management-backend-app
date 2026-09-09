@@ -143,6 +143,14 @@ RoleSchema.pre("validate", function (next) {
         role.maxActiveScopesPerUser = null;
         role.subScopeKinds = undefined;
     }
+    // subScopeKinds chi co y nghia voi vai tro dang "Cong tac vien" (scopeType=
+    // NEIGHBORHOOD) - KHONG phai voi moi vai tro scopeMechanism="ASSIGNED"
+    // (vd WARD/Bi thu cung la ASSIGNED nhung khong dung subScopeKinds). Xoa
+    // rieng o day (ngoai nhanh OWNED o tren) de doi tu NEIGHBORHOOD sang WARD
+    // khong con giu lai gia tri "con sot" tu luc con la NEIGHBORHOOD.
+    if (role.scopeType !== "NEIGHBORHOOD") {
+        role.subScopeKinds = undefined;
+    }
     return next();
 });
 

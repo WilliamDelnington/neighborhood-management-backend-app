@@ -104,7 +104,7 @@ describe("Import Excel: duong/pho (Street)", () => {
         );
         expect(res.status).toBe(200);
         expect(json.data.status).toBe("validated");
-        expect(json.data.previewData[0]).toEqual({
+        expect(json.data.previewData[0]).toMatchObject({
             name: "Lê Lợi",
             code: "LE_LOI",
             active: true,
@@ -198,7 +198,7 @@ describe("Import Excel: duong/pho (Street)", () => {
         expect(json.data.previewData).toHaveLength(0);
     });
 
-    it("trung ten/ma trong cung file bi bao loi", async () => {
+    it("trung ten/ma trong cung file bi bo qua (khong con la loi)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
         const uploadJson = await upload(
@@ -216,11 +216,12 @@ describe("Import Excel: duong/pho (Street)", () => {
             code: "Mã đường/phố",
         });
         expect(json.data.totalRows).toBe(3);
-        expect(json.data.rowErrors).toHaveLength(2);
+        expect(json.data.rowErrors).toHaveLength(0);
+        expect(json.data.skippedRows).toHaveLength(2);
         expect(json.data.validRows).toBe(1);
     });
 
-    it("trung ten/ma voi Street da co san trong DB bi bao loi", async () => {
+    it("trung ten/ma voi Street da co san trong DB bi bo qua (khong con la loi)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
         await createStreetRoute(
@@ -241,8 +242,9 @@ describe("Import Excel: duong/pho (Street)", () => {
             name: "Tên đường/phố",
             code: "Mã đường/phố",
         });
-        expect(json.data.rowErrors).toHaveLength(1);
-        expect(json.data.rowErrors[0].message).toContain("đã tồn tại");
+        expect(json.data.rowErrors).toHaveLength(0);
+        expect(json.data.skippedRows).toHaveLength(1);
+        expect(json.data.skippedRows[0].message).toContain("đã tồn tại");
     });
 
     it("khong the commit khi chua chon cot (awaiting_mapping)", async () => {

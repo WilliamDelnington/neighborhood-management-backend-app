@@ -58,10 +58,31 @@ export async function POST(req: Request) {
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "document_types.create");
 
-        const body = createDocumentTypeSchema.parse(await req.json());
+        // Client gui multipart/form-data khi kem theo file mau (xem
+        // uploadDocumentType o frontend); nguoc lai la JSON thuan.
+        const contentType = req.headers.get("content-type") || "";
+        let sampleFile: File | undefined;
+        let body;
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await req.formData();
+            const file = formData.get("sampleFile");
+            if (file instanceof File) sampleFile = file;
+            body = createDocumentTypeSchema.parse({
+                name: formData.get("name") || undefined,
+                code: formData.get("code") || undefined,
+                description: formData.get("description") || undefined,
+                hasIssueDate: formData.get("hasIssueDate") === "true",
+                hasExpiryDate: formData.get("hasExpiryDate") === "true",
+                active: formData.get("active") !== "false",
+            });
+        } else {
+            body = createDocumentTypeSchema.parse(await req.json());
+        }
+
         const documentType = await createDocumentType(
             String(actorUser._id),
             body,
+            sampleFile,
         );
         return apiSuccess(documentType, "Tạo loại giấy tờ thành công", 201);
     } catch (err) {

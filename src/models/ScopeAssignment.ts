@@ -29,6 +29,12 @@ export interface IScopeAssignment extends Document {
     };
     assignedAt: Date;
     assignedBy: mongoose.Types.ObjectId;
+    // Chi Cong tac vien (neighborhood_collaborator) dung truong nay - han
+    // "chien dich"/thoi vu cho tung phan cong con (xem
+    // expireNeighborhoodOfficerAssignments trong neighborhoodService.ts, tu
+    // dong dong phan cong khi qua han). Cac vai tro khac (Bi thu, To truong,
+    // To pho) khong con khai niem han - "active cho den khi go tay".
+    endAt?: Date;
     unassignedAt?: Date;
     unassignedBy?: mongoose.Types.ObjectId;
     note?: string;
@@ -62,6 +68,7 @@ const ScopeAssignmentSchema = new Schema<IScopeAssignment>(
         },
         assignedAt: { type: Date, default: Date.now },
         assignedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        endAt: { type: Date, index: true },
         unassignedAt: { type: Date },
         unassignedBy: { type: Schema.Types.ObjectId, ref: "User" },
         note: { type: String, trim: true },
@@ -91,6 +98,21 @@ ScopeAssignmentSchema.index(
         partialFilterExpression: {
             unassignedAt: { $exists: false },
             roleKey: { $in: ["neighborhood_leader", "secretary"] },
+        },
+    },
+);
+// Phong thu 2 lop rieng cho truc "toi da bao nhieu pham vi 1 nguoi duoc active
+// cung luc" (maxActiveScopesPerUser) - KHAC truc tren (moi pham vi toi da bao
+// nhieu nguoi). Hien chi neighborhood_coleader dung gia tri 1 (1 nguoi khong
+// duoc la to pho active o 2 to dan pho cung luc) - xem
+// neighborhoodService.assignNeighborhoodColeader.
+ScopeAssignmentSchema.index(
+    { userId: 1, roleKey: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            unassignedAt: { $exists: false },
+            roleKey: "neighborhood_coleader",
         },
     },
 );

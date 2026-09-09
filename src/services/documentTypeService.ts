@@ -5,11 +5,44 @@ import {
     type IDocumentType,
 } from "@/models";
 import { HttpError } from "@/lib/response";
+import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import type {
     CreateDocumentTypeInput,
     UpdateDocumentTypeInput,
 } from "@/validators/documentType";
+
+const MAX_SAMPLE_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_SAMPLE_FILE_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".doc",
+    ".docx",
+];
+
+async function saveSampleFile(
+    file: File,
+): Promise<{ url: string; name: string }> {
+    if (file.size > MAX_SAMPLE_FILE_SIZE_BYTES) {
+        throw new HttpError(
+            "File mẫu vượt quá dung lượng cho phép (tối đa 10MB)",
+            400,
+        );
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_SAMPLE_FILE_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_SAMPLE_FILE_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(buffer, file.name, "document-types");
+    return { url, name: file.name };
+}
 
 export async function listDocumentTypes(
     params: {
@@ -63,6 +96,7 @@ export async function getDocumentTypeById(id: string): Promise<IDocumentType> {
 export async function createDocumentType(
     actorId: string,
     input: CreateDocumentTypeInput,
+    sampleFile?: File,
 ) {
     const code = input.code.trim().toUpperCase();
     const existing = await DocumentType.findOne({ code });
@@ -70,9 +104,13 @@ export async function createDocumentType(
         throw new HttpError("Mã loại giấy tờ đã tồn tại", 409);
     }
 
+    const sample = sampleFile ? await saveSampleFile(sampleFile) : undefined;
+
     const documentType = await DocumentType.create({
         ...input,
         code,
+        sampleFileUrl: sample?.url,
+        sampleFileName: sample?.name,
         createdBy: actorId,
         updatedBy: actorId,
     });
@@ -92,6 +130,7 @@ export async function updateDocumentType(
     actorId: string,
     id: string,
     input: UpdateDocumentTypeInput,
+    options: { sampleFile?: File; removeSampleFile?: boolean } = {},
 ) {
     const documentType = await getDocumentTypeById(id);
 
@@ -106,6 +145,20 @@ export async function updateDocumentType(
         documentType.hasExpiryDate = input.hasExpiryDate;
     }
     if (input.active !== undefined) documentType.active = input.active;
+
+    if (options.sampleFile) {
+        const sample = await saveSampleFile(options.sampleFile);
+        if (documentType.sampleFileUrl) {
+            await deleteUploadedFile(documentType.sampleFileUrl);
+        }
+        documentType.sampleFileUrl = sample.url;
+        documentType.sampleFileName = sample.name;
+    } else if (options.removeSampleFile && documentType.sampleFileUrl) {
+        await deleteUploadedFile(documentType.sampleFileUrl);
+        documentType.sampleFileUrl = undefined;
+        documentType.sampleFileName = undefined;
+    }
+
     documentType.updatedBy = actorId as any;
     await documentType.save();
 
@@ -144,6 +197,9 @@ export async function deleteDocumentType(actorId: string, id: string) {
     }
 
     await DocumentType.findByIdAndDelete(id);
+    if (documentType.sampleFileUrl) {
+        await deleteUploadedFile(documentType.sampleFileUrl);
+    }
 
     await writeAuditLog({
         actorId,

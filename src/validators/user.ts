@@ -44,7 +44,7 @@ export const createHouseOwnerSchema = z.object({
         .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
     displayName: z.string().min(1, "Thiếu họ tên"),
     address: z.string().optional(),
-    idNumber: z.string().min(1, "Thiếu số CMND/CCCD"),
+    idNumber: z.string().optional(),
     role: z.string().min(1).default("house_owner"),
     password: z
         .string()
@@ -65,7 +65,7 @@ export const createOwnerManagedAccountSchema = z.object({
         .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
     displayName: z.string().min(1, "Thiếu họ tên"),
     address: z.string().optional(),
-    idNumber: z.string().min(1, "Thiếu số CMND/CCCD"),
+    idNumber: z.string().optional(),
     password: z
         .string()
         .min(6, "Mật khẩu phải có ít nhất 6 ký tự")

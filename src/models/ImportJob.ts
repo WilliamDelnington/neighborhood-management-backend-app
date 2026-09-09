@@ -49,8 +49,19 @@ export interface IImportJob extends Document {
     // HouseColumnMapping.createHouseholds la boolean).
     columnMapping: Record<string, unknown>;
     rowErrors: IImportRowError[];
+    // Dong da nhan dien "du lieu da ton tai" (trung ten/ma/cccd... voi DB hoac
+    // voi dong khac trong cung file) - KHONG con bi coi la loi/chan commit
+    // nhu truoc, chi bi bo qua (khong tao moi/khong tao trung) va hien thi rieng
+    // voi rowErrors that su (xem cac ham previewXImport/applyXImportMapping).
+    skippedRows: IImportRowError[];
     previewData: Record<string, unknown>[];
     committedCount: number;
+    // 2 truong duoi day CHI co y nghia trong luc commit (status="committing"/
+    // "committed") - phan tach committedCount (tong so dong DA XU LY, giu de
+    // tuong thich nguoc) thanh "tao moi" va "da ton tai/bo qua" de frontend
+    // hien thi chi tiet tien do (xem processXImportRows).
+    createdCount: number;
+    skippedCount: number;
     createdBy: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -82,8 +93,11 @@ const ImportJobSchema = new Schema<IImportJob>(
         suggestedMapping: { type: Schema.Types.Mixed, default: {} },
         columnMapping: { type: Schema.Types.Mixed, default: {} },
         rowErrors: { type: [ImportRowErrorSchema], default: [] },
+        skippedRows: { type: [ImportRowErrorSchema], default: [] },
         previewData: { type: Schema.Types.Mixed, default: [] },
         committedCount: { type: Number, default: 0 },
+        createdCount: { type: Number, default: 0 },
+        skippedCount: { type: Number, default: 0 },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     },
     // minimize:false - mac dinh Mongoose se xoa hang cac truong Mixed dang
