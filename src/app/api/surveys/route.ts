@@ -4,27 +4,32 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requirePermission } from "@/lib/rbac";
+import { requireUser, requirePermission, optionalUser } from "@/lib/rbac";
 import { createSurveySchema } from "@/validators/survey";
 import { createSurvey, listSurveys } from "@/services/surveyService";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET cong khai: xem danh sach khao sat (co the loc openOnly=1 de chi lay khao sat dang mo).
- * Khong yeu cau dang nhap de duyet danh sach; viec kiem tra dieu kien tra loi (eligibleRoles/
- * eligibleStreetIds/eligibleNeighborhoodIds/eligibleBusinessTypeIds) duoc thuc hien khi goi
- * API tra loi (xem surveyService.respondToSurvey / lib/surveyEligibility.ts).
+ * GET khong bat buoc dang nhap (de nhan vien quan ly khao sat - co quyen
+ * "surveys.read" - va nguoi tra loi deu dung chung 1 API), nhung KHONG con
+ * "cong khai" theo nghia moi nguoi thay giong nhau: neu nguoi goi khong co
+ * quyen "surveys.read", danh sach tra ve se AN het cac khao sat "nhap" (draft)
+ * va CHI gom cac khao sat ho du dieu kien tra loi (isSurveyEligible) - xem
+ * surveyService.listSurveys. Nguoi co quyen "surveys.read" van thay day du
+ * (ke ca draft, khong loc dieu kien) de phuc vu quan ly.
  */
 export async function GET(req: Request) {
     try {
         await connectDB();
+        const viewerUser = await optionalUser(req);
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const result = await listSurveys({
             page,
             limit,
             openOnly: searchParams.get("openOnly") === "1",
+            viewerUser,
         });
         return apiSuccess(result);
     } catch (err) {

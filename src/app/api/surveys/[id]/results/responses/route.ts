@@ -1,7 +1,10 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { getSurveyResults, requireOwnedSurvey } from "@/services/surveyService";
+import {
+    getSurveyIndividualResponses,
+    requireOwnedSurvey,
+} from "@/services/surveyService";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +16,11 @@ export async function GET(
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "surveys.read");
-        // "surveys.read" chi la dieu kien vao duoc man khao sat noi chung -
-        // xem ket qua tong hop van chi danh cho admin/nguoi tao/dong chu bien
-        // cua CHINH khao sat nay (giong dieu kien sua/xoa - assertSurveyEditable),
-        // tranh vd To truong xem duoc ket qua khao sat gioi han cho vai tro khac.
+        // Cung dieu kien voi /results (chi owner/dong chu bien/admin) vi day la
+        // du lieu nhay cam hon: lo ai da tra loi gi, khong chi so lieu tong hop.
         await requireOwnedSurvey(actorUser, params.id);
-        const results = await getSurveyResults(params.id);
-        return apiSuccess(results);
+        const responses = await getSurveyIndividualResponses(params.id);
+        return apiSuccess(responses);
     } catch (err) {
         return apiErrorFromException(err);
     }
