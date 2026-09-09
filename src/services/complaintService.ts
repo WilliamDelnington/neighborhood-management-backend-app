@@ -6,9 +6,9 @@ import {
     Citizen,
     HouseRecord,
     Neighborhood,
-    NeighborhoodColeaderAssignment,
     Request as RequestModel,
     RequestRecipient,
+    ScopeAssignment,
     User,
     type IComplaint,
     type IComplaintTypeDefinition,
@@ -357,13 +357,15 @@ export async function resolveComplaintTypeRecipientIds(
                     roleUserIds.push(String(neighborhood.leaderUserId));
                 }
             } else if (role === "neighborhood_coleader" && houseNeighborhoodId) {
-                const coleaders = await NeighborhoodColeaderAssignment.find({
-                    neighborhoodId: houseNeighborhoodId,
+                const coleaders = await ScopeAssignment.find({
+                    roleKey: "neighborhood_coleader",
+                    scopeType: "NEIGHBORHOOD",
+                    scopeId: houseNeighborhoodId,
                     unassignedAt: { $exists: false },
                 })
-                    .select("coleaderUserId")
-                    .sort({ coleaderUserId: 1 });
-                coleaders.forEach(c => roleUserIds.push(String(c.coleaderUserId)));
+                    .select("userId")
+                    .sort({ userId: 1 });
+                coleaders.forEach(c => roleUserIds.push(String(c.userId)));
             } else if (role === "cooperator" && houseCluster) {
                 const cooperators = await User.find({
                     status: "active",
@@ -512,13 +514,15 @@ export async function createComplaint(
         const neighborhood = await Neighborhood.findById(
             neighborhoodId,
         ).select("leaderUserId");
-        const coleaders = await NeighborhoodColeaderAssignment.find({
-            neighborhoodId,
+        const coleaders = await ScopeAssignment.find({
+            roleKey: "neighborhood_coleader",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: neighborhoodId,
             unassignedAt: { $exists: false },
-        }).select("coleaderUserId");
+        }).select("userId");
         const targetUserIds = [
             neighborhood?.leaderUserId,
-            ...coleaders.map(c => c.coleaderUserId),
+            ...coleaders.map(c => c.userId),
         ].filter(Boolean) as mongoose.Types.ObjectId[];
         if (targetUserIds.length) {
             await createNotification({

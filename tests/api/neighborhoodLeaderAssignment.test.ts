@@ -5,7 +5,7 @@ import {
 } from "@/app/api/neighborhoods/route";
 import { PUT as assignLeaderRoute } from "@/app/api/neighborhoods/[id]/leader/route";
 import { GET as leaderHistoryRoute } from "@/app/api/neighborhoods/[id]/leader-history/route";
-import { Neighborhood, NeighborhoodLeaderAssignment, User } from "@/models";
+import { Neighborhood, ScopeAssignment, User } from "@/models";
 import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
 async function createNeighborhood(
@@ -111,12 +111,14 @@ describe("Neighborhood: tao va gan to truong", () => {
             updatedLeader!.assignedNeighborhoodIds.map(String),
         ).toContain(String(created.data._id));
 
-        const activeAssignment = await NeighborhoodLeaderAssignment.findOne({
-            neighborhoodId: created.data._id,
+        const activeAssignment = await ScopeAssignment.findOne({
+            roleKey: "neighborhood_leader",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: created.data._id,
             unassignedAt: { $exists: false },
         });
         expect(activeAssignment).not.toBeNull();
-        expect(String(activeAssignment!.leaderUserId)).toBe(String(leader._id));
+        expect(String(activeAssignment!.userId)).toBe(String(leader._id));
     });
 
     it("to truong dang lam to truong o to khac -> tu dong chuyen (khong con khai niem nhiem ky de tu choi)", async () => {
@@ -151,8 +153,10 @@ describe("Neighborhood: tao va gan to truong", () => {
         const newNeighborhood = await Neighborhood.findById(neighborhoodB.data._id);
         expect(String(newNeighborhood!.leaderUserId)).toBe(String(leader._id));
 
-        const oldAssignment = await NeighborhoodLeaderAssignment.findOne({
-            neighborhoodId: neighborhoodA.data._id,
+        const oldAssignment = await ScopeAssignment.findOne({
+            roleKey: "neighborhood_leader",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: neighborhoodA.data._id,
         });
         expect(oldAssignment?.unassignedAt).toBeDefined();
     });

@@ -62,22 +62,36 @@ async function rebuildUserScopeCache(userId: string): Promise<void> {
         a => a.roleKey === "neighborhood_leader",
     );
 
-    const wardUpdate: Record<string, unknown> = {};
-    if (wardAssignments.length > 0) {
-        // wardCode/wardName la du lieu tu API hanh chinh ngoai (khong co model
-        // Ward rieng) - lay tu ban ghi ScopeAssignment gan nhat con active.
-        const latest = wardAssignments[wardAssignments.length - 1];
-        wardUpdate.wardCode = latest.scopeId;
+    // QUAN TRONG: gan truong = undefined trong update object KHONG xoa duoc
+    // field tren Mongo (Mongoose bo qua key co gia tri undefined khi dung
+    // $set) - phai dung $unset rieng, giong quy uoc da dung o
+    // neighborhoodService.ts (unassignNeighborhoodLeader) va
+    // appointmentServiceService.ts. Thieu buoc nay khien wardCode/neighborhoodId
+    // "dinh" lai tren User sau khi unassign, lam UI (vd WardManagementPage)
+    // van hien thi nguoi dung nhu dang con duoc gan.
+    const setFields: Record<string, unknown> = { assignedNeighborhoodIds };
+    const unsetFields: Record<string, unknown> = {};
+
+    if (leaderAssignment) {
+        setFields.neighborhoodId = leaderAssignment.scopeId;
     } else {
-        wardUpdate.wardCode = undefined;
-        wardUpdate.wardName = undefined;
+        unsetFields.neighborhoodId = "";
     }
 
-    await User.findByIdAndUpdate(userId, {
-        neighborhoodId: leaderAssignment ? leaderAssignment.scopeId : undefined,
-        assignedNeighborhoodIds,
-        ...wardUpdate,
-    });
+    if (wardAssignments.length > 0) {
+        // wardCode la du lieu tu API hanh chinh ngoai (khong co model Ward
+        // rieng) - lay tu ban ghi ScopeAssignment gan nhat con active.
+        const latest = wardAssignments[wardAssignments.length - 1];
+        setFields.wardCode = latest.scopeId;
+    } else {
+        unsetFields.wardCode = "";
+        unsetFields.wardName = "";
+    }
+
+    const update: Record<string, unknown> = { $set: setFields };
+    if (Object.keys(unsetFields).length > 0) update.$unset = unsetFields;
+
+    await User.findByIdAndUpdate(userId, update);
 }
 
 export async function assignScope(

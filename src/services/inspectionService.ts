@@ -15,6 +15,7 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { requirePermission, userHasPermission } from "@/lib/rbac";
+import { isCollaboratorOrLegacyCooperator } from "@/lib/systemRoles";
 import { saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import { createNotification } from "@/services/notificationService";
@@ -40,7 +41,6 @@ import type {
     UpdateInspectionResultInput,
 } from "@/validators/inspection";
 
-const COLLABORATOR_ROLES = ["neighborhood_collaborator", "cooperator"];
 const MUTABLE_RESULT_STATUSES: InspectionResultStatus[] = [
     "DRAFT",
     "FIELD_CHECK_REQUIRED",
@@ -66,7 +66,7 @@ function actorNeighborhoodIds(user: IUser): string[] {
 }
 
 function isCollaborator(user: IUser): boolean {
-    return user.roles.some(role => COLLABORATOR_ROLES.includes(role));
+    return isCollaboratorOrLegacyCooperator(user.roles);
 }
 
 function scopedTargetFilter(

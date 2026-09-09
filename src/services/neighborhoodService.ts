@@ -1,10 +1,8 @@
 import {
     HouseRecord,
     Neighborhood,
-    NeighborhoodLeaderAssignment,
-    NeighborhoodColeaderAssignment,
     NeighborhoodHistory,
-    NeighborhoodCollaboratorAssignment,
+    ScopeAssignment,
     FileAsset,
     InspectionCampaign,
     InspectionTarget,
@@ -14,6 +12,7 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
+import { isCollaboratorOrLegacyCooperator } from "@/lib/systemRoles";
 import type {
     CreateNeighborhoodInput,
     AssignNeighborhoodCollaboratorInput,
@@ -25,7 +24,7 @@ const LEADER_POPULATE = "displayName phone status";
 
 /**
  * Ket thuc cac phan cong CONG TAC VIEN da qua han (endAt rieng cua tung phan
- * cong, KHONG lien quan den nhiem ky - xem models/NeighborhoodCollaboratorAssignment.ts)
+ * cong, KHONG lien quan den nhiem ky - xem models/ScopeAssignment.ts)
  * va dong bo lai scope tren User. To truong/To pho KHONG con o day nua - sau
  * khi bo khai niem nhiem ky (nhiem ky/khoang thoi gian), phan cong To truong/
  * To pho la "active cho den khi duoc go tay" (giong quy uoc gan Bi thu cap
@@ -33,24 +32,28 @@ const LEADER_POPULATE = "displayName phone status";
  */
 export async function expireNeighborhoodOfficerAssignments(userId?: string) {
     const now = new Date();
-    const collaboratorFilter = userId ? { collaboratorUserId: userId } : {};
-    const expiredCollaborators = await NeighborhoodCollaboratorAssignment.find({
+    const collaboratorFilter = userId ? { userId } : {};
+    const expiredCollaborators = await ScopeAssignment.find({
         ...collaboratorFilter,
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
         unassignedAt: { $exists: false },
         endAt: { $lt: now },
     });
     for (const assignment of expiredCollaborators) {
         assignment.unassignedAt = assignment.endAt || now;
         await assignment.save();
-        const remaining = await NeighborhoodCollaboratorAssignment.exists({
-            neighborhoodId: assignment.neighborhoodId,
-            collaboratorUserId: assignment.collaboratorUserId,
+        const remaining = await ScopeAssignment.exists({
+            roleKey: "neighborhood_collaborator",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: assignment.scopeId,
+            userId: assignment.userId,
             unassignedAt: { $exists: false },
         });
         if (!remaining) {
             await User.updateOne(
-                { _id: assignment.collaboratorUserId },
-                { $pull: { assignedNeighborhoodIds: assignment.neighborhoodId } },
+                { _id: assignment.userId },
+                { $pull: { assignedNeighborhoodIds: assignment.scopeId } },
             );
         }
     }
@@ -170,10 +173,16 @@ export async function listNeighborhoods(params: {
               { $match: { neighborhoodId: { $in: items.map(n => n._id) } } },
               { $group: { _id: "$neighborhoodId", count: { $sum: 1 } } },
           ]),
-          NeighborhoodColeaderAssignment.find({
-              neighborhoodId: { $in: ids },
+          ScopeAssignment.find({
+              roleKey: "neighborhood_coleader",
+              scopeType: "NEIGHBORHOOD",
+              // scopeId la Mixed - luon luu duoi dang string cho pham vi
+              // NEIGHBORHOOD (xem assignNeighborhoodColeader), nen phai ep
+              // ve string o day, khong the so sanh truc tiep voi ObjectId
+              // tra ve tu Neighborhood.find (Mixed khong tu dong cast).
+              scopeId: { $in: ids.map(String) },
               unassignedAt: { $exists: false },
-          }).populate("coleaderUserId", LEADER_POPULATE),
+          }).populate("userId", LEADER_POPULATE),
           FileAsset.aggregate([
               { $match: { relatedModel: "Neighborhood", relatedId: { $in: ids } } },
               { $group: { _id: "$relatedId", count: { $sum: 1 } } },
@@ -185,10 +194,10 @@ export async function listNeighborhoods(params: {
     );
     const coleadersById = new Map<string, unknown[]>();
     for (const assignment of coleaderAssignments) {
-        const key = String(assignment.neighborhoodId);
+        const key = String(assignment.scopeId);
         coleadersById.set(key, [
             ...(coleadersById.get(key) || []),
-            assignment.coleaderUserId,
+            assignment.userId,
         ]);
     }
     const attachmentCountById = new Map<string, number>(
@@ -396,8 +405,13 @@ export async function assignNeighborhoodLeader(
     // to dan pho nay khoi ca neighborhoodId (chinh) lan assignedNeighborhoodIds
     // (phu) cua nguoi dung do, khong can phan biet chinh/phu.
     if (currentLeaderId) {
-        await NeighborhoodLeaderAssignment.updateOne(
-            { neighborhoodId: neighborhood._id, unassignedAt: { $exists: false } },
+        await ScopeAssignment.updateOne(
+            {
+                roleKey: "neighborhood_leader",
+                scopeType: "NEIGHBORHOOD",
+                scopeId: String(neighborhood._id),
+                unassignedAt: { $exists: false },
+            },
             { unassignedAt: now, unassignedBy: actorId },
         );
         await User.updateOne(
@@ -435,9 +449,11 @@ export async function assignNeighborhoodLeader(
     // dong dong phan cong do (chuyen to truong) - mot nguoi chi lam to truong
     // MOT noi tai mot thoi diem, khong con khai niem nhiem ky/khoang thoi gian
     // de cho phep song song o hai noi nhu truoc.
-    const otherActiveAssignment = await NeighborhoodLeaderAssignment.findOne({
-        leaderUserId,
-        neighborhoodId: { $ne: neighborhood._id },
+    const otherActiveAssignment = await ScopeAssignment.findOne({
+        roleKey: "neighborhood_leader",
+        scopeType: "NEIGHBORHOOD",
+        userId: leaderUserId,
+        scopeId: { $ne: String(neighborhood._id) },
         unassignedAt: { $exists: false },
     });
     if (otherActiveAssignment) {
@@ -445,22 +461,24 @@ export async function assignNeighborhoodLeader(
         otherActiveAssignment.unassignedBy = actorId as any;
         await otherActiveAssignment.save();
         await Neighborhood.updateOne(
-            { _id: otherActiveAssignment.neighborhoodId, leaderUserId },
+            { _id: otherActiveAssignment.scopeId, leaderUserId },
             { $unset: { leaderUserId: "" } },
         );
         await User.updateOne(
-            { _id: leaderUserId, neighborhoodId: otherActiveAssignment.neighborhoodId },
+            { _id: leaderUserId, neighborhoodId: otherActiveAssignment.scopeId },
             { $unset: { neighborhoodId: "" } },
         );
         await User.updateOne(
             { _id: leaderUserId },
-            { $pull: { assignedNeighborhoodIds: otherActiveAssignment.neighborhoodId } },
+            { $pull: { assignedNeighborhoodIds: otherActiveAssignment.scopeId } },
         );
     }
 
-    await NeighborhoodLeaderAssignment.create({
-        neighborhoodId: neighborhood._id,
-        leaderUserId,
+    await ScopeAssignment.create({
+        roleKey: "neighborhood_leader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: String(neighborhood._id),
+        userId: leaderUserId,
         assignedBy: actorId,
         assignedAt: now,
         note,
@@ -496,26 +514,32 @@ export async function getLeaderHistory(neighborhoodId: string) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
-    return NeighborhoodLeaderAssignment.find({ neighborhoodId })
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_leader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+    })
         .sort({ assignedAt: -1 })
-        .populate("leaderUserId", LEADER_POPULATE)
+        .populate("userId", LEADER_POPULATE)
         .populate("assignedBy", "displayName")
         .populate("unassignedBy", "displayName");
 }
 
 /**
  * Danh sach To pho dang hoat dong cua mot to dan pho. Khac To truong: khong
- * denormalize len Neighborhood - doc truc tiep tu NeighborhoodColeaderAssignment
- * (xem ghi chu trong model ve ly do khong can field rieng).
+ * denormalize len Neighborhood - doc truc tiep tu ScopeAssignment
+ * (roleKey="neighborhood_coleader").
  */
 export async function listColeaders(neighborhoodId: string) {
     await expireNeighborhoodOfficerAssignments();
-    return NeighborhoodColeaderAssignment.find({
-        neighborhoodId,
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
         unassignedAt: { $exists: false },
     })
         .sort({ assignedAt: -1 })
-        .populate("coleaderUserId", LEADER_POPULATE)
+        .populate("userId", LEADER_POPULATE)
         .populate("assignedBy", "displayName");
 }
 
@@ -536,9 +560,11 @@ export async function assignNeighborhoodColeader(
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
-    const existing = await NeighborhoodColeaderAssignment.findOne({
-        neighborhoodId,
-        coleaderUserId,
+    const existing = await ScopeAssignment.findOne({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        userId: coleaderUserId,
         unassignedAt: { $exists: false },
     });
     if (existing) return;
@@ -559,12 +585,15 @@ export async function assignNeighborhoodColeader(
     }
 
     // 1 nguoi chi duoc la to pho active o DUY NHAT 1 to dan pho cung luc (xem
-    // unique index tren NeighborhoodColeaderAssignment) - tu choi thay vi tu
-    // dong chuyen (khac chinh sach cua to truong), nen kiem tra ro o day de
-    // bao loi de hieu thay vi de loi trung khoa tu Mongo.
-    const otherActive = await NeighborhoodColeaderAssignment.exists({
-        coleaderUserId,
-        neighborhoodId: { $ne: neighborhoodId },
+    // unique index tren ScopeAssignment - {userId,roleKey} khi roleKey=
+    // "neighborhood_coleader") - tu choi thay vi tu dong chuyen (khac chinh
+    // sach cua to truong), nen kiem tra ro o day de bao loi de hieu thay vi de
+    // loi trung khoa tu Mongo.
+    const otherActive = await ScopeAssignment.exists({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        userId: coleaderUserId,
+        scopeId: { $ne: neighborhoodId },
         unassignedAt: { $exists: false },
     });
     if (otherActive) {
@@ -574,9 +603,11 @@ export async function assignNeighborhoodColeader(
         );
     }
 
-    await NeighborhoodColeaderAssignment.create({
-        neighborhoodId,
-        coleaderUserId,
+    await ScopeAssignment.create({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        userId: coleaderUserId,
         assignedBy: actorId,
         assignedAt: new Date(),
         note,
@@ -607,8 +638,14 @@ export async function unassignNeighborhoodColeader(
     coleaderUserId: string,
 ): Promise<void> {
     const now = new Date();
-    const result = await NeighborhoodColeaderAssignment.updateOne(
-        { neighborhoodId, coleaderUserId, unassignedAt: { $exists: false } },
+    const result = await ScopeAssignment.updateOne(
+        {
+            roleKey: "neighborhood_coleader",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: neighborhoodId,
+            userId: coleaderUserId,
+            unassignedAt: { $exists: false },
+        },
         { unassignedAt: now, unassignedBy: actorId },
     );
     if (result.matchedCount === 0) return;
@@ -636,9 +673,13 @@ export async function getColeaderHistory(neighborhoodId: string) {
     const neighborhood = await Neighborhood.findById(neighborhoodId);
     if (!neighborhood) throw new HttpError("Không tìm thấy tổ dân phố", 404);
 
-    return NeighborhoodColeaderAssignment.find({ neighborhoodId })
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+    })
         .sort({ assignedAt: -1 })
-        .populate("coleaderUserId", LEADER_POPULATE)
+        .populate("userId", LEADER_POPULATE)
         .populate("assignedBy", "displayName")
         .populate("unassignedBy", "displayName");
 }
@@ -656,15 +697,17 @@ export async function listNeighborhoodCollaborators(neighborhoodId: string) {
     await expireNeighborhoodOfficerAssignments();
     const exists = await Neighborhood.exists({ _id: neighborhoodId });
     if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
-    return NeighborhoodCollaboratorAssignment.find({
-        neighborhoodId,
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
         unassignedAt: { $exists: false },
     })
-        .sort({ startAt: -1 })
-        .populate("collaboratorUserId", LEADER_POPULATE)
-        .populate("streetId", "name code")
-        .populate("houseIds", "code address")
-        .populate("campaignId", "name status dueAt")
+        .sort({ assignedAt: -1 })
+        .populate("userId", LEADER_POPULATE)
+        .populate("subScope.streetId", "name code")
+        .populate("subScope.houseIds", "code address")
+        .populate("subScope.campaignId", "name status dueAt")
         .populate("assignedBy", "displayName");
 }
 
@@ -682,10 +725,7 @@ export async function assignNeighborhoodCollaborator(
     if (!collaborator || collaborator.status !== "active") {
         throw new HttpError("Cộng tác viên không hợp lệ", 422);
     }
-    if (
-        !collaborator.roles.includes("neighborhood_collaborator") &&
-        !collaborator.roles.includes("cooperator")
-    ) {
+    if (!isCollaboratorOrLegacyCooperator(collaborator.roles)) {
         throw new HttpError("Tài khoản phải có vai trò Cộng tác viên", 422);
     }
     const startAt = input.startAt || new Date();
@@ -720,25 +760,34 @@ export async function assignNeighborhoodCollaborator(
     }
 
     const duplicateFilter: Record<string, unknown> = {
-        neighborhoodId,
-        collaboratorUserId: input.collaboratorUserId,
-        scopeType: input.scopeType,
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        userId: input.collaboratorUserId,
+        "subScope.kind": input.scopeType,
         unassignedAt: { $exists: false },
     };
-    if (input.scopeType === "STREET") duplicateFilter.streetId = input.streetId;
-    if (input.scopeType === "CAMPAIGN") duplicateFilter.campaignId = input.campaignId;
-    if (await NeighborhoodCollaboratorAssignment.exists(duplicateFilter)) {
+    if (input.scopeType === "STREET") duplicateFilter["subScope.streetId"] = input.streetId;
+    if (input.scopeType === "CAMPAIGN") duplicateFilter["subScope.campaignId"] = input.campaignId;
+    if (await ScopeAssignment.exists(duplicateFilter)) {
         throw new HttpError("Phạm vi công tác này đã được phân công", 409);
     }
 
-    const assignment = await NeighborhoodCollaboratorAssignment.create({
-        ...input,
-        neighborhoodId,
-        startAt,
+    const assignment = await ScopeAssignment.create({
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        userId: input.collaboratorUserId,
+        assignedAt: startAt,
+        endAt: input.endAt,
         assignedBy: actorId,
-        streetId: input.scopeType === "STREET" ? input.streetId : undefined,
-        houseIds: input.scopeType === "HOUSE_GROUP" ? input.houseIds : [],
-        campaignId: input.scopeType === "CAMPAIGN" ? input.campaignId : undefined,
+        note: input.note,
+        subScope: {
+            kind: input.scopeType,
+            streetId: input.scopeType === "STREET" ? input.streetId : undefined,
+            houseIds: input.scopeType === "HOUSE_GROUP" ? input.houseIds : [],
+            campaignId: input.scopeType === "CAMPAIGN" ? input.campaignId : undefined,
+        },
     });
     await User.updateOne(
         { _id: collaborator._id },
@@ -748,7 +797,7 @@ export async function assignNeighborhoodCollaborator(
         writeAuditLog({
             actorId,
             action: "neighborhood.collaborator_assign",
-            targetModel: "NeighborhoodCollaboratorAssignment",
+            targetModel: "ScopeAssignment",
             targetId: assignment._id,
             metadata: { neighborhoodId, scopeType: input.scopeType },
         }),
@@ -770,23 +819,27 @@ export async function unassignNeighborhoodCollaborator(
     neighborhoodId: string,
     assignmentId: string,
 ) {
-    const assignment = await NeighborhoodCollaboratorAssignment.findOne({
+    const assignment = await ScopeAssignment.findOne({
         _id: assignmentId,
-        neighborhoodId,
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
         unassignedAt: { $exists: false },
     });
     if (!assignment) throw new HttpError("Không tìm thấy phân công", 404);
     assignment.unassignedAt = new Date();
     assignment.unassignedBy = actorId as any;
     await assignment.save();
-    const remaining = await NeighborhoodCollaboratorAssignment.exists({
-        neighborhoodId,
-        collaboratorUserId: assignment.collaboratorUserId,
+    const remaining = await ScopeAssignment.exists({
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        userId: assignment.userId,
         unassignedAt: { $exists: false },
     });
     if (!remaining) {
         await User.updateOne(
-            { _id: assignment.collaboratorUserId },
+            { _id: assignment.userId },
             { $pull: { assignedNeighborhoodIds: neighborhoodId } },
         );
     }
@@ -794,7 +847,7 @@ export async function unassignNeighborhoodCollaborator(
         writeAuditLog({
             actorId,
             action: "neighborhood.collaborator_unassign",
-            targetModel: "NeighborhoodCollaboratorAssignment",
+            targetModel: "ScopeAssignment",
             targetId: assignment._id,
             metadata: { neighborhoodId },
         }),
@@ -802,7 +855,7 @@ export async function unassignNeighborhoodCollaborator(
             neighborhoodId,
             actorId,
             action: "COLLABORATOR_UNASSIGNED",
-            metadata: { collaboratorUserId: assignment.collaboratorUserId },
+            metadata: { collaboratorUserId: assignment.userId },
         }),
     ]);
 }

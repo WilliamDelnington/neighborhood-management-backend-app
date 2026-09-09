@@ -6,12 +6,7 @@ import {
     DELETE as unassignCollaboratorRoute,
     POST as assignCollaboratorRoute,
 } from "@/app/api/neighborhoods/[id]/collaborators/route";
-import {
-    Neighborhood,
-    NeighborhoodLeaderAssignment,
-    NeighborhoodCollaboratorAssignment,
-    User,
-} from "@/models";
+import { Neighborhood, ScopeAssignment, User } from "@/models";
 import { areaScopeFilter } from "@/lib/rbac";
 import { authHeaders, createTestUser, makeRequest, readJson } from "../helpers";
 
@@ -116,7 +111,11 @@ describe("Neighborhood organization", () => {
         const [neighborhood, refreshedLeader, assignment] = await Promise.all([
             Neighborhood.findById(neighborhoodId),
             User.findById(leader._id),
-            NeighborhoodLeaderAssignment.findOne({ neighborhoodId }),
+            ScopeAssignment.findOne({
+                roleKey: "neighborhood_leader",
+                scopeType: "NEIGHBORHOOD",
+                scopeId: neighborhoodId,
+            }),
         ]);
         expect(neighborhood?.leaderUserId).toBeUndefined();
         expect(refreshedLeader?.assignedNeighborhoodIds).toHaveLength(0);
@@ -165,8 +164,9 @@ describe("Neighborhood organization", () => {
             (await User.findById(collaborator._id))?.assignedNeighborhoodIds,
         ).toHaveLength(0);
         expect(
-            await NeighborhoodCollaboratorAssignment.exists({
+            await ScopeAssignment.exists({
                 _id: assigned.data._id,
+                roleKey: "neighborhood_collaborator",
                 unassignedAt: { $exists: true },
             }),
         ).toBeTruthy();

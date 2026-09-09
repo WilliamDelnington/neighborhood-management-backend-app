@@ -4,7 +4,7 @@ import {
     POST as assignColeaderRoute,
     DELETE as unassignColeaderRoute,
 } from "@/app/api/neighborhoods/[id]/coleaders/route";
-import { NeighborhoodColeaderAssignment, User } from "@/models";
+import { ScopeAssignment, User } from "@/models";
 import { createTestUser, authHeaders, makeRequest, readJson } from "../helpers";
 
 async function createNeighborhood(
@@ -50,8 +50,10 @@ describe("Neighborhood: gan/huy gan to pho (coleader)", () => {
         );
         expect(res.status).toBe(200);
 
-        const assignment = await NeighborhoodColeaderAssignment.findOne({
-            neighborhoodId: created.data._id,
+        const assignment = await ScopeAssignment.findOne({
+            roleKey: "neighborhood_coleader",
+            scopeType: "NEIGHBORHOOD",
+            scopeId: created.data._id,
             unassignedAt: { $exists: false },
         });
         expect(assignment).not.toBeNull();
