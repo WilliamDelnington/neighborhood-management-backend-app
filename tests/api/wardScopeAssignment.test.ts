@@ -5,7 +5,7 @@ import {
     POST as assignScopeRoute,
 } from "@/app/api/scope-assignments/route";
 import { POST as unassignScopeRoute } from "@/app/api/scope-assignments/unassign/route";
-import { ScopeAssignment } from "@/models";
+import { ScopeAssignment, User } from "@/models";
 import { authHeaders, createTestUser, makeRequest, readJson } from "../helpers";
 
 const WARD_CODE = 88123;
@@ -147,5 +147,25 @@ describe("Config-driven ward scope assignment", () => {
         });
         expect(rows).toHaveLength(1);
         expect(rows[0].unassignedAt).toBeDefined();
+
+        // Regression: wardCode cache tren User phai duoc XOA (khong chi
+        // ScopeAssignment dong lai) - neu khong, WardManagementPage van hien
+        // thi nguoi nay nhu dang con duoc gan du da bam "go phan cong".
+        const updatedUser = await User.findById(secretary._id);
+        expect(updatedUser?.wardCode).toBeUndefined();
+
+        // /api/wards/managers tra ve TAT CA nguoi co vai tro cap Phuong (frontend
+        // moi loc theo wardCode === selectedWardCode - xem WardManagementPage.tsx)
+        // nen nguoi nay van con trong danh sach, nhung phai KHONG con wardCode
+        // cua phuong da go, neu khong WardManagementPage se van xep ho vao
+        // "Dang quan ly" cua phuong do.
+        const wardManagersRes = await listWardManagersRoute(
+            makeRequest("/api/wards/managers", { headers }),
+        );
+        const wardManagersJson = await readJson(wardManagersRes);
+        const entry = wardManagersJson.data.find(
+            (u: any) => u.id === String(secretary._id),
+        );
+        expect(entry?.wardCode).not.toBe(WARD_CODE + 2);
     });
 });

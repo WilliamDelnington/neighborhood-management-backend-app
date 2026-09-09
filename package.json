@@ -37,6 +37,8 @@
         "houses:backfill-province-ward": "tsx scripts/backfill-house-province-ward.ts",
         "neighborhoods:backfill-scoped-records": "tsx scripts/backfill-neighborhood-ids.ts",
         "neighborhoods:migrate-organization": "tsx scripts/migrate-neighborhood-organization.ts",
+        "neighborhoods:migrate-scope-assignments": "tsx scripts/migrate-neighborhood-assignments-to-scope-assignment.ts",
+        "roles:check-cooperator-usage": "tsx scripts/check-cooperator-role-usage.ts",
         "digital:migrate-foundation": "tsx scripts/migrate-digital-foundation.ts",
         "reports:migrate-foundation": "tsx scripts/migrate-reporting-foundation.ts",
         "reports:preview-pdf": "tsx scripts/preview-report-pdf.ts",

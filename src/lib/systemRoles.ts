@@ -1,5 +1,29 @@
 import { ALL_PERMISSION_KEYS } from "@/lib/permissionRegistry";
 
+// Vai tro CU, tu truoc khi co he thong To dan pho/neighborhood_collaborator -
+// KHONG co mat trong SYSTEM_ROLE_PERMISSIONS/SYSTEM_ROLE_SCOPE_CONFIG (tai
+// khoan chi giu vai tro nay se khong co permission nao qua getUserPermissionSet,
+// va khong the tao moi qua "Tạo tài khoản" - xem getCreatableRolesForActor).
+// Pham vi cua no la CUM (assignedClusters, xem rbac.clusterScopeFilter) - MOT
+// CO CHE KHAC voi pham vi To dan pho (ScopeAssignment) cua neighborhood_collaborator,
+// khong phai chi la ten cu cua cung mot vai tro - xem ghi chu chi tiet trong
+// scripts/check-cooperator-role-usage.ts truoc khi merge/xoa nhanh xu ly nay.
+// Gom cac noi kiem tra rai rac (rbac.ts/complaintService.ts/inspectionService.ts/
+// neighborhoodService.ts) ve MOT hang so de de doi khi co quyet dinh cuoi cung.
+export const LEGACY_COOPERATOR_ROLE_KEY = "cooperator";
+
+/**
+ * True neu user giu vai tro neighborhood_collaborator (chinh thuc) HOAC
+ * cooperator (vai tro cu, cung duoc chap nhan lam Cong tac vien To dan pho -
+ * xem neighborhoodService.assignNeighborhoodCollaborator).
+ */
+export function isCollaboratorOrLegacyCooperator(roles: string[]): boolean {
+    return (
+        roles.includes("neighborhood_collaborator") ||
+        roles.includes(LEGACY_COOPERATOR_ROLE_KEY)
+    );
+}
+
 // Permission mac dinh cho 6 vai tro he thong, suy ra tu cac requireRole(...) /
 // role-array constant thuc te trong code truoc khi co permission dong (khong
 // dung nguyen vi du minh hoa cua spec) de dam bao hanh vi giu nguyen nhu truoc.
