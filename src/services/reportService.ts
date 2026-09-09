@@ -91,8 +91,13 @@ export type PopulationReport = {
     elderlyCount: number;
     childCount: number;
     disabledOrSupportNeededCount: number;
+    disabledChildCount: number;
     partyMemberCount: number;
     unionMemberCount: number;
+    martyrCount: number;
+    martyrFamilyCount: number;
+    veteranCount: number;
+    otherSpecialCount: number;
 };
 
 export async function getPopulationReport(
@@ -126,8 +131,13 @@ export async function getPopulationReport(
         elderlyCount,
         childCount,
         disabledOrSupportNeededCount,
+        disabledChildCount,
         partyMemberCount,
         unionMemberCount,
+        martyrCount,
+        martyrFamilyCount,
+        veteranCount,
+        otherSpecialCount,
     ] = await Promise.all([
         Household.countDocuments(householdFilter),
         Citizen.countDocuments(citizenFilter),
@@ -160,8 +170,13 @@ export async function getPopulationReport(
             ...citizenFilter,
             isDisabledOrSupportNeeded: true,
         }),
+        Citizen.countDocuments({ ...citizenFilter, isDisabledChild: true }),
         Citizen.countDocuments({ ...citizenFilter, isPartyMember: true }),
         Citizen.countDocuments({ ...citizenFilter, isUnionMember: true }),
+        Citizen.countDocuments({ ...citizenFilter, isMartyr: true }),
+        Citizen.countDocuments({ ...citizenFilter, isMartyrFamily: true }),
+        Citizen.countDocuments({ ...citizenFilter, isVeteran: true }),
+        Citizen.countDocuments({ ...citizenFilter, isOtherSpecial: true }),
     ]);
 
     return {
@@ -180,8 +195,13 @@ export async function getPopulationReport(
         elderlyCount,
         childCount,
         disabledOrSupportNeededCount,
+        disabledChildCount,
         partyMemberCount,
         unionMemberCount,
+        martyrCount,
+        martyrFamilyCount,
+        veteranCount,
+        otherSpecialCount,
     };
 }
 
@@ -198,8 +218,13 @@ export function buildPopulationReportWorkbook(
             label: "Số người khuyết tật/cần hỗ trợ",
             value: data.disabledOrSupportNeededCount,
         },
+        { label: "Số trẻ em khuyết tật", value: data.disabledChildCount },
         { label: "Số đảng viên", value: data.partyMemberCount },
         { label: "Số đoàn viên/hội viên", value: data.unionMemberCount },
+        { label: "Số liệt sĩ", value: data.martyrCount },
+        { label: "Số gia đình liệt sĩ", value: data.martyrFamilyCount },
+        { label: "Số cựu chiến binh", value: data.veteranCount },
+        { label: "Số diện ưu tiên khác", value: data.otherSpecialCount },
     ]);
     addTableSheet(
         workbook,
