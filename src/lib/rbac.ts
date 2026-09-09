@@ -102,6 +102,20 @@ export async function requireUser(req: Request): Promise<IUser> {
     return user;
 }
 
+/**
+ * Nhu requireUser nhung KHONG nem loi - tra ve null neu thieu/invalid token
+ * (thay vi 401/423). Dung cho API cong khai muon ca nhan hoa ket qua cho
+ * nguoi da dang nhap (vd loc khao sat theo dieu kien du dieu kien cua chinh
+ * ho) ma khong bat buoc dang nhap moi xem duoc.
+ */
+export async function optionalUser(req: Request): Promise<IUser | null> {
+    try {
+        return await requireUser(req);
+    } catch {
+        return null;
+    }
+}
+
 export function isAdmin(session: SessionTokenPayload): boolean {
     return session.roles.includes("admin");
 }

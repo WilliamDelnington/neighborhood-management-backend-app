@@ -11,6 +11,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
+import { getUnreadRelatedIds } from "@/services/notificationReadService";
 import { writeAuditLog } from "@/services/auditService";
 import { getCorrespondenceTypeById } from "@/services/correspondenceTypeService";
 import type {
@@ -263,15 +264,20 @@ export async function listCorrespondences(params: {
 }) {
     const { actorUser } = params;
     const filter: Record<string, unknown> = {};
+    let isReceivedView = true;
 
     if (actorUser.roles.includes("admin")) {
         if (params.status) filter.status = params.status;
-        if (params.view === "sent") filter.senderId = actorUser._id;
+        if (params.view === "sent") {
+            filter.senderId = actorUser._id;
+            isReceivedView = false;
+        }
     } else {
         const view = params.view || "received";
         if (view === "sent") {
             filter.senderId = actorUser._id;
             if (params.status) filter.status = params.status;
+            isReceivedView = false;
         } else {
             const userNeighborhoodIds = [
                 actorUser.neighborhoodId,
@@ -285,14 +291,31 @@ export async function listCorrespondences(params: {
         }
     }
 
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
         Correspondence.find(filter)
             .sort({ isUrgent: -1, issuedAt: -1, createdAt: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
-            .populate("correspondenceTypeId", "name code"),
+            .populate("correspondenceTypeId", "name code")
+            .lean(),
         Correspondence.countDocuments(filter),
     ]);
+
+    // "isUnread" chi co y nghia o tab "Đã nhận" - danh dau dong nao con
+    // thong bao van ban chua doc, dung de hien in dam/cham do trong bang
+    // (xem CorrespondenceListPage.tsx), giong y tuong hop thu den.
+    let items: Array<(typeof rawItems)[number] & { isUnread?: boolean }> =
+        rawItems;
+    if (isReceivedView) {
+        const unreadIds = await getUnreadRelatedIds(
+            String(actorUser._id),
+            "Correspondence",
+        );
+        items = rawItems.map(doc => ({
+            ...doc,
+            isUnread: unreadIds.has(String(doc._id)),
+        }));
+    }
 
     return {
         items,

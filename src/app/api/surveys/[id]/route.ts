@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import { requireUser, requirePermission } from "@/lib/rbac";
+import { requireUser, requirePermission, optionalUser } from "@/lib/rbac";
 import { updateSurveySchema } from "@/validators/survey";
 import {
     deleteSurvey,
@@ -11,12 +11,13 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: { id: string } },
 ) {
     try {
         await connectDB();
-        const survey = await getSurveyById(params.id);
+        const viewerUser = await optionalUser(req);
+        const survey = await getSurveyById(params.id, viewerUser);
         return apiSuccess(survey);
     } catch (err) {
         return apiErrorFromException(err);
