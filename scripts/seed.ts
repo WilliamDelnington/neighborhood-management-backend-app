@@ -484,6 +484,7 @@ async function seedCitizens(households: any[], actorId: string) {
             birthDate: new Date("1948-03-03"),
             isElderly: true,
             isDisabledOrSupportNeeded: true,
+            isVeteran: true,
         },
         {
             fullName: "Lê Văn Cường",
@@ -493,6 +494,7 @@ async function seedCitizens(households: any[], actorId: string) {
             cccd: "001090003111",
             birthDate: new Date("1975-06-06"),
             isPartyMember: true,
+            isMartyrFamily: true,
         },
         {
             fullName: "Lê Thị Dịu",
@@ -520,6 +522,7 @@ async function seedCitizens(households: any[], actorId: string) {
             cccd: "001090004112",
             birthDate: new Date("2015-07-07"),
             isChild: true,
+            isDisabledChild: true,
         },
         {
             fullName: "Hoàng Văn Dân",
@@ -528,6 +531,8 @@ async function seedCitizens(households: any[], actorId: string) {
             relationToHead: "Chủ hộ",
             cccd: "001090005111",
             birthDate: new Date("1990-10-10"),
+            isOtherSpecial: true,
+            otherSpecialLabel: "Hộ nghèo",
         },
         {
             fullName: "Đỗ Văn Hạnh",

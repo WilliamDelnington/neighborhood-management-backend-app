@@ -126,8 +126,14 @@ export const citizenImportMappingSchema = z
         isElderly: z.string().optional(),
         isChild: z.string().optional(),
         isDisabledOrSupportNeeded: z.string().optional(),
+        isDisabledChild: z.string().optional(),
         isPartyMember: z.string().optional(),
         isUnionMember: z.string().optional(),
+        isMartyr: z.string().optional(),
+        isMartyrFamily: z.string().optional(),
+        isVeteran: z.string().optional(),
+        isOtherSpecial: z.string().optional(),
+        otherSpecialLabel: z.string().optional(),
     })
     .refine(data => !!data.householdCode || !!data.houseCode, {
         message:

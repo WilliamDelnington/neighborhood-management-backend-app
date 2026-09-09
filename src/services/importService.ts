@@ -214,8 +214,14 @@ const CITIZEN_COLUMNS = {
     isElderly: "Người cao tuổi",
     isChild: "Trẻ em",
     isDisabledOrSupportNeeded: "Người khuyết tật",
+    isDisabledChild: "Trẻ em khuyết tật",
     isPartyMember: "Đảng viên",
     isUnionMember: "Đoàn viên",
+    isMartyr: "Liệt sĩ",
+    isMartyrFamily: "Gia đình liệt sĩ",
+    isVeteran: "Cựu chiến binh",
+    isOtherSpecial: "Diện ưu tiên khác",
+    otherSpecialLabel: "Tên diện ưu tiên khác",
 } as const;
 
 const STREET_COLUMNS = {
@@ -1326,8 +1332,14 @@ export type CitizenColumnMapping = {
     isElderly?: string;
     isChild?: string;
     isDisabledOrSupportNeeded?: string;
+    isDisabledChild?: string;
     isPartyMember?: string;
     isUnionMember?: string;
+    isMartyr?: string;
+    isMartyrFamily?: string;
+    isVeteran?: string;
+    isOtherSpecial?: string;
+    otherSpecialLabel?: string;
 };
 
 // Cac truong tuong ung 1-1 voi cot trong file, tru "fullName" (bat buoc, xu
@@ -1348,8 +1360,14 @@ const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
     "isElderly",
     "isChild",
     "isDisabledOrSupportNeeded",
+    "isDisabledChild",
     "isPartyMember",
     "isUnionMember",
+    "isMartyr",
+    "isMartyrFamily",
+    "isVeteran",
+    "isOtherSpecial",
+    "otherSpecialLabel",
 ];
 
 /**
@@ -1644,12 +1662,30 @@ export async function applyCitizenImportMapping(
             isDisabledOrSupportNeeded: mapping.isDisabledOrSupportNeeded
                 ? parseBoolean(v[mapping.isDisabledOrSupportNeeded])
                 : false,
+            isDisabledChild: mapping.isDisabledChild
+                ? parseBoolean(v[mapping.isDisabledChild])
+                : false,
             isPartyMember: mapping.isPartyMember
                 ? parseBoolean(v[mapping.isPartyMember])
                 : false,
             isUnionMember: mapping.isUnionMember
                 ? parseBoolean(v[mapping.isUnionMember])
                 : false,
+            isMartyr: mapping.isMartyr
+                ? parseBoolean(v[mapping.isMartyr])
+                : false,
+            isMartyrFamily: mapping.isMartyrFamily
+                ? parseBoolean(v[mapping.isMartyrFamily])
+                : false,
+            isVeteran: mapping.isVeteran
+                ? parseBoolean(v[mapping.isVeteran])
+                : false,
+            isOtherSpecial: mapping.isOtherSpecial
+                ? parseBoolean(v[mapping.isOtherSpecial])
+                : false,
+            otherSpecialLabel: mapping.otherSpecialLabel
+                ? (v[mapping.otherSpecialLabel] || "").trim() || undefined
+                : undefined,
         });
     }
 
@@ -1743,8 +1779,14 @@ async function processCitizenImportRows(
                 isElderly: !!row.isElderly,
                 isChild: !!row.isChild,
                 isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
+                isDisabledChild: !!row.isDisabledChild,
                 isPartyMember: !!row.isPartyMember,
                 isUnionMember: !!row.isUnionMember,
+                isMartyr: !!row.isMartyr,
+                isMartyrFamily: !!row.isMartyrFamily,
+                isVeteran: !!row.isVeteran,
+                isOtherSpecial: !!row.isOtherSpecial,
+                otherSpecialLabel: row.otherSpecialLabel,
                 createdBy: actorId,
                 updatedBy: actorId,
             });
@@ -1946,6 +1988,11 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             width: 16,
         },
         {
+            header: CITIZEN_COLUMNS.isDisabledChild,
+            key: "isDisabledChild",
+            width: 16,
+        },
+        {
             header: CITIZEN_COLUMNS.isPartyMember,
             key: "isPartyMember",
             width: 14,
@@ -1954,6 +2001,23 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             header: CITIZEN_COLUMNS.isUnionMember,
             key: "isUnionMember",
             width: 14,
+        },
+        { header: CITIZEN_COLUMNS.isMartyr, key: "isMartyr", width: 12 },
+        {
+            header: CITIZEN_COLUMNS.isMartyrFamily,
+            key: "isMartyrFamily",
+            width: 16,
+        },
+        { header: CITIZEN_COLUMNS.isVeteran, key: "isVeteran", width: 14 },
+        {
+            header: CITIZEN_COLUMNS.isOtherSpecial,
+            key: "isOtherSpecial",
+            width: 14,
+        },
+        {
+            header: CITIZEN_COLUMNS.otherSpecialLabel,
+            key: "otherSpecialLabel",
+            width: 22,
         },
     ];
     worksheet.getRow(1).font = { bold: true };
@@ -1971,8 +2035,14 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         isElderly: "Không",
         isChild: "Không",
         isDisabledOrSupportNeeded: "Không",
+        isDisabledChild: "Không",
         isPartyMember: "Không",
         isUnionMember: "Có",
+        isMartyr: "Không",
+        isMartyrFamily: "Không",
+        isVeteran: "Có",
+        isOtherSpecial: "Không",
+        otherSpecialLabel: "",
     });
     worksheet.addRow({
         fullName: "Nguyễn Thị Bé",
@@ -1988,8 +2058,14 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         isElderly: "Không",
         isChild: "Có",
         isDisabledOrSupportNeeded: "Không",
+        isDisabledChild: "Có",
         isPartyMember: "Không",
         isUnionMember: "Không",
+        isMartyr: "Không",
+        isMartyrFamily: "Không",
+        isVeteran: "Không",
+        isOtherSpecial: "Có",
+        otherSpecialLabel: "Hộ nghèo",
     });
     return workbook;
 }

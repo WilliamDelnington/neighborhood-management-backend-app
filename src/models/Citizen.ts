@@ -41,8 +41,16 @@ export interface ICitizen extends Document {
     isElderly: boolean;
     isChild: boolean;
     isDisabledOrSupportNeeded: boolean;
+    isDisabledChild: boolean;
     isPartyMember: boolean;
     isUnionMember: boolean;
+    isMartyr: boolean;
+    isMartyrFamily: boolean;
+    isVeteran: boolean;
+    isOtherSpecial: boolean;
+    // Bat buoc khi isOtherSpecial=true (xem validators/citizen.ts) - mo ta
+    // dien khai tu do cho dien uu tien khong nam trong danh sach co san.
+    otherSpecialLabel?: string;
     zaloUserId?: mongoose.Types.ObjectId;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -94,8 +102,14 @@ const CitizenSchema = new Schema<ICitizen>(
         isElderly: { type: Boolean, default: false },
         isChild: { type: Boolean, default: false },
         isDisabledOrSupportNeeded: { type: Boolean, default: false },
+        isDisabledChild: { type: Boolean, default: false },
         isPartyMember: { type: Boolean, default: false },
         isUnionMember: { type: Boolean, default: false },
+        isMartyr: { type: Boolean, default: false },
+        isMartyrFamily: { type: Boolean, default: false },
+        isVeteran: { type: Boolean, default: false },
+        isOtherSpecial: { type: Boolean, default: false },
+        otherSpecialLabel: { type: String, trim: true },
         zaloUserId: { type: Schema.Types.ObjectId, ref: "User" },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
