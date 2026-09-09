@@ -26,8 +26,12 @@ const campaignChecklistItemSchema = z.object({
 });
 
 export const createInspectionCampaignSchema = z.object({
-    name: z.string().trim().min(3, "Tên chiến dịch quá ngắn").max(300),
-    purpose: z.string().trim().min(10, "Mục tiêu chiến dịch quá ngắn").max(5000),
+    name: z.string().trim().min(1, "Vui lòng nhập tên chiến dịch").max(300),
+    purpose: z
+        .string()
+        .trim()
+        .min(1, "Vui lòng nhập mục tiêu chiến dịch")
+        .max(5000),
     checklistTemplate: z.array(campaignChecklistItemSchema).min(1).max(200),
     allowSelfDeclaration: z.boolean().default(false),
     requiredEvidence: z.boolean().default(false),
@@ -57,8 +61,12 @@ export type CreateInspectionCampaignInput = z.infer<
 >;
 
 export const updateInspectionCampaignDetailsSchema = z.object({
-    name: z.string().trim().min(3, "Tên chiến dịch quá ngắn").max(300),
-    purpose: z.string().trim().min(10, "Mục tiêu chiến dịch quá ngắn").max(5000),
+    name: z.string().trim().min(1, "Vui lòng nhập tên chiến dịch").max(300),
+    purpose: z
+        .string()
+        .trim()
+        .min(1, "Vui lòng nhập mục tiêu chiến dịch")
+        .max(5000),
 });
 export type UpdateInspectionCampaignDetailsInput = z.infer<
     typeof updateInspectionCampaignDetailsSchema

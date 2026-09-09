@@ -3,8 +3,8 @@ import { LOAI_YEU_CAU_HO_TRO, TRANG_THAI_YEU_CAU_HO_TRO } from "@/types";
 
 export const createSupportTicketSchema = z.object({
     type: z.enum(LOAI_YEU_CAU_HO_TRO),
-    title: z.string().min(3, "Tiêu đề quá ngắn"),
-    content: z.string().min(10, "Nội dung quá ngắn"),
+    title: z.string().trim().min(1, "Vui lòng nhập tiêu đề"),
+    content: z.string().trim().min(1, "Vui lòng nhập nội dung"),
     images: z.array(z.string()).max(6).optional(),
     deviceInfo: z.string().optional(),
 });
@@ -21,7 +21,7 @@ export type UpdateSupportTicketStatusInput = z.infer<
 >;
 
 export const updateSupportTicketSchema = z.object({
-    content: z.string().min(10, "Nội dung quá ngắn"),
+    content: z.string().trim().min(1, "Vui lòng nhập nội dung"),
 });
 export type UpdateSupportTicketInput = z.infer<
     typeof updateSupportTicketSchema
