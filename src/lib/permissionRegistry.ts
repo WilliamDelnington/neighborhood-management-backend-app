@@ -461,6 +461,55 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         ],
     },
     {
+        key: "export_reports",
+        label: "Xuất báo cáo",
+        // Moi danh sach (the ExportReportListPage.tsx/reportItems.ts o
+        // frontend) co 1 quyen rieng - cho phep phan quyen ai duoc xem/xuat
+        // TUNG danh sach cu the, thay vi 1 quyen chung cho ca tinh nang.
+        permissions: [
+            {
+                key: "reports.export_citizens.unregistered_residency",
+                label: "Xem / xuất danh sách chưa khai báo cư trú",
+            },
+            {
+                key: "reports.export_citizens.military_age_male",
+                label: "Xem / xuất danh sách nam trong độ tuổi nhập ngũ",
+            },
+            {
+                key: "reports.export_citizens.women",
+                label: "Xem / xuất danh sách Phụ nữ",
+            },
+            {
+                key: "reports.export_citizens.elderly",
+                label: "Xem / xuất danh sách Người cao tuổi",
+            },
+            {
+                key: "reports.export_citizens.children",
+                label: "Xem / xuất danh sách Trẻ em",
+            },
+            {
+                key: "reports.export_citizens.veterans",
+                label: "Xem / xuất danh sách Cựu chiến binh",
+            },
+            {
+                key: "reports.export_citizens.martyrs",
+                label: "Xem / xuất danh sách Liệt sĩ/Thương binh/Bệnh binh",
+            },
+            {
+                key: "reports.export_citizens.poor_households",
+                label: "Xem / xuất danh sách Hộ nghèo/cận nghèo",
+            },
+            {
+                key: "reports.export_citizens.disease_monitoring",
+                label: "Xem / xuất danh sách theo dõi dịch bệnh",
+            },
+            {
+                key: "reports.export_citizens.unemployed",
+                label: "Xem / xuất danh sách Thất nghiệp",
+            },
+        ],
+    },
+    {
         key: "files",
         label: "Tài liệu, biểu mẫu",
         permissions: [
@@ -527,6 +576,14 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
 export const ALL_PERMISSION_KEYS: string[] = MODULE_PERMISSION_REGISTRY.flatMap(
     module => module.permissions.map(p => p.key),
 );
+
+// Dung o route GET /api/citizens: cho phep nguoi chi duoc cap MOT (hoac vai)
+// quyen xem/xuat danh sach cu the (khong co "citizens.read" day du) van goi
+// duoc danh sach nhan khau de loc/xuat - xem export_reports o tren.
+export const EXPORT_CITIZEN_REPORT_PERMISSION_KEYS: string[] =
+    MODULE_PERMISSION_REGISTRY.find(m => m.key === "export_reports")?.permissions.map(
+        p => p.key,
+    ) ?? [];
 
 export const PERMISSION_LABEL: Record<string, string> = Object.fromEntries(
     MODULE_PERMISSION_REGISTRY.flatMap(module =>
