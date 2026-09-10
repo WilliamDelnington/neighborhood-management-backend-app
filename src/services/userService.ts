@@ -98,15 +98,38 @@ export async function listUsers(params: {
 }
 
 /**
- * Danh sach rut gon (chi id + displayName) cac nhan vien co bat ky role nao trong
- * danh sach truyen vao - dung cho cac man hinh chon nguoi phu trach (vd. gan phu
- * trach phan anh) ma KHONG can quyen quan ly nguoi dung day du (/api/users la admin-only).
+ * Danh sach rut gon (id + displayName + roles) cac nhan vien co bat ky role nao
+ * trong danh sach truyen vao - dung cho cac man hinh chon nguoi phu trach (vd.
+ * gan phu trach phan anh) ma KHONG can quyen quan ly nguoi dung day du
+ * (/api/users la admin-only).
+ *
+ * `wardCode`: loc bo sung theo pham vi phuong/xa (vd khi chon nguoi phu trach
+ * cho MOT phan anh cu the, chi nen thay cac bo phan/thu ky CUNG phuong voi
+ * phan anh do, thay vi tat ca bo phan tren toan he thong - xem
+ * complaintService.ts). Dieu kien la OR voi "khong co wardCode" (thay vi AND
+ * tuyet doi) de KHONG loai bo cac vai tro khong gan pham vi phuong/xa (vd
+ * admin) - tranh thu hep danh sach ngoai y muon cho cac permission dung
+ * chung voi nhieu vai tro khac nhau.
  */
-export async function listAssignableStaff(roles: RoleType[]) {
-    const users = await User.find({ roles: { $in: roles }, status: "active" })
-        .select("displayName")
+export async function listAssignableStaff(
+    roles: RoleType[],
+    wardCode?: number,
+) {
+    const filter: Record<string, unknown> = {
+        roles: { $in: roles },
+        status: "active",
+    };
+    if (wardCode !== undefined) {
+        filter.$or = [{ wardCode }, { wardCode: { $exists: false } }];
+    }
+    const users = await User.find(filter)
+        .select("displayName roles")
         .sort({ displayName: 1 });
-    return users.map(u => ({ id: String(u._id), displayName: u.displayName }));
+    return users.map(u => ({
+        id: String(u._id),
+        displayName: u.displayName,
+        roles: u.roles,
+    }));
 }
 
 /**
