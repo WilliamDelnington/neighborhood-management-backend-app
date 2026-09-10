@@ -245,7 +245,14 @@ export async function listCitizens(params: {
             .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
             .limit(params.limit)
-            .populate("householdId", "code address cluster"),
+            // diseaseStatus/diseaseName duoc chon them de phuc vu bao cao "Xuat
+            // danh sach theo dõi dịch bệnh" (xem admin-web-app reportItems.ts) -
+            // bao cao do loc/hien thi tren Citizen nhung can thong tin dich benh
+            // cua Household ma Citizen thuoc ve.
+            .populate(
+                "householdId",
+                "code address cluster diseaseStatus diseaseName",
+            ),
         Citizen.countDocuments(filter),
     ]);
 

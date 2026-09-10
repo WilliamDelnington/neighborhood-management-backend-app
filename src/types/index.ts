@@ -375,6 +375,23 @@ export const LOAI_SO_HUU_LABEL: Record<LoaiSoHuu, string> = {
     cho_thue: "Cho thuê",
 };
 
+// Tinh trang benh/dich benh cua ho dan - "khong co" la mac dinh, 3 gia tri con
+// lai deu bat buoc phai co diseaseName di kem (xem refine tren
+// createHouseholdSchema trong validators/household.ts).
+export const DISEASE_STATUS = [
+    "none",
+    "recorded",
+    "monitoring",
+    "resolved",
+] as const;
+export type DiseaseStatus = typeof DISEASE_STATUS[number];
+export const DISEASE_STATUS_LABEL: Record<DiseaseStatus, string> = {
+    none: "Không có",
+    recorded: "Mới ghi nhận",
+    monitoring: "Đang theo dõi",
+    resolved: "Đã xử lý - hết theo dõi",
+};
+
 // ---------------------------------------------------------------------------
 // Nhan khau
 // ---------------------------------------------------------------------------

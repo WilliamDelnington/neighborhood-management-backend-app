@@ -174,6 +174,8 @@ export async function createHousehold(
         isNearPoor: input.isNearPoor ?? false,
         isMartyrFamilyHousehold: input.isMartyrFamilyHousehold ?? false,
         isLonelyElderly: input.isLonelyElderly ?? false,
+        diseaseStatus: input.diseaseStatus ?? "none",
+        diseaseName: input.diseaseName,
         houseId: input.houseId || undefined,
         status: resolveInitialVerificationStatus(houseRecord),
         note: input.note,
