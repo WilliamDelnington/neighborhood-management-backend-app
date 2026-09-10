@@ -4,7 +4,8 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import { requireUser, requirePermission } from "@/lib/rbac";
+import { requireUser, requirePermission, requireAnyPermission } from "@/lib/rbac";
+import { EXPORT_CITIZEN_REPORT_PERMISSION_KEYS } from "@/lib/permissionRegistry";
 import { createCitizenSchema } from "@/validators/citizen";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,14 @@ export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "citizens.read");
+        // Cho phep nguoi chi duoc cap 1 trong cac quyen
+        // "reports.export_citizens.*" (rieng cho man Xuat bao cao) truy cap
+        // danh sach nay ma khong bat buoc phai co ca quyen "citizens.read"
+        // day du (quyen do con gate ca man Nhan khau/CRUD).
+        await requireAnyPermission(user, [
+            "citizens.read",
+            ...EXPORT_CITIZEN_REPORT_PERMISSION_KEYS,
+        ]);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
