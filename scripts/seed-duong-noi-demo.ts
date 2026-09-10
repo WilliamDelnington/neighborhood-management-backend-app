@@ -8,6 +8,14 @@
  *     2 cong ty (chu nha da dang ca nhan/to chuc, mot so tai khoan dung chung
  *     lam chu nha + chu ho + dai dien ho kinh doanh cung luc), 1 to pho + 2
  *     cong tac vien.
+ *   - Ho dan duoc da dang hoa cac "trang thai dac biet" (needsSupport/
+ *     isNearPoor/isMartyrFamilyHousehold/isLonelyElderly) va tinh trang dich
+ *     benh (diseaseStatus/diseaseName) de co du lieu mau cho danh sach "Xuat
+ *     danh sach theo doi dich benh" va cac bo loc trang thai ho dan.
+ *   - Moi ho dan co THEM 1 nhan khau phu (ngoai chu ho tu dong tao boi
+ *     createHousehold) voi nghe nghiep, loai cu tru da dang (mot so "tam tru"
+ *     kem khoang thoi gian tu ngay-den ngay), va tinh trang da/chua khai bao
+ *     cu tru khac nhau.
  *   - 15 ban ghi PCCC, 15 ban ghi An ninh (muc do/tinh trang khac nhau).
  *   - 25 Request (Yeu cau) tu nhieu tai khoan gui khac nhau, cho nhieu tai
  *     khoan nhan khac nhau, trai deu 6 trang thai qua dung luong chuyen trang
@@ -111,6 +119,7 @@ async function main() {
         Neighborhood,
         HouseRecord,
         Household,
+        Citizen,
         Business,
         Company,
         PcccCheck,
@@ -119,6 +128,7 @@ async function main() {
     } = await import("@/models");
     const { createHouseRecord } = await import("@/services/houseRecordService");
     const { createHousehold } = await import("@/services/householdService");
+    const { createCitizen } = await import("@/services/citizenService");
     const { createBusiness } = await import("@/services/businessService");
     const { createCompany } = await import("@/services/companyService");
     const {
@@ -266,6 +276,30 @@ async function main() {
     const allHouseIds: string[] = [];
     const allResidentUserIds: string[] = [];
 
+    // Du lieu mau cho tinh trang dich benh (Household.diseaseStatus/diseaseName)
+    // va nghe nghiep cua nhan khau phu (Citizen.occupation) - xem vong lap "10
+    // ho dan" ben duoi.
+    const DISEASE_STATUS_CYCLE: Array<{
+        status: "recorded" | "monitoring" | "resolved";
+        name: string;
+    }> = [
+        { status: "recorded", name: "Sốt xuất huyết" },
+        { status: "monitoring", name: "Tay chân miệng" },
+        { status: "resolved", name: "Cúm mùa" },
+    ];
+    const RESIDENT_OCCUPATIONS = [
+        "Công nhân",
+        "Giáo viên",
+        "Kinh doanh tự do",
+        "Nghỉ hưu",
+        "Sinh viên",
+        "Nội trợ",
+        "Kỹ sư",
+        "Nhân viên y tế",
+        "Lái xe",
+        "Thợ xây",
+    ];
+
     for (const neighborhood of neighborhoods) {
         console.log(`\n== ${neighborhood.code} - ${neighborhood.name} ==`);
         const cluster = neighborhood.name;
@@ -381,9 +415,18 @@ async function main() {
         }
         console.log(`  Nha so: ${houseIds.length}`);
 
-        // --- 10 ho dan: 6 dung chung voi chu nha ca nhan, 4 co chu ho rieng.
+        // --- 10 ho dan: 6 dung chung voi chu nha ca nhan, 4 co chu ho rieng. Da
+        // dang hoa them cac trang thai dac biet (needsSupport/isNearPoor/
+        // isMartyrFamilyHousehold/isLonelyElderly) va tinh trang dich benh
+        // (diseaseStatus/diseaseName) de co du lieu mau cho danh sach "Xuat
+        // danh sach theo doi dich benh" va cac bo loc trang thai ho dan. Moi ho
+        // dan co THEM 1 nhan khau phu (ngoai chu ho tu dong tao boi
+        // createHousehold) voi nghe nghiep/loai cu tru/tinh trang khai bao cu
+        // tru da dang.
         // Idempotent: kiem tra theo `address` (duy nhat trong script nay) truoc
-        // khi goi createHousehold, tuong tu nha so o tren.
+        // khi goi createHousehold, tuong tu nha so o tren; nhan khau phu kiem
+        // tra theo `householdId` + `fullName`.
+        let residentsCreated = 0;
         for (let i = 0; i < HOUSEHOLDS_PER_NEIGHBORHOOD; i += 1) {
             const houseId = houseIds[i % houseIds.length];
             const headUser =
@@ -391,20 +434,62 @@ async function main() {
                     ? individualOwners[i]
                     : dedicatedHouseholdHeads[i - INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD];
             const address = `Hộ dân số ${i + 1}, ${cluster}`;
+            // Chi 3/10 ho co ghi nhan dich benh (i < do dai DISEASE_STATUS_CYCLE),
+            // con lai giu "none" (mac dinh) - tranh moi ho deu "dang co dich
+            // benh" khong thuc te.
+            const disease = DISEASE_STATUS_CYCLE[i % DISEASE_STATUS_CYCLE.length];
+            const hasDisease = i < DISEASE_STATUS_CYCLE.length;
             // eslint-disable-next-line no-await-in-loop
-            const existingHousehold = await Household.findOne({ address, houseId });
-            if (!existingHousehold) {
+            let household: any = await Household.findOne({ address, houseId });
+            if (!household) {
                 // eslint-disable-next-line no-await-in-loop
-                await createHousehold(adminUser, {
+                household = (await createHousehold(adminUser, {
                     cluster,
                     address,
                     headOfHousehold: headUser.displayName,
                     headOfHouseholdUserId: String(headUser._id),
                     houseId,
+                    needsSupport: i % 5 === 0,
+                    isNearPoor: i % 4 === 0,
+                    isMartyrFamilyHousehold: i === 2,
+                    isLonelyElderly: i === 3,
+                    diseaseStatus: hasDisease ? disease.status : "none",
+                    diseaseName: hasDisease ? disease.name : undefined,
+                } as any)) as any;
+            }
+
+            const residentName = `Nhân khẩu bổ sung ${i + 1}, ${cluster}`;
+            // eslint-disable-next-line no-await-in-loop
+            const existingResident = await Citizen.findOne({
+                householdId: household._id,
+                fullName: residentName,
+            });
+            if (!existingResident) {
+                const isTamTru = i % 3 === 0;
+                // eslint-disable-next-line no-await-in-loop
+                await createCitizen(adminUser, {
+                    fullName: residentName,
+                    gender: i % 2 === 0 ? "nam" : "nu",
+                    relationToHead: "Thành viên hộ",
+                    occupation: RESIDENT_OCCUPATIONS[i % RESIDENT_OCCUPATIONS.length],
+                    householdId: String(household._id),
+                    residenceType: isTamTru ? "tam_tru" : "thuong_tru",
+                    temporaryResidenceStartsAt: isTamTru
+                        ? new Date(Date.UTC(2026, 0, 1 + i)).toISOString()
+                        : undefined,
+                    temporaryResidenceExpiresAt: isTamTru
+                        ? new Date(Date.UTC(2026, 6, 1 + i)).toISOString()
+                        : undefined,
+                    // Xen ke da/chua khai bao cu tru de co du lieu mau ca 2
+                    // trang thai (xem Citizen.isResidencyDeclared).
+                    isResidencyDeclared: i % 2 === 0,
                 } as any);
+                residentsCreated += 1;
             }
         }
-        console.log(`  Ho dan: ${HOUSEHOLDS_PER_NEIGHBORHOOD}`);
+        console.log(
+            `  Ho dan: ${HOUSEHOLDS_PER_NEIGHBORHOOD} (nhan khau phu moi tao: ${residentsCreated})`,
+        );
 
         // --- 6 ho kinh doanh: 3 dung chung voi chu nha ca nhan, 3 co dai dien rieng.
         // Idempotent: kiem tra theo `name` (duy nhat trong script nay) truoc

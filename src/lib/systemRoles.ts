@@ -419,6 +419,25 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "appointments.manage",
         "appointments.checkin",
     ],
+    // 4 vai tro "phong ban" cap Phuong/Xa moi (dashboard theo tung linh vuc) -
+    // moi vai tro chi doc, pham vi WARD giong secretary/people_committee_official/
+    // regional_police, chi khac o tap permission hep hon (chi vua du de tinh
+    // cac chi so dashboard rieng cua minh) - xem dashboardService.buildDepartmentOverview.
+    social_affairs_official: [
+        "dashboard.read",
+        "citizens.read",
+        "households.read",
+        "reports.read",
+    ],
+    health_official: ["dashboard.read", "households.read", "reports.read"],
+    education_official: ["dashboard.read", "citizens.read", "reports.read"],
+    economy_labor_official: [
+        "dashboard.read",
+        "citizens.read",
+        "businesses.read",
+        "companies.read",
+        "reports.read",
+    ],
     house_owner: [
         "organizations.read",
         "organizations.create",
@@ -601,6 +620,29 @@ export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
     // moi hoan toan) - mac dinh khong gioi han so Cong an khu vuc/Phuong, giong
     // Can bo UBND; dieu chinh lai qua man Quan ly vai tro neu can khac.
     regional_police: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    // 4 vai tro "phong ban" moi - cung pham vi WARD/ASSIGNED, khong gioi han so
+    // luong nhu people_committee_official/regional_police (xem SYSTEM_ROLE_PERMISSIONS
+    // o tren cho tap permission cua tung vai tro).
+    social_affairs_official: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    health_official: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    education_official: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+        maxActivePerScope: null,
+    },
+    economy_labor_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
         maxActivePerScope: null,

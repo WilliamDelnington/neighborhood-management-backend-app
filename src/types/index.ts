@@ -41,6 +41,10 @@ export const ROLE_LABEL: Record<string, string> = {
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
     people_committee_official: "Cán bộ UBND",
+    social_affairs_official: "Cán bộ Văn hóa – Xã hội",
+    health_official: "Cán bộ Y tế",
+    education_official: "Cán bộ Giáo dục",
+    economy_labor_official: "Cán bộ Kinh tế, Lao động",
     admin: "Quản trị viên",
 };
 

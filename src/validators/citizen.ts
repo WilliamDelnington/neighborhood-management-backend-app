@@ -19,6 +19,7 @@ const citizenBaseSchema = z.object({
     isResidencyDeclared: z.boolean().default(false),
     isElderly: z.boolean().default(false),
     isChild: z.boolean().default(false),
+    isUnemployed: z.boolean().default(false),
     isDisabledOrSupportNeeded: z.boolean().default(false),
     isDisabledChild: z.boolean().default(false),
     isPartyMember: z.boolean().default(false),

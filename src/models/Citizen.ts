@@ -45,6 +45,10 @@ export interface ICitizen extends Document {
     identityVerifiedAt?: Date;
     isElderly: boolean;
     isChild: boolean;
+    // Khai bao thu cong - khong suy tu occupation rong, vi occupation rong
+    // cung co the la chua khai bao/tre em/nguoi cao tuoi, khong dong nghia
+    // that nghiep (xem thao luan luc thiet ke tinh nang dashboard).
+    isUnemployed: boolean;
     isDisabledOrSupportNeeded: boolean;
     isDisabledChild: boolean;
     isPartyMember: boolean;
@@ -108,6 +112,7 @@ const CitizenSchema = new Schema<ICitizen>(
         identityVerifiedAt: { type: Date },
         isElderly: { type: Boolean, default: false },
         isChild: { type: Boolean, default: false },
+        isUnemployed: { type: Boolean, default: false },
         isDisabledOrSupportNeeded: { type: Boolean, default: false },
         isDisabledChild: { type: Boolean, default: false },
         isPartyMember: { type: Boolean, default: false },

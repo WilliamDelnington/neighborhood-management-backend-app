@@ -215,6 +215,7 @@ const CITIZEN_COLUMNS = {
     temporaryResidenceStartsAt: "Ngày bắt đầu tạm trú",
     temporaryResidenceExpiresAt: "Ngày hết hạn tạm trú",
     isResidencyDeclared: "Đã khai báo cư trú",
+    isUnemployed: "Đang thất nghiệp",
     isElderly: "Người cao tuổi",
     isChild: "Trẻ em",
     isDisabledOrSupportNeeded: "Người khuyết tật",
@@ -1336,6 +1337,7 @@ export type CitizenColumnMapping = {
     temporaryResidenceStartsAt?: string;
     temporaryResidenceExpiresAt?: string;
     isResidencyDeclared?: string;
+    isUnemployed?: string;
     isElderly?: string;
     isChild?: string;
     isDisabledOrSupportNeeded?: string;
@@ -1367,6 +1369,7 @@ const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
     "temporaryResidenceStartsAt",
     "temporaryResidenceExpiresAt",
     "isResidencyDeclared",
+    "isUnemployed",
     "isElderly",
     "isChild",
     "isDisabledOrSupportNeeded",
@@ -1696,6 +1699,9 @@ export async function applyCitizenImportMapping(
             isResidencyDeclared: mapping.isResidencyDeclared
                 ? parseBoolean(v[mapping.isResidencyDeclared])
                 : false,
+            isUnemployed: mapping.isUnemployed
+                ? parseBoolean(v[mapping.isUnemployed])
+                : false,
             isElderly: mapping.isElderly
                 ? parseBoolean(v[mapping.isElderly])
                 : false,
@@ -1828,6 +1834,7 @@ async function processCitizenImportRows(
                     ? new Date(row.temporaryResidenceExpiresAt as string)
                     : undefined,
                 isResidencyDeclared: !!row.isResidencyDeclared,
+                isUnemployed: !!row.isUnemployed,
                 isElderly: !!row.isElderly,
                 isChild: !!row.isChild,
                 isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
@@ -2058,6 +2065,11 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             key: "isResidencyDeclared",
             width: 18,
         },
+        {
+            header: CITIZEN_COLUMNS.isUnemployed,
+            key: "isUnemployed",
+            width: 16,
+        },
         { header: CITIZEN_COLUMNS.isElderly, key: "isElderly", width: 14 },
         { header: CITIZEN_COLUMNS.isChild, key: "isChild", width: 12 },
         {
@@ -2113,6 +2125,7 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         temporaryResidenceStartsAt: "",
         temporaryResidenceExpiresAt: "",
         isResidencyDeclared: "Có",
+        isUnemployed: "Không",
         isElderly: "Không",
         isChild: "Không",
         isDisabledOrSupportNeeded: "Không",
@@ -2139,6 +2152,7 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         temporaryResidenceStartsAt: "01/06/2026",
         temporaryResidenceExpiresAt: "01/12/2026",
         isResidencyDeclared: "Không",
+        isUnemployed: "Không",
         isElderly: "Không",
         isChild: "Có",
         isDisabledOrSupportNeeded: "Không",

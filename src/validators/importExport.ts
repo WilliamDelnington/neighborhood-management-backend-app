@@ -126,6 +126,7 @@ export const citizenImportMappingSchema = z
         temporaryResidenceStartsAt: z.string().optional(),
         temporaryResidenceExpiresAt: z.string().optional(),
         isResidencyDeclared: z.string().optional(),
+        isUnemployed: z.string().optional(),
         isElderly: z.string().optional(),
         isChild: z.string().optional(),
         isDisabledOrSupportNeeded: z.string().optional(),

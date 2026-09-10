@@ -113,6 +113,7 @@ export async function createCitizen(
         isResidencyDeclared: input.isResidencyDeclared ?? false,
         isElderly: input.isElderly ?? false,
         isChild: input.isChild ?? false,
+        isUnemployed: input.isUnemployed ?? false,
         isDisabledOrSupportNeeded: input.isDisabledOrSupportNeeded ?? false,
         isDisabledChild: input.isDisabledChild ?? false,
         isPartyMember: input.isPartyMember ?? false,

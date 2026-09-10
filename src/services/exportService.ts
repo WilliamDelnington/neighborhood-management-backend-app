@@ -92,6 +92,7 @@ export async function exportCitizensToExcel(): Promise<ExcelJS.Workbook> {
             key: "isResidencyDeclared",
             width: 16,
         },
+        { header: "Đang thất nghiệp", key: "isUnemployed", width: 16 },
         { header: "Người cao tuổi", key: "isElderly", width: 15 },
         { header: "Trẻ em", key: "isChild", width: 12 },
         {
@@ -128,6 +129,7 @@ export async function exportCitizensToExcel(): Promise<ExcelJS.Workbook> {
             temporaryResidenceStartsAt: formatDate(c.temporaryResidenceStartsAt),
             temporaryResidenceExpiresAt: formatDate(c.temporaryResidenceExpiresAt),
             isResidencyDeclared: yesNo(c.isResidencyDeclared),
+            isUnemployed: yesNo(c.isUnemployed),
             isElderly: yesNo(c.isElderly),
             isChild: yesNo(c.isChild),
             isDisabledOrSupportNeeded: yesNo(c.isDisabledOrSupportNeeded),
