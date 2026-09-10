@@ -33,8 +33,13 @@ export interface ICitizen extends Document {
     householdId: mongoose.Types.ObjectId;
     residenceType: LoaiCuTru;
     // Bat buoc khi residenceType="tam_tru" (xem validators/citizen.ts) - ngay
-    // het han khai bao tam tru, khong ap dung cho thuong_tru.
+    // bat dau va ket thuc khai bao tam tru, khong ap dung cho thuong_tru.
+    temporaryResidenceStartsAt?: Date;
     temporaryResidenceExpiresAt?: Date;
+    // Da/chua khai bao cu tru voi UBND - doc lap voi residenceType (thuong
+    // tru/tam tru la PHAN LOAI cu tru, con co nay la tinh trang DA THONG BAO
+    // phan loai do cho chinh quyen hay chua).
+    isResidencyDeclared: boolean;
     identityProvider: IdentityProvider;
     identityVerificationStatus: IdentityVerificationStatus;
     identityVerifiedAt?: Date;
@@ -83,7 +88,9 @@ const CitizenSchema = new Schema<ICitizen>(
             enum: LOAI_CU_TRU,
             default: "thuong_tru",
         },
+        temporaryResidenceStartsAt: { type: Date },
         temporaryResidenceExpiresAt: { type: Date },
+        isResidencyDeclared: { type: Boolean, default: false },
         // Du lieu nhap tay/CCCD hien tai chi la khai bao. Khong gan nhan
         // "verified" neu chua doi chieu that su qua VNeID/CSDLQGDC.
         identityProvider: {

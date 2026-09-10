@@ -18,6 +18,17 @@ export interface IHousehold extends Document {
     memberCount: number;
     ownershipType: LoaiSoHuu;
     needsSupport: boolean;
+    isNearPoor: boolean;
+    // Doc lap voi Citizen.isMartyrFamily (co the co nhieu Citizen trong ho dan
+    // co gan co "gia dinh liet si" o muc ca nhan) - day la co rieng cua ho dan,
+    // do nguoi khai bao tu bat/tat, khong suy ra tu du lieu Citizen.
+    isMartyrFamilyHousehold: boolean;
+    isLonelyElderly: boolean;
+    // Hai co duoi day la TU TINH (khong nhan tu client) - xem
+    // citizenService.recomputeHouseholdFlags, duoc dong bo lai moi khi Citizen
+    // cua ho dan nay duoc them/sua/xoa/chuyen ho dan.
+    hasDisabledChild: boolean;
+    hasDisabledPerson: boolean;
     houseId?: mongoose.Types.ObjectId;
     // Trang thai xac thuc CUA CHINH ho dan nay - doc lap voi trang thai cua nha
     // so cha (xem VerificationStatus o types/index.ts). "unverified" ngay tu
@@ -63,6 +74,11 @@ const HouseholdSchema = new Schema<IHousehold>(
             default: "chinh_chu",
         },
         needsSupport: { type: Boolean, default: false },
+        isNearPoor: { type: Boolean, default: false },
+        isMartyrFamilyHousehold: { type: Boolean, default: false },
+        isLonelyElderly: { type: Boolean, default: false },
+        hasDisabledChild: { type: Boolean, default: false },
+        hasDisabledPerson: { type: Boolean, default: false },
         houseId: { type: Schema.Types.ObjectId, ref: "House", index: true },
         status: {
             type: String,

@@ -27,6 +27,12 @@ const householdBaseSchema = z.object({
     contactName: z.string().optional(),
     ownershipType: z.enum(LOAI_SO_HUU).default("chinh_chu"),
     needsSupport: z.boolean().default(false),
+    isNearPoor: z.boolean().default(false),
+    isMartyrFamilyHousehold: z.boolean().default(false),
+    isLonelyElderly: z.boolean().default(false),
+    // hasDisabledChild/hasDisabledPerson KHONG nam trong schema nay - la co tu
+    // tinh (xem citizenService.recomputeHouseholdFlags), giong memberCount,
+    // khong cho phep nhap tay qua API.
     // null = go lien ket voi nha so (chua gan), undefined = khong doi.
     houseId: z.string().nullable().optional(),
     note: z.string().optional(),
@@ -56,3 +62,17 @@ export const updateHouseholdStatusSchema = z
 export type UpdateHouseholdStatusInput = z.infer<
     typeof updateHouseholdStatusSchema
 >;
+
+// Danh sach day du 6 "trang thai dac biet" cua ho dan (4 nhap tay + 2 tu tinh -
+// xem citizenService.recomputeHouseholdFlags cho 2 co tu tinh). Dung de
+// whitelist query param `states` o route GET /households truoc khi dua vao
+// Mongo filter (khong duoc tin truc tiep chuoi client gui len lam ten truong).
+export const HOUSEHOLD_STATE_KEYS = [
+    "needsSupport",
+    "isNearPoor",
+    "isMartyrFamilyHousehold",
+    "isLonelyElderly",
+    "hasDisabledChild",
+    "hasDisabledPerson",
+] as const;
+export type HouseholdStateKey = (typeof HOUSEHOLD_STATE_KEYS)[number];

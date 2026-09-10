@@ -5,7 +5,11 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { createHouseholdSchema } from "@/validators/household";
+import {
+    createHouseholdSchema,
+    HOUSEHOLD_STATE_KEYS,
+    type HouseholdStateKey,
+} from "@/validators/household";
 import { VERIFICATION_STATUS, type VerificationStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +43,17 @@ export async function GET(req: Request) {
             (VERIFICATION_STATUS as readonly string[]).includes(statusParam)
                 ? (statusParam as VerificationStatus)
                 : undefined;
+        // Whitelist truoc khi dua vao Mongo filter (xem listHouseholds) - khong
+        // tin truc tiep chuoi client gui len lam ten truong.
+        const statesParam = searchParams.get("states");
+        const states: HouseholdStateKey[] | undefined = statesParam
+            ? statesParam
+                  .split(",")
+                  .map(s => s.trim())
+                  .filter((s): s is HouseholdStateKey =>
+                      (HOUSEHOLD_STATE_KEYS as readonly string[]).includes(s),
+                  )
+            : undefined;
         const result = await listHouseholds({
             page,
             limit,
@@ -48,6 +63,7 @@ export async function GET(req: Request) {
             neighborhoodId: searchParams.get("neighborhoodId") || undefined,
             unassigned: searchParams.get("unassigned") === "true",
             status,
+            states: states && states.length > 0 ? states : undefined,
             actorUser: user,
         });
         return apiSuccess(result);

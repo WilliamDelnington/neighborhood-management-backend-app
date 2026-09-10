@@ -59,6 +59,31 @@ async function adjustHouseholdMemberCount(
     );
 }
 
+/**
+ * Tinh lai hasDisabledChild/hasDisabledPerson cho MOT ho dan dua tren Citizen
+ * hien co. Khac voi memberCount (counter, dung $inc duoc), day la gia tri
+ * "co/khong" nen phai kiem tra lai bang Citizen.exists() moi lan, khong the
+ * cong/tru truc tiep - vi vi du xoa 1 Citizen co isDisabledChild=true khong co
+ * nghia ho dan het "co tre em khuyet tat" neu van con Citizen khac cung co nay.
+ * Goi moi khi mot thao tac Citizen (them/sua/xoa/chuyen ho dan) CO THE anh
+ * huong den 2 co nay cua ho dan lien quan. An toan de goi thua (idempotent).
+ */
+export async function recomputeHouseholdFlags(
+    householdId: unknown,
+): Promise<void> {
+    const [hasDisabledChild, hasDisabledPerson] = await Promise.all([
+        Citizen.exists({ householdId, isDisabledChild: true }),
+        Citizen.exists({ householdId, isDisabledOrSupportNeeded: true }),
+    ]);
+    await Household.updateOne(
+        { _id: householdId },
+        {
+            hasDisabledChild: !!hasDisabledChild,
+            hasDisabledPerson: !!hasDisabledPerson,
+        },
+    );
+}
+
 export async function createCitizen(
     actorUser: IUser,
     input: CreateCitizenInput,
@@ -79,9 +104,13 @@ export async function createCitizen(
         occupation: input.occupation,
         householdId: input.householdId,
         residenceType: input.residenceType ?? "thuong_tru",
+        temporaryResidenceStartsAt: input.temporaryResidenceStartsAt
+            ? new Date(input.temporaryResidenceStartsAt)
+            : undefined,
         temporaryResidenceExpiresAt: input.temporaryResidenceExpiresAt
             ? new Date(input.temporaryResidenceExpiresAt)
             : undefined,
+        isResidencyDeclared: input.isResidencyDeclared ?? false,
         isElderly: input.isElderly ?? false,
         isChild: input.isChild ?? false,
         isDisabledOrSupportNeeded: input.isDisabledOrSupportNeeded ?? false,
@@ -99,6 +128,9 @@ export async function createCitizen(
     });
 
     await adjustHouseholdMemberCount(input.householdId, 1);
+    if (input.isDisabledChild || input.isDisabledOrSupportNeeded) {
+        await recomputeHouseholdFlags(input.householdId);
+    }
 
     await writeAuditLog({
         actorId,
@@ -257,7 +289,12 @@ export async function updateCitizen(
 
     // Chi gan cac truong thuc su co mat trong patch (partial schema van tra ve
     // day du key voi gia tri undefined cho truong khong duoc gui len).
-    const { birthDate, temporaryResidenceExpiresAt, ...rest } = patch;
+    const {
+        birthDate,
+        temporaryResidenceStartsAt,
+        temporaryResidenceExpiresAt,
+        ...rest
+    } = patch;
     for (const [key, value] of Object.entries(rest)) {
         if (value !== undefined) {
             (citizen as unknown as Record<string, unknown>)[key] = value;
@@ -265,6 +302,11 @@ export async function updateCitizen(
     }
     if (birthDate !== undefined) {
         citizen.birthDate = birthDate ? new Date(birthDate) : undefined;
+    }
+    if (temporaryResidenceStartsAt !== undefined) {
+        citizen.temporaryResidenceStartsAt = temporaryResidenceStartsAt
+            ? new Date(temporaryResidenceStartsAt)
+            : undefined;
     }
     if (temporaryResidenceExpiresAt !== undefined) {
         citizen.temporaryResidenceExpiresAt = temporaryResidenceExpiresAt
@@ -278,6 +320,18 @@ export async function updateCitizen(
     if (newHouseholdId !== oldHouseholdId) {
         await adjustHouseholdMemberCount(oldHouseholdId, -1);
         await adjustHouseholdMemberCount(newHouseholdId, 1);
+        // Nhan khau mang theo bat ky co isDisabledChild/isDisabledOrSupportNeeded
+        // hien co sang ho dan moi - phai tinh lai CA HAI ho dan, khong chi ho dan
+        // moi, vi ho dan cu co the mat co neu day la Citizen duy nhat co co do.
+        await Promise.all([
+            recomputeHouseholdFlags(oldHouseholdId),
+            recomputeHouseholdFlags(newHouseholdId),
+        ]);
+    } else if (
+        patch.isDisabledChild !== undefined ||
+        patch.isDisabledOrSupportNeeded !== undefined
+    ) {
+        await recomputeHouseholdFlags(newHouseholdId);
     }
 
     await writeAuditLog({
@@ -299,8 +353,12 @@ export async function deleteCitizen(
     if (!citizen) throw new HttpError("Không tìm thấy nhân khẩu", 404);
 
     const householdId = citizen.householdId;
+    const hadFlags = citizen.isDisabledChild || citizen.isDisabledOrSupportNeeded;
     await citizen.deleteOne();
     await adjustHouseholdMemberCount(householdId, -1);
+    if (hadFlags) {
+        await recomputeHouseholdFlags(householdId);
+    }
 
     await writeAuditLog({
         actorId,

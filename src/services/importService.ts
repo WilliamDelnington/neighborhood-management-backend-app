@@ -17,6 +17,7 @@ import { isValidVnPhone } from "@/lib/phone";
 import { hashForLookup, normalizeCccd } from "@/lib/encryption";
 import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
+import { recomputeHouseholdFlags } from "@/services/citizenService";
 import {
     createHouseRecord,
     resolveInitialVerificationStatus,
@@ -211,6 +212,9 @@ const CITIZEN_COLUMNS = {
     // khau" o dau file va applyCitizenImportMapping.
     houseCode: "Mã căn/hộ",
     residenceType: "Thường trú/Tạm trú",
+    temporaryResidenceStartsAt: "Ngày bắt đầu tạm trú",
+    temporaryResidenceExpiresAt: "Ngày hết hạn tạm trú",
+    isResidencyDeclared: "Đã khai báo cư trú",
     isElderly: "Người cao tuổi",
     isChild: "Trẻ em",
     isDisabledOrSupportNeeded: "Người khuyết tật",
@@ -1329,6 +1333,9 @@ export type CitizenColumnMapping = {
     householdCode?: string;
     houseCode?: string;
     residenceType?: string;
+    temporaryResidenceStartsAt?: string;
+    temporaryResidenceExpiresAt?: string;
+    isResidencyDeclared?: string;
     isElderly?: string;
     isChild?: string;
     isDisabledOrSupportNeeded?: string;
@@ -1357,6 +1364,9 @@ const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
     "householdCode",
     "houseCode",
     "residenceType",
+    "temporaryResidenceStartsAt",
+    "temporaryResidenceExpiresAt",
+    "isResidencyDeclared",
     "isElderly",
     "isChild",
     "isDisabledOrSupportNeeded",
@@ -1618,6 +1628,32 @@ export async function applyCitizenImportMapping(
             }
         }
 
+        // Bat buoc ca 2 ngay khi "tam_tru", giong yeu cau cua
+        // createCitizenSchema (validators/citizen.ts) o luong tao thu cong.
+        let temporaryResidenceStartsAt: Date | undefined;
+        let temporaryResidenceExpiresAt: Date | undefined;
+        if (residenceType === "tam_tru") {
+            temporaryResidenceStartsAt = mapping.temporaryResidenceStartsAt
+                ? parseDateCell(v[mapping.temporaryResidenceStartsAt])
+                : undefined;
+            temporaryResidenceExpiresAt = mapping.temporaryResidenceExpiresAt
+                ? parseDateCell(v[mapping.temporaryResidenceExpiresAt])
+                : undefined;
+            if (!temporaryResidenceStartsAt) {
+                rowErrors.push("Thiếu hoặc sai định dạng 'Ngày bắt đầu tạm trú'");
+            }
+            if (!temporaryResidenceExpiresAt) {
+                rowErrors.push("Thiếu hoặc sai định dạng 'Ngày hết hạn tạm trú'");
+            }
+            if (
+                temporaryResidenceStartsAt &&
+                temporaryResidenceExpiresAt &&
+                temporaryResidenceStartsAt > temporaryResidenceExpiresAt
+            ) {
+                rowErrors.push("Ngày bắt đầu tạm trú phải trước ngày hết hạn");
+            }
+        }
+
         if (rowErrors.length > 0) {
             errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
             continue;
@@ -1655,6 +1691,11 @@ export async function applyCitizenImportMapping(
                 : undefined,
             householdId,
             residenceType,
+            temporaryResidenceStartsAt: temporaryResidenceStartsAt?.toISOString(),
+            temporaryResidenceExpiresAt: temporaryResidenceExpiresAt?.toISOString(),
+            isResidencyDeclared: mapping.isResidencyDeclared
+                ? parseBoolean(v[mapping.isResidencyDeclared])
+                : false,
             isElderly: mapping.isElderly
                 ? parseBoolean(v[mapping.isElderly])
                 : false,
@@ -1761,6 +1802,10 @@ async function processCitizenImportRows(
     // recompute/update rieng le cho tung dong) de tranh O(n) update khi import
     // nhieu nhan khau cung luc.
     const memberCountDeltas = new Map<string, number>();
+    // Ho dan can tinh lai hasDisabledChild/hasDisabledPerson - gom lai roi
+    // recompute 1 lan cho moi ho dan sau vong lap (giong memberCountDeltas),
+    // thay vi goi rieng le tung dong.
+    const householdIdsNeedingFlagRecompute = new Set<string>();
     for (const row of job.previewData as Record<string, unknown>[]) {
         try {
             // eslint-disable-next-line no-await-in-loop
@@ -1776,6 +1821,13 @@ async function processCitizenImportRows(
                 occupation: row.occupation,
                 householdId: row.householdId,
                 residenceType: row.residenceType,
+                temporaryResidenceStartsAt: row.temporaryResidenceStartsAt
+                    ? new Date(row.temporaryResidenceStartsAt as string)
+                    : undefined,
+                temporaryResidenceExpiresAt: row.temporaryResidenceExpiresAt
+                    ? new Date(row.temporaryResidenceExpiresAt as string)
+                    : undefined,
+                isResidencyDeclared: !!row.isResidencyDeclared,
                 isElderly: !!row.isElderly,
                 isChild: !!row.isChild,
                 isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
@@ -1797,6 +1849,9 @@ async function processCitizenImportRows(
                     key,
                     (memberCountDeltas.get(key) || 0) + 1,
                 );
+                if (row.isDisabledChild || row.isDisabledOrSupportNeeded) {
+                    householdIdsNeedingFlagRecompute.add(key);
+                }
             }
         } catch (err) {
             commitErrors.push({
@@ -1823,6 +1878,14 @@ async function processCitizenImportRows(
                         update: { $inc: { memberCount: delta } },
                     },
                 }),
+            ),
+        );
+    }
+
+    if (householdIdsNeedingFlagRecompute.size > 0) {
+        await Promise.all(
+            Array.from(householdIdsNeedingFlagRecompute).map(id =>
+                recomputeHouseholdFlags(id),
             ),
         );
     }
@@ -1980,6 +2043,21 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             key: "residenceType",
             width: 18,
         },
+        {
+            header: CITIZEN_COLUMNS.temporaryResidenceStartsAt,
+            key: "temporaryResidenceStartsAt",
+            width: 18,
+        },
+        {
+            header: CITIZEN_COLUMNS.temporaryResidenceExpiresAt,
+            key: "temporaryResidenceExpiresAt",
+            width: 18,
+        },
+        {
+            header: CITIZEN_COLUMNS.isResidencyDeclared,
+            key: "isResidencyDeclared",
+            width: 18,
+        },
         { header: CITIZEN_COLUMNS.isElderly, key: "isElderly", width: 14 },
         { header: CITIZEN_COLUMNS.isChild, key: "isChild", width: 12 },
         {
@@ -2032,6 +2110,9 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         householdCode: "HB001",
         houseCode: "",
         residenceType: "Thường trú",
+        temporaryResidenceStartsAt: "",
+        temporaryResidenceExpiresAt: "",
+        isResidencyDeclared: "Có",
         isElderly: "Không",
         isChild: "Không",
         isDisabledOrSupportNeeded: "Không",
@@ -2054,7 +2135,10 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         occupation: "",
         householdCode: "HB001",
         houseCode: "",
-        residenceType: "Thường trú",
+        residenceType: "Tạm trú",
+        temporaryResidenceStartsAt: "01/06/2026",
+        temporaryResidenceExpiresAt: "01/12/2026",
+        isResidencyDeclared: "Không",
         isElderly: "Không",
         isChild: "Có",
         isDisabledOrSupportNeeded: "Không",
