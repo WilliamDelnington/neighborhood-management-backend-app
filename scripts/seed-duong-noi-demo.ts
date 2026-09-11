@@ -470,6 +470,14 @@ async function main() {
                 headOfHousehold: headUser.displayName,
                 headOfHouseholdUserId: String(headUser._id),
                 houseId,
+                // Bat buoc truyen tay: script goi thang householdService.createHousehold
+                // (bo qua lop zod o route), nen KHONG duoc ap dung
+                // contactIsHead=true mac dinh cua createHouseholdSchema - neu
+                // thieu, createHousehold hieu la "co nguoi lien he rieng" va
+                // crash khi doc input.contactName (undefined). Script nay
+                // khong co khai niem nguoi lien he rieng nen chu ho luon la
+                // nguoi lien he.
+                contactIsHead: true,
                 needsSupport: i % 5 === 0,
                 isNearPoor: i % 4 === 0,
                 isMartyrFamilyHousehold: i === 2,
