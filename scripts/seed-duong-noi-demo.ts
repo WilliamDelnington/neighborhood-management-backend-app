@@ -89,6 +89,10 @@ const NEIGHBORHOOD_SLOT: Record<string, number> = {
     "TDP-03": 3,
     "TDP-04-DUONGNOI": 4,
     "TDP-05": 5,
+    // To dan pho thu 6 thuoc wardCode 9886 phat sinh trong DB (khong thuoc bo
+    // 5 to goc cua script) - can khai bao slot rieng, khac 1-5, de tranh trung
+    // so dien thoai voi cac to da co.
+    "TDP-Hoa-Binh": 6,
 };
 function slotForNeighborhood(code: string): number {
     const slot = NEIGHBORHOOD_SLOT[code];
