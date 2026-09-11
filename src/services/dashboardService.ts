@@ -23,12 +23,14 @@ import {
 } from "@/models";
 import {
     getUserAllowedComplaintCategories,
+    getUserAllowedDashboardMetrics,
     getUserPermissionSet,
 } from "@/lib/rbac";
 import {
     TRANG_THAI_PHAN_ANH_LABEL,
     type TrangThaiPhanAnh,
     type HouseRecordStatus,
+    type DashboardMetricKey,
 } from "@/types";
 import {
     getMyRequestCounts,
@@ -498,9 +500,10 @@ export async function getHouseGisOverview(
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
-    const [permissions, context] = await Promise.all([
+    const [permissions, context, allowedDashboardMetrics] = await Promise.all([
         getUserPermissionSet(actorUser),
         dashboardAreaContext(actorUser),
+        getUserAllowedDashboardMetrics(actorUser),
     ]);
 
     const capabilities = {
@@ -836,10 +839,37 @@ export async function getDashboardSummary(actorUser: IUser) {
                 : Promise.resolve(undefined),
         ]);
 
+    // Duong di MOI, cong them (khong thay the 3 khoi tren) - chi tinh khi CO
+    // it nhat 1 vai tro cua actor da cau hinh dashboardMetrics (khac null) VA
+    // audience thuoc 2 tang co "dashboard tong hop theo khu vuc dia ly" (WARD/
+    // NEIGHBORHOOD) - xem getUserAllowedDashboardMetrics/computeFlatDashboardMetrics.
+    // Vai tro chua cau hinh (allowedDashboardMetrics===null, truong hop pho
+    // bien nhat hien nay) hoan toan khong bi anh huong - metrics/
+    // allowedDashboardMetrics tra ve undefined/null, frontend tiep tuc dung
+    // neighborhoodOverview/wardOverview/departmentOverview nhu truoc.
+    const supportsFlatMetrics =
+        context.audience === "neighborhood" ||
+        WARD_FAMILY_AUDIENCES.includes(context.audience);
+    let metrics:
+        | Partial<Record<DashboardMetricKey, number | ComplaintSummary>>
+        | undefined;
+    if (allowedDashboardMetrics !== null && supportsFlatMetrics) {
+        const allMetrics = await computeFlatDashboardMetrics(
+            context,
+            complaintSummary,
+        );
+        const allowedSet = new Set(allowedDashboardMetrics);
+        metrics = Object.fromEntries(
+            Object.entries(allMetrics).filter(([key]) => allowedSet.has(key)),
+        ) as Partial<Record<DashboardMetricKey, number | ComplaintSummary>>;
+    }
+
     return {
         neighborhoodOverview,
         departmentOverview,
         wardOverview,
+        metrics,
+        allowedDashboardMetrics: metrics ? allowedDashboardMetrics : null,
         audience: context.audience,
         scopeLabel: context.scopeLabel,
         generatedAt: now,
@@ -1722,6 +1752,110 @@ async function buildDepartmentOverview(
         default:
             return {};
     }
+}
+
+/**
+ * Tinh TOAN BO DASHBOARD_METRIC_KEYS (khong phan biet audience) cho mot vai
+ * tro DA cau hinh dashboardMetrics (xem getUserAllowedDashboardMetrics) - chi
+ * duoc goi khi allowedDashboardMetrics khac null, tuc la co it nhat 1 vai tro
+ * cua actor da "chot" mot tap con cu the. Dung chung context.neighborhoodIds
+ * cho ca audience "ward"/"neighborhood" (dashboardAreaContext da chuan hoa
+ * ve cung mot danh sach neighborhoodId). Ket qua se duoc loc lai theo dung
+ * allowedDashboardMetrics truoc khi tra ve cho client (xem getDashboardSummary) -
+ * ham nay CHI tinh toan, khong tu loc.
+ */
+async function computeFlatDashboardMetrics(
+    context: DashboardAreaContext,
+    complaintSummary: ComplaintSummary,
+): Promise<Partial<Record<DashboardMetricKey, number | ComplaintSummary>>> {
+    const neighborhoodIds = context.neighborhoodIds;
+    if (neighborhoodIds.length === 0) {
+        return { complaints_summary: complaintSummary };
+    }
+
+    const [households, houseRows, businesses, companies] = await Promise.all([
+        Household.find({ neighborhoodId: { $in: neighborhoodIds } }).select(
+            "_id isNearPoor diseaseStatus",
+        ),
+        HouseRecord.find({ neighborhoodId: { $in: neighborhoodIds } }).select(
+            "_id status",
+        ),
+        Business.find({ neighborhoodId: { $in: neighborhoodIds } }).select("_id"),
+        Company.find({ neighborhoodId: { $in: neighborhoodIds } }).select("_id"),
+    ]);
+    const householdIds = households.map(h => h._id);
+    const houseIds = houseRows.map(h => h._id);
+    const citizenFilter = (extra: Record<string, unknown>) =>
+        householdIds.length > 0
+            ? Citizen.countDocuments({ householdId: { $in: householdIds }, ...extra })
+            : Promise.resolve(0);
+    const militaryAgeRange = birthDateRangeForAge(
+        MILITARY_AGE_MIN,
+        MILITARY_AGE_MAX,
+        new Date(),
+    );
+    const schoolAgeRange = birthDateRangeForAge(
+        SCHOOL_AGE_MIN,
+        SCHOOL_AGE_MAX,
+        new Date(),
+    );
+
+    const [
+        ownerIds,
+        women,
+        elderly,
+        children,
+        veterans,
+        martyrs,
+        unemployed,
+        militaryAgeMen,
+        undeclaredResidency,
+        schoolAgeChildren,
+    ] = await Promise.all([
+        houseIds.length > 0
+            ? HouseOwnership.distinct("ownerId", {
+                  houseId: { $in: houseIds },
+                  active: true,
+              })
+            : Promise.resolve([]),
+        citizenFilter({ gender: "nu" }),
+        citizenFilter({ isElderly: true }),
+        citizenFilter({ isChild: true }),
+        citizenFilter({ isVeteran: true }),
+        citizenFilter({ $or: [{ isMartyr: true }, { isMartyrFamily: true }] }),
+        citizenFilter({ isUnemployed: true }),
+        citizenFilter({
+            gender: "nam",
+            birthDate: { $gte: militaryAgeRange.from, $lte: militaryAgeRange.to },
+        }),
+        citizenFilter({ isResidencyDeclared: false }),
+        citizenFilter({
+            birthDate: { $gte: schoolAgeRange.from, $lte: schoolAgeRange.to },
+        }),
+    ]);
+
+    return {
+        neighborhoods_count: neighborhoodIds.length,
+        houses_count: houseIds.length,
+        owners_count: ownerIds.length,
+        business_units_count: businesses.length + companies.length,
+        complaints_summary: complaintSummary,
+        women_count: women,
+        elderly_count: elderly,
+        children_count: children,
+        veterans_count: veterans,
+        martyrs_count: martyrs,
+        poor_households_count: households.filter(h => h.isNearPoor).length,
+        unemployed_count: unemployed,
+        military_age_men_count: militaryAgeMen,
+        undeclared_residency_count: undeclaredResidency,
+        disease_monitored_households_count: households.filter(
+            h => h.diseaseStatus && h.diseaseStatus !== "none",
+        ).length,
+        registered_houses_count: houseRows.filter(h => h.status === "verified")
+            .length,
+        school_age_children_count: schoolAgeChildren,
+    };
 }
 
 async function getInspectionDashboard(

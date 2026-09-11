@@ -448,6 +448,54 @@ export const NHOM_PHAN_ANH_LABEL: Record<NhomPhanAnh, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Dashboard - danh muc so lieu CO DINH (khac ComplaintTypeDefinition/
+// RequestTypeDefinition - danh muc nay KHONG cho admin tu mo rong), dung lam
+// gia tri hop le cho Role.dashboardMetrics (xem models/Role.ts). undefined tren
+// Role = khong gioi han (giu nguyen bo so lieu co dinh theo audience nhu truoc
+// day - xem dashboardService.ts); mot mang cu the = CHI hien dung nhung so
+// lieu do, bat ke audience/vai tro la gi.
+// ---------------------------------------------------------------------------
+export const DASHBOARD_METRIC_KEYS = [
+    "neighborhoods_count",
+    "houses_count",
+    "owners_count",
+    "business_units_count",
+    "complaints_summary",
+    "women_count",
+    "elderly_count",
+    "children_count",
+    "veterans_count",
+    "martyrs_count",
+    "poor_households_count",
+    "unemployed_count",
+    "military_age_men_count",
+    "undeclared_residency_count",
+    "disease_monitored_households_count",
+    "registered_houses_count",
+    "school_age_children_count",
+] as const;
+export type DashboardMetricKey = typeof DASHBOARD_METRIC_KEYS[number];
+export const DASHBOARD_METRIC_LABEL: Record<DashboardMetricKey, string> = {
+    neighborhoods_count: "Tổ dân phố",
+    houses_count: "Nhà số",
+    owners_count: "Chủ sở hữu",
+    business_units_count: "Đơn vị kinh doanh",
+    complaints_summary: "Phản ánh (chưa/đang/đã xử lý, tổng)",
+    women_count: "Phụ nữ",
+    elderly_count: "Người cao tuổi",
+    children_count: "Trẻ em",
+    veterans_count: "Cựu chiến binh",
+    martyrs_count: "Liệt sĩ / Thương binh / Bệnh binh",
+    poor_households_count: "Hộ nghèo / cận nghèo",
+    unemployed_count: "Đang thất nghiệp",
+    military_age_men_count: "Nam trong độ tuổi nhập ngũ",
+    undeclared_residency_count: "Chưa khai báo cư trú",
+    disease_monitored_households_count: "Có dịch bệnh theo dõi",
+    registered_houses_count: "Nhà số đã đăng ký",
+    school_age_children_count: "Trẻ trong độ tuổi đi học",
+};
+
+// ---------------------------------------------------------------------------
 // So ha tang To dan pho (InfrastructureAsset - B11)
 // ---------------------------------------------------------------------------
 export const INFRASTRUCTURE_ASSET_TYPES = [
