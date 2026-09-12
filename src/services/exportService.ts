@@ -77,6 +77,22 @@ export async function exportCitizensToExcel(): Promise<ExcelJS.Workbook> {
         { header: "Quan hệ với chủ hộ", key: "relationToHead", width: 20 },
         { header: "Mã hộ", key: "householdCode", width: 12 },
         { header: "Thường trú/Tạm trú", key: "residenceType", width: 18 },
+        {
+            header: "Ngày bắt đầu tạm trú",
+            key: "temporaryResidenceStartsAt",
+            width: 18,
+        },
+        {
+            header: "Ngày hết hạn tạm trú",
+            key: "temporaryResidenceExpiresAt",
+            width: 18,
+        },
+        {
+            header: "Đã khai báo cư trú",
+            key: "isResidencyDeclared",
+            width: 16,
+        },
+        { header: "Đang thất nghiệp", key: "isUnemployed", width: 16 },
         { header: "Người cao tuổi", key: "isElderly", width: 15 },
         { header: "Trẻ em", key: "isChild", width: 12 },
         {
@@ -84,8 +100,18 @@ export async function exportCitizensToExcel(): Promise<ExcelJS.Workbook> {
             key: "isDisabledOrSupportNeeded",
             width: 18,
         },
+        { header: "Trẻ em khuyết tật", key: "isDisabledChild", width: 16 },
         { header: "Đảng viên", key: "isPartyMember", width: 12 },
         { header: "Đoàn viên", key: "isUnionMember", width: 12 },
+        { header: "Liệt sĩ", key: "isMartyr", width: 12 },
+        { header: "Gia đình liệt sĩ", key: "isMartyrFamily", width: 16 },
+        { header: "Cựu chiến binh", key: "isVeteran", width: 14 },
+        { header: "Diện ưu tiên khác", key: "isOtherSpecial", width: 16 },
+        {
+            header: "Tên diện ưu tiên khác",
+            key: "otherSpecialLabel",
+            width: 22,
+        },
     ];
     worksheet.getRow(1).font = { bold: true };
 
@@ -100,11 +126,21 @@ export async function exportCitizensToExcel(): Promise<ExcelJS.Workbook> {
             relationToHead: c.relationToHead || "",
             householdCode: household?.code || "",
             residenceType: LOAI_CU_TRU_LABEL[c.residenceType],
+            temporaryResidenceStartsAt: formatDate(c.temporaryResidenceStartsAt),
+            temporaryResidenceExpiresAt: formatDate(c.temporaryResidenceExpiresAt),
+            isResidencyDeclared: yesNo(c.isResidencyDeclared),
+            isUnemployed: yesNo(c.isUnemployed),
             isElderly: yesNo(c.isElderly),
             isChild: yesNo(c.isChild),
             isDisabledOrSupportNeeded: yesNo(c.isDisabledOrSupportNeeded),
+            isDisabledChild: yesNo(c.isDisabledChild),
             isPartyMember: yesNo(c.isPartyMember),
             isUnionMember: yesNo(c.isUnionMember),
+            isMartyr: yesNo(c.isMartyr),
+            isMartyrFamily: yesNo(c.isMartyrFamily),
+            isVeteran: yesNo(c.isVeteran),
+            isOtherSpecial: yesNo(c.isOtherSpecial),
+            otherSpecialLabel: c.otherSpecialLabel || "",
         });
     }
 

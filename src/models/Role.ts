@@ -37,6 +37,11 @@ export interface IRole extends Document {
     permissions: string[];
     allowedComplaintCategories?: string[];
     allowedRequestTypes?: string[];
+    // Cung quy uoc voi 2 truong tren: undefined = khong gioi han (giu nguyen
+    // bo so lieu dashboard co dinh theo audience nhu truoc day - xem
+    // dashboardService.ts), mot mang cu the = CHI hien dung nhung so lieu do
+    // (DASHBOARD_METRIC_KEYS trong types/index.ts), bat ke audience/vai tro.
+    dashboardMetrics?: string[];
     scopeType: AccessScopeTier;
     scopeMechanism?: ScopeAssignmentMechanism;
     // Chi co y nghia khi scopeMechanism === "ASSIGNED". 1 = chi 1 nguoi duoc
@@ -90,6 +95,7 @@ const RoleSchema = new Schema<IRole>(
         // Cung quy uoc voi allowedComplaintCategories: undefined = khong gioi
         // han loai yeu cau duoc gui, [] = admin da chot khong cho gui loai nao.
         allowedRequestTypes: { type: [String], default: undefined },
+        dashboardMetrics: { type: [String], default: undefined },
         allowedCreatableRoles: { type: [String], default: [] },
         scopeType: {
             type: String,

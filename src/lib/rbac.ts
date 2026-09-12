@@ -102,6 +102,20 @@ export async function requireUser(req: Request): Promise<IUser> {
     return user;
 }
 
+/**
+ * Nhu requireUser nhung KHONG nem loi - tra ve null neu thieu/invalid token
+ * (thay vi 401/423). Dung cho API cong khai muon ca nhan hoa ket qua cho
+ * nguoi da dang nhap (vd loc khao sat theo dieu kien du dieu kien cua chinh
+ * ho) ma khong bat buoc dang nhap moi xem duoc.
+ */
+export async function optionalUser(req: Request): Promise<IUser | null> {
+    try {
+        return await requireUser(req);
+    } catch {
+        return null;
+    }
+}
+
 export function isAdmin(session: SessionTokenPayload): boolean {
     return session.roles.includes("admin");
 }
@@ -274,6 +288,39 @@ export async function getUserAllowedRequestTypes(
     for (const role of roleDocs) {
         for (const type of role.allowedRequestTypes || []) {
             allowed.add(type);
+        }
+    }
+    return [...allowed];
+}
+
+/**
+ * Tra ve danh sach DashboardMetricKey (xem types/index.ts) ma user duoc phep
+ * xem tren dashboard, hoac null neu khong gioi han (giu nguyen bo so lieu co
+ * dinh theo audience nhu truoc day - xem dashboardService.ts). Cung quy uoc
+ * voi getUserAllowedComplaintCategories/getUserAllowedRequestTypes: chi gioi
+ * han khi TAT CA cac role dang active cua user deu da duoc admin "chot" danh
+ * sach dashboardMetrics; nhieu role bi gioi han thi hop (union).
+ */
+export async function getUserAllowedDashboardMetrics(
+    user: IUser,
+): Promise<string[] | null> {
+    if (user.roles.includes("admin")) return null;
+
+    const roleDocs = await RoleModel.find({
+        key: { $in: user.roles },
+        active: true,
+    });
+    if (roleDocs.length === 0) return null;
+
+    const hasUnrestrictedRole = roleDocs.some(
+        r => r.dashboardMetrics === undefined,
+    );
+    if (hasUnrestrictedRole) return null;
+
+    const allowed = new Set<string>();
+    for (const role of roleDocs) {
+        for (const metric of role.dashboardMetrics || []) {
+            allowed.add(metric);
         }
     }
     return [...allowed];

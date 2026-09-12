@@ -17,6 +17,7 @@ import { isValidVnPhone } from "@/lib/phone";
 import { hashForLookup, normalizeCccd } from "@/lib/encryption";
 import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
+import { recomputeHouseholdFlags } from "@/services/citizenService";
 import {
     createHouseRecord,
     resolveInitialVerificationStatus,
@@ -211,11 +212,21 @@ const CITIZEN_COLUMNS = {
     // khau" o dau file va applyCitizenImportMapping.
     houseCode: "Mã căn/hộ",
     residenceType: "Thường trú/Tạm trú",
+    temporaryResidenceStartsAt: "Ngày bắt đầu tạm trú",
+    temporaryResidenceExpiresAt: "Ngày hết hạn tạm trú",
+    isResidencyDeclared: "Đã khai báo cư trú",
+    isUnemployed: "Đang thất nghiệp",
     isElderly: "Người cao tuổi",
     isChild: "Trẻ em",
     isDisabledOrSupportNeeded: "Người khuyết tật",
+    isDisabledChild: "Trẻ em khuyết tật",
     isPartyMember: "Đảng viên",
     isUnionMember: "Đoàn viên",
+    isMartyr: "Liệt sĩ",
+    isMartyrFamily: "Gia đình liệt sĩ",
+    isVeteran: "Cựu chiến binh",
+    isOtherSpecial: "Diện ưu tiên khác",
+    otherSpecialLabel: "Tên diện ưu tiên khác",
 } as const;
 
 const STREET_COLUMNS = {
@@ -1323,11 +1334,21 @@ export type CitizenColumnMapping = {
     householdCode?: string;
     houseCode?: string;
     residenceType?: string;
+    temporaryResidenceStartsAt?: string;
+    temporaryResidenceExpiresAt?: string;
+    isResidencyDeclared?: string;
+    isUnemployed?: string;
     isElderly?: string;
     isChild?: string;
     isDisabledOrSupportNeeded?: string;
+    isDisabledChild?: string;
     isPartyMember?: string;
     isUnionMember?: string;
+    isMartyr?: string;
+    isMartyrFamily?: string;
+    isVeteran?: string;
+    isOtherSpecial?: string;
+    otherSpecialLabel?: string;
 };
 
 // Cac truong tuong ung 1-1 voi cot trong file, tru "fullName" (bat buoc, xu
@@ -1345,11 +1366,21 @@ const CITIZEN_MAPPING_COLUMN_FIELDS: Exclude<
     "householdCode",
     "houseCode",
     "residenceType",
+    "temporaryResidenceStartsAt",
+    "temporaryResidenceExpiresAt",
+    "isResidencyDeclared",
+    "isUnemployed",
     "isElderly",
     "isChild",
     "isDisabledOrSupportNeeded",
+    "isDisabledChild",
     "isPartyMember",
     "isUnionMember",
+    "isMartyr",
+    "isMartyrFamily",
+    "isVeteran",
+    "isOtherSpecial",
+    "otherSpecialLabel",
 ];
 
 /**
@@ -1600,6 +1631,32 @@ export async function applyCitizenImportMapping(
             }
         }
 
+        // Bat buoc ca 2 ngay khi "tam_tru", giong yeu cau cua
+        // createCitizenSchema (validators/citizen.ts) o luong tao thu cong.
+        let temporaryResidenceStartsAt: Date | undefined;
+        let temporaryResidenceExpiresAt: Date | undefined;
+        if (residenceType === "tam_tru") {
+            temporaryResidenceStartsAt = mapping.temporaryResidenceStartsAt
+                ? parseDateCell(v[mapping.temporaryResidenceStartsAt])
+                : undefined;
+            temporaryResidenceExpiresAt = mapping.temporaryResidenceExpiresAt
+                ? parseDateCell(v[mapping.temporaryResidenceExpiresAt])
+                : undefined;
+            if (!temporaryResidenceStartsAt) {
+                rowErrors.push("Thiếu hoặc sai định dạng 'Ngày bắt đầu tạm trú'");
+            }
+            if (!temporaryResidenceExpiresAt) {
+                rowErrors.push("Thiếu hoặc sai định dạng 'Ngày hết hạn tạm trú'");
+            }
+            if (
+                temporaryResidenceStartsAt &&
+                temporaryResidenceExpiresAt &&
+                temporaryResidenceStartsAt > temporaryResidenceExpiresAt
+            ) {
+                rowErrors.push("Ngày bắt đầu tạm trú phải trước ngày hết hạn");
+            }
+        }
+
         if (rowErrors.length > 0) {
             errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
             continue;
@@ -1637,6 +1694,14 @@ export async function applyCitizenImportMapping(
                 : undefined,
             householdId,
             residenceType,
+            temporaryResidenceStartsAt: temporaryResidenceStartsAt?.toISOString(),
+            temporaryResidenceExpiresAt: temporaryResidenceExpiresAt?.toISOString(),
+            isResidencyDeclared: mapping.isResidencyDeclared
+                ? parseBoolean(v[mapping.isResidencyDeclared])
+                : false,
+            isUnemployed: mapping.isUnemployed
+                ? parseBoolean(v[mapping.isUnemployed])
+                : false,
             isElderly: mapping.isElderly
                 ? parseBoolean(v[mapping.isElderly])
                 : false,
@@ -1644,12 +1709,30 @@ export async function applyCitizenImportMapping(
             isDisabledOrSupportNeeded: mapping.isDisabledOrSupportNeeded
                 ? parseBoolean(v[mapping.isDisabledOrSupportNeeded])
                 : false,
+            isDisabledChild: mapping.isDisabledChild
+                ? parseBoolean(v[mapping.isDisabledChild])
+                : false,
             isPartyMember: mapping.isPartyMember
                 ? parseBoolean(v[mapping.isPartyMember])
                 : false,
             isUnionMember: mapping.isUnionMember
                 ? parseBoolean(v[mapping.isUnionMember])
                 : false,
+            isMartyr: mapping.isMartyr
+                ? parseBoolean(v[mapping.isMartyr])
+                : false,
+            isMartyrFamily: mapping.isMartyrFamily
+                ? parseBoolean(v[mapping.isMartyrFamily])
+                : false,
+            isVeteran: mapping.isVeteran
+                ? parseBoolean(v[mapping.isVeteran])
+                : false,
+            isOtherSpecial: mapping.isOtherSpecial
+                ? parseBoolean(v[mapping.isOtherSpecial])
+                : false,
+            otherSpecialLabel: mapping.otherSpecialLabel
+                ? (v[mapping.otherSpecialLabel] || "").trim() || undefined
+                : undefined,
         });
     }
 
@@ -1725,6 +1808,10 @@ async function processCitizenImportRows(
     // recompute/update rieng le cho tung dong) de tranh O(n) update khi import
     // nhieu nhan khau cung luc.
     const memberCountDeltas = new Map<string, number>();
+    // Ho dan can tinh lai hasDisabledChild/hasDisabledPerson - gom lai roi
+    // recompute 1 lan cho moi ho dan sau vong lap (giong memberCountDeltas),
+    // thay vi goi rieng le tung dong.
+    const householdIdsNeedingFlagRecompute = new Set<string>();
     for (const row of job.previewData as Record<string, unknown>[]) {
         try {
             // eslint-disable-next-line no-await-in-loop
@@ -1740,11 +1827,25 @@ async function processCitizenImportRows(
                 occupation: row.occupation,
                 householdId: row.householdId,
                 residenceType: row.residenceType,
+                temporaryResidenceStartsAt: row.temporaryResidenceStartsAt
+                    ? new Date(row.temporaryResidenceStartsAt as string)
+                    : undefined,
+                temporaryResidenceExpiresAt: row.temporaryResidenceExpiresAt
+                    ? new Date(row.temporaryResidenceExpiresAt as string)
+                    : undefined,
+                isResidencyDeclared: !!row.isResidencyDeclared,
+                isUnemployed: !!row.isUnemployed,
                 isElderly: !!row.isElderly,
                 isChild: !!row.isChild,
                 isDisabledOrSupportNeeded: !!row.isDisabledOrSupportNeeded,
+                isDisabledChild: !!row.isDisabledChild,
                 isPartyMember: !!row.isPartyMember,
                 isUnionMember: !!row.isUnionMember,
+                isMartyr: !!row.isMartyr,
+                isMartyrFamily: !!row.isMartyrFamily,
+                isVeteran: !!row.isVeteran,
+                isOtherSpecial: !!row.isOtherSpecial,
+                otherSpecialLabel: row.otherSpecialLabel,
                 createdBy: actorId,
                 updatedBy: actorId,
             });
@@ -1755,6 +1856,9 @@ async function processCitizenImportRows(
                     key,
                     (memberCountDeltas.get(key) || 0) + 1,
                 );
+                if (row.isDisabledChild || row.isDisabledOrSupportNeeded) {
+                    householdIdsNeedingFlagRecompute.add(key);
+                }
             }
         } catch (err) {
             commitErrors.push({
@@ -1781,6 +1885,14 @@ async function processCitizenImportRows(
                         update: { $inc: { memberCount: delta } },
                     },
                 }),
+            ),
+        );
+    }
+
+    if (householdIdsNeedingFlagRecompute.size > 0) {
+        await Promise.all(
+            Array.from(householdIdsNeedingFlagRecompute).map(id =>
+                recomputeHouseholdFlags(id),
             ),
         );
     }
@@ -1938,11 +2050,36 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             key: "residenceType",
             width: 18,
         },
+        {
+            header: CITIZEN_COLUMNS.temporaryResidenceStartsAt,
+            key: "temporaryResidenceStartsAt",
+            width: 18,
+        },
+        {
+            header: CITIZEN_COLUMNS.temporaryResidenceExpiresAt,
+            key: "temporaryResidenceExpiresAt",
+            width: 18,
+        },
+        {
+            header: CITIZEN_COLUMNS.isResidencyDeclared,
+            key: "isResidencyDeclared",
+            width: 18,
+        },
+        {
+            header: CITIZEN_COLUMNS.isUnemployed,
+            key: "isUnemployed",
+            width: 16,
+        },
         { header: CITIZEN_COLUMNS.isElderly, key: "isElderly", width: 14 },
         { header: CITIZEN_COLUMNS.isChild, key: "isChild", width: 12 },
         {
             header: CITIZEN_COLUMNS.isDisabledOrSupportNeeded,
             key: "isDisabledOrSupportNeeded",
+            width: 16,
+        },
+        {
+            header: CITIZEN_COLUMNS.isDisabledChild,
+            key: "isDisabledChild",
             width: 16,
         },
         {
@@ -1954,6 +2091,23 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
             header: CITIZEN_COLUMNS.isUnionMember,
             key: "isUnionMember",
             width: 14,
+        },
+        { header: CITIZEN_COLUMNS.isMartyr, key: "isMartyr", width: 12 },
+        {
+            header: CITIZEN_COLUMNS.isMartyrFamily,
+            key: "isMartyrFamily",
+            width: 16,
+        },
+        { header: CITIZEN_COLUMNS.isVeteran, key: "isVeteran", width: 14 },
+        {
+            header: CITIZEN_COLUMNS.isOtherSpecial,
+            key: "isOtherSpecial",
+            width: 14,
+        },
+        {
+            header: CITIZEN_COLUMNS.otherSpecialLabel,
+            key: "otherSpecialLabel",
+            width: 22,
         },
     ];
     worksheet.getRow(1).font = { bold: true };
@@ -1968,11 +2122,21 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         householdCode: "HB001",
         houseCode: "",
         residenceType: "Thường trú",
+        temporaryResidenceStartsAt: "",
+        temporaryResidenceExpiresAt: "",
+        isResidencyDeclared: "Có",
+        isUnemployed: "Không",
         isElderly: "Không",
         isChild: "Không",
         isDisabledOrSupportNeeded: "Không",
+        isDisabledChild: "Không",
         isPartyMember: "Không",
         isUnionMember: "Có",
+        isMartyr: "Không",
+        isMartyrFamily: "Không",
+        isVeteran: "Có",
+        isOtherSpecial: "Không",
+        otherSpecialLabel: "",
     });
     worksheet.addRow({
         fullName: "Nguyễn Thị Bé",
@@ -1984,12 +2148,22 @@ export function buildCitizenImportTemplateWorkbook(): ExcelJS.Workbook {
         occupation: "",
         householdCode: "HB001",
         houseCode: "",
-        residenceType: "Thường trú",
+        residenceType: "Tạm trú",
+        temporaryResidenceStartsAt: "01/06/2026",
+        temporaryResidenceExpiresAt: "01/12/2026",
+        isResidencyDeclared: "Không",
+        isUnemployed: "Không",
         isElderly: "Không",
         isChild: "Có",
         isDisabledOrSupportNeeded: "Không",
+        isDisabledChild: "Có",
         isPartyMember: "Không",
         isUnionMember: "Không",
+        isMartyr: "Không",
+        isMartyrFamily: "Không",
+        isVeteran: "Không",
+        isOtherSpecial: "Có",
+        otherSpecialLabel: "Hộ nghèo",
     });
     return workbook;
 }

@@ -5,7 +5,7 @@ import {
     paginationParams,
 } from "@/lib/response";
 import { requireUser, requirePermission } from "@/lib/rbac";
-import { getSurveyById } from "@/services/surveyService";
+import { requireOwnedSurvey } from "@/services/surveyService";
 import { listAuditLogs } from "@/services/auditService";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,7 @@ export async function GET(
         await connectDB();
         const user = await requireUser(req);
         await requirePermission(user, "surveys.update");
-
-        await getSurveyById(params.id);
+        await requireOwnedSurvey(user, params.id);
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);

@@ -123,11 +123,21 @@ export const citizenImportMappingSchema = z
         householdCode: z.string().optional(),
         houseCode: z.string().optional(),
         residenceType: z.string().optional(),
+        temporaryResidenceStartsAt: z.string().optional(),
+        temporaryResidenceExpiresAt: z.string().optional(),
+        isResidencyDeclared: z.string().optional(),
+        isUnemployed: z.string().optional(),
         isElderly: z.string().optional(),
         isChild: z.string().optional(),
         isDisabledOrSupportNeeded: z.string().optional(),
+        isDisabledChild: z.string().optional(),
         isPartyMember: z.string().optional(),
         isUnionMember: z.string().optional(),
+        isMartyr: z.string().optional(),
+        isMartyrFamily: z.string().optional(),
+        isVeteran: z.string().optional(),
+        isOtherSpecial: z.string().optional(),
+        otherSpecialLabel: z.string().optional(),
     })
     .refine(data => !!data.householdCode || !!data.houseCode, {
         message:

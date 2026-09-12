@@ -7,6 +7,7 @@ import {
     isSurveyEligible,
     resolveSurveyRecipientUserIds,
     resolveUserEligibilityContext,
+    type UserEligibilityContext,
 } from "@/lib/surveyEligibility";
 import type {
     CreateSurveyInput,
@@ -41,6 +42,27 @@ async function assertUsersCanCoEdit(userIds: string[]): Promise<void> {
 }
 
 /**
+ * true neu user la admin, chinh nguoi tao (createdBy), hoac dong chu bien
+ * (coEditorUserIds) CUA KHAO SAT NAY - day la nhom duy nhat duoc xem/sua khao
+ * sat bat ke trang thai (nhap/dang_mo/da_dong) hay dieu kien doi tuong tra loi
+ * (eligibleRoles/...). Quyen "surveys.read"/"surveys.update" chi la dieu kien
+ * de VAO duoc man quan ly khao sat noi chung, KHONG dong nghia duoc thay/sua
+ * khao sat CUA NGUOI KHAC - truoc day dung sai quyen "surveys.update"/
+ * "surveys.read" toan cuc lam dieu kien nay, khien vd To truong (co
+ * surveys.read) thay duoc ca khao sat nhap cua admin, hoac khao sat da gioi
+ * han doi tuong tra loi khac vai tro cua ho.
+ */
+function isSurveyOwnerOrCoEditor(
+    user: IUser | null,
+    survey: ISurvey,
+): boolean {
+    if (!user) return false;
+    if (user.roles.includes("admin")) return true;
+    if (String(survey.createdBy) === String(user._id)) return true;
+    return survey.coEditorUserIds.some(id => String(id) === String(user._id));
+}
+
+/**
  * Nem HttpError(403) neu actor khong duoc phep chinh sua/mo/dong/xoa khao sat
  * nay - CHI admin, chinh nguoi tao (createdBy), hoac dong chu bien
  * (coEditorUserIds) moi duoc phep. Truoc day BAT KY ai co quyen "surveys.update"
@@ -48,15 +70,7 @@ async function assertUsersCanCoEdit(userIds: string[]): Promise<void> {
  * khac - day la lo hong duoc bao cao va sua o day.
  */
 function assertSurveyEditable(actorUser: IUser, survey: ISurvey): void {
-    if (actorUser.roles.includes("admin")) return;
-    if (String(survey.createdBy) === String(actorUser._id)) return;
-    if (
-        survey.coEditorUserIds.some(
-            id => String(id) === String(actorUser._id),
-        )
-    ) {
-        return;
-    }
+    if (isSurveyOwnerOrCoEditor(actorUser, survey)) return;
     throw new HttpError(
         "Bạn không phải người tạo hoặc đồng chủ biên của khảo sát này",
         403,
@@ -94,14 +108,28 @@ export async function createSurvey(actorUser: IUser, input: CreateSurveyInput) {
     return survey;
 }
 
+/**
+ * Tai khao sat va bat buoc actor la owner/co-editor (assertSurveyEditable) -
+ * dung cho cac thao tac chi danh cho chu bien (sua, mo, dong, xoa, xem lich
+ * su chinh sua), KHAC voi getSurveyById (cho nguoi tra loi/xem ket qua, chap
+ * nhan ca nguoi ngoai du dieu kien tra loi - xem isSurveyVisibleTo).
+ */
+export async function requireOwnedSurvey(
+    actorUser: IUser,
+    id: string,
+): Promise<ISurvey> {
+    const survey = await Survey.findById(id);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
+    assertSurveyEditable(actorUser, survey);
+    return survey;
+}
+
 export async function updateSurvey(
     actorUser: IUser,
     id: string,
     patch: UpdateSurveyInput,
 ) {
-    const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
-    assertSurveyEditable(actorUser, survey);
+    const survey = await requireOwnedSurvey(actorUser, id);
 
     if (patch.coEditorUserIds?.length) {
         await assertUsersCanCoEdit(patch.coEditorUserIds);
@@ -126,9 +154,7 @@ export async function openSurvey(
     actorUser: IUser,
     id: string,
 ): Promise<ISurvey> {
-    const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
-    assertSurveyEditable(actorUser, survey);
+    const survey = await requireOwnedSurvey(actorUser, id);
 
     survey.status = "dang_mo";
     if (!survey.openDate) survey.openDate = new Date();
@@ -168,9 +194,7 @@ export async function closeSurvey(
     actorUser: IUser,
     id: string,
 ): Promise<ISurvey> {
-    const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
-    assertSurveyEditable(actorUser, survey);
+    const survey = await requireOwnedSurvey(actorUser, id);
 
     survey.status = "da_dong";
     survey.closeDate = new Date();
@@ -188,9 +212,7 @@ export async function closeSurvey(
 }
 
 export async function deleteSurvey(actorUser: IUser, id: string) {
-    const survey = await Survey.findById(id);
-    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
-    assertSurveyEditable(actorUser, survey);
+    const survey = await requireOwnedSurvey(actorUser, id);
     await survey.deleteOne();
     await SurveyResponse.deleteMany({ surveyId: id });
 
@@ -202,21 +224,75 @@ export async function deleteSurvey(actorUser: IUser, id: string) {
     });
 }
 
+/**
+ * true neu khao sat duoc phep thay boi viewerUser BAT KE trang thai/dieu kien
+ * doi tuong: hoac ho la owner/co-editor (xem isSurveyOwnerOrCoEditor - luon
+ * thay, ke ca nhap), hoac (voi khao sat KHONG phai nhap) ho du dieu kien tra
+ * loi - eligibleAll, hoac isSurveyEligible khop role/vi tri cua chinh ho.
+ * Dung chung cho ca listSurveys va getSurveyById de 2 cho nay LUON dong bo:
+ * khao sat khong hien trong danh sach thi truy cap truc tiep bang id cung
+ * khong duoc, tranh la ho ro rang qua chi tiet du list da chan.
+ */
+function isSurveyVisibleTo(
+    survey: ISurvey,
+    viewerUser: IUser | null,
+    context: UserEligibilityContext | null,
+): boolean {
+    if (isSurveyOwnerOrCoEditor(viewerUser, survey)) return true;
+    if (survey.status === "nhap") return false;
+    if (survey.eligibleAll) return true;
+    if (viewerUser && context) return isSurveyEligible(survey, viewerUser, context);
+    return false;
+}
+
+/**
+ * Quyen "surveys.read" chi la dieu kien de VAO man quan ly khao sat noi
+ * chung (AdminGuard o frontend) - o day KHONG dung no de quyet dinh thay
+ * "toan bo" khao sat: tung khao sat duoc xet RIENG qua isSurveyVisibleTo, nen
+ * vd To truong (co surveys.read) se KHONG thay khao sat nhap cua nguoi khac,
+ * cung KHONG thay khao sat da mo nhung gioi han doi tuong tra loi khac vai
+ * tro/vi tri cua ho - tru khi chinh ho la nguoi tao/dong chu bien.
+ */
 export async function listSurveys(params: {
     page: number;
     limit: number;
     openOnly?: boolean;
+    viewerUser: IUser | null;
 }) {
-    const filter: Record<string, unknown> = {};
-    if (params.openOnly) filter.status = "dang_mo";
+    const dbFilter: Record<string, unknown> = {};
+    if (params.openOnly) dbFilter.status = "dang_mo";
 
-    const [items, total] = await Promise.all([
-        Survey.find(filter)
-            .sort({ createdAt: -1 })
-            .skip((params.page - 1) * params.limit)
-            .limit(params.limit),
-        Survey.countDocuments(filter),
-    ]);
+    const candidates = await Survey.find(dbFilter).sort({ createdAt: -1 });
+    const context = params.viewerUser
+        ? await resolveUserEligibilityContext(params.viewerUser)
+        : null;
+
+    const visible = candidates.filter(s =>
+        isSurveyVisibleTo(s, params.viewerUser, context),
+    );
+
+    const total = visible.length;
+    const pagedSurveys = visible.slice(
+        (params.page - 1) * params.limit,
+        params.page * params.limit,
+    );
+
+    // "hasResponded" de UI hien "Đã trả lời"/"Chưa trả lời" ngay trong bang
+    // danh sach (xem SurveyListPage.tsx), thay vi bat nguoi dung bam vao
+    // "Trả lời" moi biet minh da gui cau tra loi hay chua.
+    let respondedIds = new Set<string>();
+    if (params.viewerUser && pagedSurveys.length > 0) {
+        const responses = await SurveyResponse.find({
+            surveyId: { $in: pagedSurveys.map(s => s._id) },
+            userId: params.viewerUser._id,
+        }).select("surveyId");
+        respondedIds = new Set(responses.map(r => String(r.surveyId)));
+    }
+
+    const items = pagedSurveys.map(s => ({
+        ...s.toObject(),
+        hasResponded: respondedIds.has(String(s._id)),
+    }));
 
     return {
         items,
@@ -227,11 +303,20 @@ export async function listSurveys(params: {
     };
 }
 
-export async function getSurveyById(id: string) {
+export async function getSurveyById(id: string, viewerUser: IUser | null) {
     const survey = await Survey.findById(id)
         .populate("createdBy", "displayName")
         .populate("coEditorUserIds", "displayName");
     if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
+
+    const context =
+        viewerUser && !isSurveyOwnerOrCoEditor(viewerUser, survey)
+            ? await resolveUserEligibilityContext(viewerUser)
+            : null;
+    if (!isSurveyVisibleTo(survey, viewerUser, context)) {
+        throw new HttpError("Không tìm thấy khảo sát", 404);
+    }
+
     return survey;
 }
 
@@ -275,6 +360,33 @@ export async function respondToSurvey(
     });
 
     return response;
+}
+
+/**
+ * So khao sat DANG MO ma actorUser du dieu kien tra loi (isSurveyEligible)
+ * nhung CHUA gui cau tra loi - dung de hien so dem (badge) canh muc "Khảo
+ * sát" tren menu, giup nguoi dung biet co bao nhieu khao sat dang cho ho tra
+ * loi ma khong phai vao tung trang de kiem tra.
+ */
+export async function countUnansweredSurveys(
+    actorUser: IUser,
+): Promise<number> {
+    const openSurveys = await Survey.find({ status: "dang_mo" });
+    if (openSurveys.length === 0) return 0;
+
+    const context = await resolveUserEligibilityContext(actorUser);
+    const eligibleSurveys = openSurveys.filter(s =>
+        isSurveyEligible(s, actorUser, context),
+    );
+    if (eligibleSurveys.length === 0) return 0;
+
+    const answered = await SurveyResponse.find({
+        surveyId: { $in: eligibleSurveys.map(s => s._id) },
+        userId: actorUser._id,
+    }).select("surveyId");
+    const answeredIds = new Set(answered.map(r => String(r.surveyId)));
+
+    return eligibleSurveys.filter(s => !answeredIds.has(String(s._id))).length;
 }
 
 export type SurveyQuestionResult = {
@@ -331,4 +443,50 @@ export async function getSurveyResults(surveyId: string) {
         totalResponses: responses.length,
         results,
     };
+}
+
+export type SurveyIndividualResponse = {
+    responseId: string;
+    userId: string;
+    displayName: string;
+    phone?: string;
+    submittedAt: Date;
+    answers: {
+        questionId: string;
+        selectedOptions: string[];
+        otherText?: string;
+    }[];
+};
+
+/**
+ * Danh sach cau tra loi theo TUNG nguoi (giong tab "Individual" cua Google
+ * Forms) - khac voi getSurveyResults chi tra ve so lieu tong hop theo tung
+ * cau hoi, o day tra ve moi SurveyResponse kem thong tin nguoi tra loi de
+ * xem chi tiet ai da chon gi.
+ */
+export async function getSurveyIndividualResponses(
+    surveyId: string,
+): Promise<SurveyIndividualResponse[]> {
+    const survey = await Survey.findById(surveyId);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
+
+    const responses = await SurveyResponse.find({ surveyId })
+        .populate<{ userId: IUser }>("userId", "displayName phone")
+        .sort({ createdAt: 1 });
+
+    return responses.map(response => {
+        const user = response.userId as unknown as IUser;
+        return {
+            responseId: String(response._id),
+            userId: String(user?._id ?? response.userId),
+            displayName: user?.displayName ?? "Người dùng đã xóa",
+            phone: user?.phone,
+            submittedAt: response.createdAt,
+            answers: response.answers.map(answer => ({
+                questionId: String(answer.questionId),
+                selectedOptions: answer.selectedOptions,
+                otherText: answer.otherText,
+            })),
+        };
+    });
 }

@@ -28,13 +28,18 @@ export async function GET(req: Request) {
         const actorUser = await requireUser(req);
         const { searchParams } = new URL(req.url);
         const rolesParam = searchParams.get("roles");
+        // Tuy chon, dung khi ben goi muon thu hep theo pham vi phuong/xa cua
+        // mot ban ghi cu the (vd wardCode cua Complaint dang chon nguoi phu
+        // trach) - xem userService.listAssignableStaff.
+        const wardCodeParam = searchParams.get("wardCode");
+        const wardCode = wardCodeParam ? Number(wardCodeParam) : undefined;
 
         if (rolesParam) {
             const roleKeys = rolesParam
                 .split(",")
                 .map(v => v.trim())
                 .filter(Boolean);
-            const staff = await listAssignableStaff(roleKeys);
+            const staff = await listAssignableStaff(roleKeys, wardCode);
             return apiSuccess(staff);
         }
 
@@ -44,7 +49,7 @@ export async function GET(req: Request) {
         }
         await requirePermission(actorUser, permission);
         const roleKeys = await getRoleKeysWithPermission(permission);
-        const staff = await listAssignableStaff(roleKeys);
+        const staff = await listAssignableStaff(roleKeys, wardCode);
         return apiSuccess(staff);
     } catch (err) {
         return apiErrorFromException(err);

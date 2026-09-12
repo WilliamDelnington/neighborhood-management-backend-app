@@ -139,6 +139,10 @@ export async function updateRole(
                 ? undefined
                 : input.allowedRequestTypes;
     }
+    if (input.dashboardMetrics !== undefined) {
+        role.dashboardMetrics =
+            input.dashboardMetrics === null ? undefined : input.dashboardMetrics;
+    }
     if (input.allowedCreatableRoles !== undefined) {
         role.allowedCreatableRoles = input.allowedCreatableRoles;
     }

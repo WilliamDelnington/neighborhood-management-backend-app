@@ -18,16 +18,19 @@ import {
     BusinessDocument,
     BusinessType,
     ResidentRecord,
+    HouseOwnership,
     type IUser,
 } from "@/models";
 import {
     getUserAllowedComplaintCategories,
+    getUserAllowedDashboardMetrics,
     getUserPermissionSet,
 } from "@/lib/rbac";
 import {
     TRANG_THAI_PHAN_ANH_LABEL,
     type TrangThaiPhanAnh,
     type HouseRecordStatus,
+    type DashboardMetricKey,
 } from "@/types";
 import {
     getMyRequestCounts,
@@ -44,6 +47,55 @@ import {
 
 const COMPLAINT_TERMINAL_STATUSES = ["hoan_thanh", "dong"];
 const SUPPORT_TICKET_TERMINAL_STATUSES = ["dong"];
+// Do tuoi nhap ngu ap dung nam gioi (Luat NVQS) - cung khoang tuoi da dung o
+// admin-web-app ExportReports/reportItems.ts (client-side), lam lai server-side
+// o day de tinh duoc so lieu tong hop cho dashboard.
+const MILITARY_AGE_MIN = 18;
+const MILITARY_AGE_MAX = 25;
+// Do tuoi di hoc (tieu hoc den THPT) - khai niem MOI, chua tung dinh nghia o
+// dau khac trong he thong (xem thao luan luc thiet ke tinh nang dashboard).
+const SCHOOL_AGE_MIN = 6;
+const SCHOOL_AGE_MAX = 18;
+
+/**
+ * Tra ve khoang birthDate (tu ngay - den ngay) ung voi mot khoang tuoi [min,max]
+ * tinh tai thoi diem `now`. Dung cho cac chi so tinh theo tuoi (nam trong do
+ * tuoi nhap ngu, tre trong do tuoi di hoc) thay vi mot co thu cong rieng -
+ * tuoi luon dung voi ngay sinh thuc te, khong the "quen cap nhat" nhu mot co
+ * boolean.
+ */
+function birthDateRangeForAge(
+    min: number,
+    max: number,
+    now: Date,
+): { from: Date; to: Date } {
+    // "to" = ngay sinh MOI NHAT de vua tron `min` tuoi (sinh vao dung ngay nay
+    // thi hom nay vua tron min tuoi).
+    const to = new Date(now);
+    to.setFullYear(to.getFullYear() - min);
+    // "from" = ngay sinh SOM NHAT de chua qua (max+1) tuoi (sinh sau ngay nay
+    // 1 ngay thi hom nay chua tron max+1 tuoi).
+    const from = new Date(now);
+    from.setFullYear(from.getFullYear() - (max + 1));
+    from.setDate(from.getDate() + 1);
+    return { from, to };
+}
+
+/** Gom 6 trang thai TrangThaiPhanAnh ve 4 nhom hien thi tren dashboard. */
+function bucketComplaintCounts(
+    complaintCount: Map<string, number>,
+): ComplaintSummary {
+    const get = (status: string) => complaintCount.get(status) || 0;
+    const unprocessed = get("moi_tiep_nhan");
+    const inProgress = get("dang_xu_ly") + get("can_bo_sung");
+    const processed = get("da_xu_ly") + get("hoan_thanh") + get("dong");
+    return {
+        unprocessed,
+        inProgress,
+        processed,
+        total: unprocessed + inProgress + processed,
+    };
+}
 
 export type DashboardTask = { label: string; count: number; link: string };
 
@@ -52,7 +104,22 @@ export type DashboardAudience =
     | "ward"
     | "neighborhood"
     | "police"
+    | "social_affairs"
+    | "health"
+    | "education"
+    | "economy_labor"
     | "staff";
+
+// Cac audience deu la "ho hang" cap Phuong - dung chung khoi "Nha so"/"Phan
+// anh" (buildWardOverview), chi khac o phan "phong ban" rieng (buildDepartmentOverview).
+const WARD_FAMILY_AUDIENCES: DashboardAudience[] = [
+    "ward",
+    "police",
+    "social_affairs",
+    "health",
+    "education",
+    "economy_labor",
+];
 
 type DashboardAreaContext = {
     audience: DashboardAudience;
@@ -91,6 +158,21 @@ export type NeighborhoodOverview = {
         elderly: number;
         children: number;
         needsSupport: number;
+        // 8 chi so nhan khau/ho dan cho dashboard To truong/To pho (hang 1+2
+        // trong yeu cau) - women/veterans/martyrs/militaryAgeMen tu Citizen,
+        // poorHouseholds tu Household.isNearPoor, unemployed tu Citizen.isUnemployed.
+        women: number;
+        veterans: number;
+        martyrs: number;
+        poorHouseholds: number;
+        unemployed: number;
+        militaryAgeMen: number;
+        // Nhom "Nha so" (Chua khai bao cu tru/Co dich benh theo doi/Nha so da
+        // dang ky) - registeredHouses trung voi houses.verified da co san,
+        // giu them ten rieng cho ro nghia khi hien thi.
+        undeclaredResidency: number;
+        diseaseMonitoredHouseholds: number;
+        registeredHouses: number;
     };
     business: {
         dataAvailable: boolean;
@@ -119,6 +201,17 @@ export type NeighborhoodOverview = {
         averageSatisfaction: number | null;
         ratedComplaintCount: number;
     };
+    // Nhom "Phan anh" 4-nhom (Chua xu ly/Dang xu ly/Da xu ly/Tong) - xem
+    // bucketComplaintCounts(). Doc lap voi tasks.newComplaints/inProgressComplaints
+    // o tren (giu nguyen y nghia cu, khong doi de tranh anh huong noi khac dang dung).
+    complaintSummary: ComplaintSummary;
+};
+
+export type ComplaintSummary = {
+    unprocessed: number;
+    inProgress: number;
+    processed: number;
+    total: number;
 };
 
 export type WardNeighborhoodRow = {
@@ -135,6 +228,17 @@ export type WardNeighborhoodRow = {
 
 export type WardOverview = {
     neighborhoods: WardNeighborhoodRow[];
+    // Nhom "Nha so" dung chung cho MOI tai khoan cap Phuong (ward/police/
+    // social_affairs/health/education/economy_labor) - xem buildWardOverview.
+    // "neighborhoods" o day la SO LUONG (khong kem mau so co dinh - xem quyet
+    // dinh thiet ke, khong bia them mot cau hinh "tong so to du kien" moi).
+    houseSummary: {
+        neighborhoods: number;
+        houses: number;
+        owners: number;
+        businessUnits: number;
+    };
+    complaintSummary: ComplaintSummary;
     dataQuality: {
         duplicateAddressGroups: number;
         duplicateAddressHouses: number;
@@ -174,6 +278,38 @@ export type WardOverview = {
     systemSafetyAvailable: boolean;
 };
 
+/**
+ * Khoi du lieu RIENG cho tung "phong ban" cap Phuong (Cong an/Van hoa-Xa hoi/
+ * Y te/Giao duc/Kinh te-Lao dong) - chi field tuong ung voi audience hien tai
+ * duoc dien, cac field con lai la undefined. Dung kem voi WardOverview (khoi
+ * "Nha so"/"Phan anh" dung chung cho MOI tai khoan cap Phuong) - xem
+ * buildDepartmentOverview.
+ */
+export type DepartmentOverview = {
+    police?: {
+        undeclaredResidency: number;
+        militaryAgeMen: number;
+    };
+    socialAffairs?: {
+        women: number;
+        elderly: number;
+        children: number;
+        veterans: number;
+        martyrs: number;
+        poorHouseholds: number;
+    };
+    health?: {
+        diseaseMonitoredHouseholds: number;
+    };
+    education?: {
+        schoolAgeChildren: number;
+    };
+    economyLabor?: {
+        businessUnits: number;
+        unemployed: number;
+    };
+};
+
 /** Xac dinh audience va pham vi du lieu cho dashboard, khong chi cho menu. */
 async function dashboardAreaContext(actorUser: IUser): Promise<DashboardAreaContext> {
     const roles = actorUser.roles || [];
@@ -192,21 +328,43 @@ async function dashboardAreaContext(actorUser: IUser): Promise<DashboardAreaCont
         roles.includes("neighborhood_leader") ||
         roles.includes("neighborhood_coleader");
     const isPolice = roles.includes("regional_police");
+    // 4 vai tro "phong ban" moi - moi vai tro co audience/khoi du lieu rieng
+    // (buildDepartmentOverview), khac voi audience "ward" chung chung truoc
+    // day (vd secretary/people_committee_official, hoac bat ky vai tro Phuong
+    // tuy chinh nao khac khong nam trong danh sach nay).
+    const isSocialAffairs = roles.includes("social_affairs_official");
+    const isHealth = roles.includes("health_official");
+    const isEducation = roles.includes("education_official");
+    const isEconomyLabor = roles.includes("economy_labor_official");
     // Truoc day chi secretary/people_committee_official duoc coi la audience
     // "ward". Cac vai tro Phuong tuy chinh tao qua Role admin (vd
     // social_cultral_leader) duoc gan wardCode giong secretary nhung khong
     // nam trong danh sach co dinh - tong quat hoa: bat ky vai tro nao khong
-    // phai To/Cong an/Admin va co wardCode deu duoc coi la dieu hanh cap
-    // Phuong, khong phu thuoc ten role key cu the.
+    // phai To/Cong an/Admin/4 phong ban moi va co wardCode deu duoc coi la
+    // dieu hanh cap Phuong, khong phu thuoc ten role key cu the.
     const isWard =
-        !isNeighborhood && !isPolice && Boolean(actorUser.wardCode);
+        !isNeighborhood &&
+        !isPolice &&
+        !isSocialAffairs &&
+        !isHealth &&
+        !isEducation &&
+        !isEconomyLabor &&
+        Boolean(actorUser.wardCode);
     const audience: DashboardAudience = isNeighborhood
         ? "neighborhood"
-        : isWard
-          ? "ward"
-          : isPolice
-            ? "police"
-            : "staff";
+        : isSocialAffairs
+          ? "social_affairs"
+          : isHealth
+            ? "health"
+            : isEducation
+              ? "education"
+              : isEconomyLabor
+                ? "economy_labor"
+                : isWard
+                  ? "ward"
+                  : isPolice
+                    ? "police"
+                    : "staff";
 
     if (isNeighborhood) {
         const neighborhoodIds = [
@@ -342,9 +500,10 @@ export async function getHouseGisOverview(
  */
 export async function getDashboardSummary(actorUser: IUser) {
     const now = new Date();
-    const [permissions, context] = await Promise.all([
+    const [permissions, context, allowedDashboardMetrics] = await Promise.all([
         getUserPermissionSet(actorUser),
         dashboardAreaContext(actorUser),
+        getUserAllowedDashboardMetrics(actorUser),
     ]);
 
     const capabilities = {
@@ -367,7 +526,7 @@ export async function getDashboardSummary(actorUser: IUser) {
         await Promise.all([
             capabilities.population
                 ? Household.find(context.areaFilter).select(
-                      "_id houseId cluster neighborhoodId ownershipType needsSupport",
+                      "_id houseId cluster neighborhoodId ownershipType needsSupport isNearPoor diseaseStatus",
                   )
                 : Promise.resolve([]),
             capabilities.population ||
@@ -587,6 +746,7 @@ export async function getDashboardSummary(actorUser: IUser) {
     );
     const newComplaints = complaintCount.get("moi_tiep_nhan") || 0;
     const inProgressComplaints = complaintCount.get("dang_xu_ly") || 0;
+    const complaintSummary = bucketComplaintCounts(complaintCount);
     const highRiskPcccCount = latestPccc.filter(row => row.riskLevel === "do").length;
     const urgentSecurityCount = latestSecurity.filter(
         row => row.level === "khan_cap",
@@ -655,27 +815,61 @@ export async function getDashboardSummary(actorUser: IUser) {
         overdueInspectionTargets: inspection.overdueTargets,
     });
 
-    const [neighborhoodOverview, wardOverview] = await Promise.all([
-        context.audience === "neighborhood"
-            ? buildNeighborhoodOverview({
-                  context,
-                  capabilities,
-                  houses,
-                  households,
-                  latestPccc,
-                  newComplaints,
-                  inProgressComplaints,
-                  requestReport,
-              })
-            : Promise.resolve(undefined),
-        context.audience === "ward"
-            ? buildWardOverview(context, capabilities)
-            : Promise.resolve(undefined),
-    ]);
+    const [neighborhoodOverview, wardOverview, departmentOverview] =
+        await Promise.all([
+            context.audience === "neighborhood"
+                ? buildNeighborhoodOverview({
+                      context,
+                      capabilities,
+                      houses,
+                      households,
+                      latestPccc,
+                      newComplaints,
+                      inProgressComplaints,
+                      requestReport,
+                      complaintSummary,
+                  })
+                : Promise.resolve(undefined),
+            WARD_FAMILY_AUDIENCES.includes(context.audience)
+                ? buildWardOverview(context, capabilities, complaintSummary)
+                : Promise.resolve(undefined),
+            WARD_FAMILY_AUDIENCES.includes(context.audience) &&
+            context.audience !== "ward"
+                ? buildDepartmentOverview(context, capabilities)
+                : Promise.resolve(undefined),
+        ]);
+
+    // Duong di MOI, cong them (khong thay the 3 khoi tren) - chi tinh khi CO
+    // it nhat 1 vai tro cua actor da cau hinh dashboardMetrics (khac null) VA
+    // audience thuoc 2 tang co "dashboard tong hop theo khu vuc dia ly" (WARD/
+    // NEIGHBORHOOD) - xem getUserAllowedDashboardMetrics/computeFlatDashboardMetrics.
+    // Vai tro chua cau hinh (allowedDashboardMetrics===null, truong hop pho
+    // bien nhat hien nay) hoan toan khong bi anh huong - metrics/
+    // allowedDashboardMetrics tra ve undefined/null, frontend tiep tuc dung
+    // neighborhoodOverview/wardOverview/departmentOverview nhu truoc.
+    const supportsFlatMetrics =
+        context.audience === "neighborhood" ||
+        WARD_FAMILY_AUDIENCES.includes(context.audience);
+    let metrics:
+        | Partial<Record<DashboardMetricKey, number | ComplaintSummary>>
+        | undefined;
+    if (allowedDashboardMetrics !== null && supportsFlatMetrics) {
+        const allMetrics = await computeFlatDashboardMetrics(
+            context,
+            complaintSummary,
+        );
+        const allowedSet = new Set(allowedDashboardMetrics);
+        metrics = Object.fromEntries(
+            Object.entries(allMetrics).filter(([key]) => allowedSet.has(key)),
+        ) as Partial<Record<DashboardMetricKey, number | ComplaintSummary>>;
+    }
 
     return {
         neighborhoodOverview,
+        departmentOverview,
         wardOverview,
+        metrics,
+        allowedDashboardMetrics: metrics ? allowedDashboardMetrics : null,
         audience: context.audience,
         scopeLabel: context.scopeLabel,
         generatedAt: now,
@@ -794,11 +988,14 @@ async function buildNeighborhoodOverview(args: {
         _id: unknown;
         houseId?: unknown;
         needsSupport?: boolean;
+        isNearPoor?: boolean;
+        diseaseStatus?: string;
     }>;
     latestPccc: Array<{ _id: unknown; riskLevel: string; followUpStatus?: string }>;
     newComplaints: number;
     inProgressComplaints: number;
     requestReport?: RequestReport;
+    complaintSummary: ComplaintSummary;
 }): Promise<NeighborhoodOverview> {
     const {
         context,
@@ -809,6 +1006,7 @@ async function buildNeighborhoodOverview(args: {
         newComplaints,
         inProgressComplaints,
         requestReport,
+        complaintSummary,
     } = args;
     const houseIds = houses.map(house => house._id);
     const householdIds = households.map(household => household._id);
@@ -818,11 +1016,22 @@ async function buildNeighborhoodOverview(args: {
             .filter((value): value is string => Boolean(value)),
     );
 
+    const militaryAgeRange = birthDateRangeForAge(
+        MILITARY_AGE_MIN,
+        MILITARY_AGE_MAX,
+        new Date(),
+    );
     const [
         residenceTypeRows,
         renterAgg,
         elderlyCount,
         childCount,
+        womenCount,
+        veteranCount,
+        martyrCount,
+        unemployedCount,
+        militaryAgeMenCount,
+        undeclaredResidencyCount,
         businesses,
         companies,
         complaintQuality,
@@ -851,6 +1060,46 @@ async function buildNeighborhoodOverview(args: {
                   isChild: true,
               })
             : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  gender: "nu",
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  isVeteran: true,
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  $or: [{ isMartyr: true }, { isMartyrFamily: true }],
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  isUnemployed: true,
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  gender: "nam",
+                  birthDate: {
+                      $gte: militaryAgeRange.from,
+                      $lte: militaryAgeRange.to,
+                  },
+              })
+            : Promise.resolve(0),
+        capabilities.population && householdIds.length > 0
+            ? Citizen.countDocuments({
+                  householdId: { $in: householdIds },
+                  isResidencyDeclared: false,
+              })
+            : Promise.resolve(0),
         capabilities.business
             ? Business.find(context.areaFilter).select(
                   "_id houseId status businessType",
@@ -863,6 +1112,12 @@ async function buildNeighborhoodOverview(args: {
             ? getComplaintQualityMetrics(context.complaintFilter)
             : Promise.resolve(null),
     ]);
+    const poorHouseholdsCount = households.filter(
+        household => household.isNearPoor,
+    ).length;
+    const diseaseMonitoredHouseholdsCount = households.filter(
+        household => household.diseaseStatus && household.diseaseStatus !== "none",
+    ).length;
 
     const businessHouseIds = new Set(
         [...businesses, ...companies]
@@ -949,6 +1204,15 @@ async function buildNeighborhoodOverview(args: {
             children: childCount,
             needsSupport: households.filter(household => household.needsSupport)
                 .length,
+            women: womenCount,
+            veterans: veteranCount,
+            martyrs: martyrCount,
+            poorHouseholds: poorHouseholdsCount,
+            unemployed: unemployedCount,
+            militaryAgeMen: militaryAgeMenCount,
+            undeclaredResidency: undeclaredResidencyCount,
+            diseaseMonitoredHouseholds: diseaseMonitoredHouseholdsCount,
+            registeredHouses: statusCount("verified"),
         },
         business: {
             dataAvailable: capabilities.business,
@@ -986,6 +1250,7 @@ async function buildNeighborhoodOverview(args: {
             averageSatisfaction: complaintQuality?.averageRating ?? null,
             ratedComplaintCount: complaintQuality?.ratedCount || 0,
         },
+        complaintSummary,
     };
 }
 
@@ -1066,11 +1331,14 @@ async function getComplaintQualityMetrics(
 async function buildWardOverview(
     context: DashboardAreaContext,
     capabilities: { population: boolean; complaints: boolean; pccc: boolean; business: boolean },
+    complaintSummary: ComplaintSummary,
 ): Promise<WardOverview> {
     const neighborhoodIds = context.neighborhoodIds;
     if (neighborhoodIds.length === 0) {
         return {
             neighborhoods: [],
+            houseSummary: { neighborhoods: 0, houses: 0, owners: 0, businessUnits: 0 },
+            complaintSummary,
             dataQuality: {
                 duplicateAddressGroups: 0,
                 duplicateAddressHouses: 0,
@@ -1132,7 +1400,7 @@ async function buildWardOverview(
         capabilities.population
             ? Household.find({
                   neighborhoodId: { $in: neighborhoodIds },
-              }).select("_id houseId needsSupport")
+              }).select("_id houseId needsSupport isNearPoor diseaseStatus")
             : Promise.resolve([]),
         capabilities.pccc
             ? PcccCheck.aggregate([
@@ -1245,7 +1513,7 @@ async function buildWardOverview(
 
     const householdIdsForWard = householdRows.map(household => household._id);
     const houseIdsForWard = houseRows.map(house => house._id);
-    const [citizenCount, elderlyCount, childCount, renterAgg] =
+    const [citizenCount, elderlyCount, childCount, renterAgg, ownerIds] =
         await Promise.all([
             capabilities.population && householdIdsForWard.length > 0
                 ? Citizen.countDocuments({
@@ -1269,6 +1537,15 @@ async function buildWardOverview(
                       { $match: { houseId: { $in: houseIdsForWard } } },
                       { $group: { _id: null, total: { $sum: "$renterCount" } } },
                   ])
+                : Promise.resolve([]),
+            // "Chu so huu" = so nguoi/to chuc dang dung ten so huu/quan ly it
+            // nhat 1 nha trong Phuong (khong phan biet primary_owner/co_owner/
+            // authorized_manager - xem models/HouseOwnership.ts).
+            houseIdsForWard.length > 0
+                ? HouseOwnership.distinct("ownerId", {
+                      houseId: { $in: houseIdsForWard },
+                      active: true,
+                  })
                 : Promise.resolve([]),
         ]);
 
@@ -1314,6 +1591,13 @@ async function buildWardOverview(
 
     return {
         neighborhoods: neighborhoodRows,
+        houseSummary: {
+            neighborhoods: neighborhoodIds.length,
+            houses: houseRows.length,
+            owners: ownerIds.length,
+            businessUnits: businesses.length + companies.length,
+        },
+        complaintSummary,
         dataQuality: {
             duplicateAddressGroups: duplicateAddressRows.length,
             duplicateAddressHouses,
@@ -1362,6 +1646,215 @@ async function buildWardOverview(
         },
         digitalServicesAvailable: false,
         systemSafetyAvailable: false,
+    };
+}
+
+/**
+ * Khoi du lieu RIENG cho 1 trong 5 "phong ban" cap Phuong (police/
+ * social_affairs/health/education/economy_labor) - CHI goi khi audience khac
+ * "ward" (xem getDashboardSummary). Dung chung context.neighborhoodIds (da
+ * tinh san boi dashboardAreaContext, giong buildWardOverview) de quet toan bo
+ * Phuong, khong phai rieng mot To dan pho.
+ */
+async function buildDepartmentOverview(
+    context: DashboardAreaContext,
+    capabilities: { population: boolean; business: boolean },
+): Promise<DepartmentOverview> {
+    const neighborhoodIds = context.neighborhoodIds;
+    if (neighborhoodIds.length === 0 || !capabilities.population) return {};
+
+    const householdIds = await Household.distinct("_id", {
+        neighborhoodId: { $in: neighborhoodIds },
+    });
+    const citizenFilter = (extra: Record<string, unknown>) =>
+        householdIds.length > 0
+            ? Citizen.countDocuments({ householdId: { $in: householdIds }, ...extra })
+            : Promise.resolve(0);
+
+    switch (context.audience) {
+        case "police": {
+            const militaryAgeRange = birthDateRangeForAge(
+                MILITARY_AGE_MIN,
+                MILITARY_AGE_MAX,
+                new Date(),
+            );
+            const [undeclaredResidency, militaryAgeMen] = await Promise.all([
+                citizenFilter({ isResidencyDeclared: false }),
+                citizenFilter({
+                    gender: "nam",
+                    birthDate: {
+                        $gte: militaryAgeRange.from,
+                        $lte: militaryAgeRange.to,
+                    },
+                }),
+            ]);
+            return { police: { undeclaredResidency, militaryAgeMen } };
+        }
+        case "social_affairs": {
+            const [women, elderly, children, veterans, martyrs, poorHouseholds] =
+                await Promise.all([
+                    citizenFilter({ gender: "nu" }),
+                    citizenFilter({ isElderly: true }),
+                    citizenFilter({ isChild: true }),
+                    citizenFilter({ isVeteran: true }),
+                    citizenFilter({ $or: [{ isMartyr: true }, { isMartyrFamily: true }] }),
+                    Household.countDocuments({
+                        neighborhoodId: { $in: neighborhoodIds },
+                        isNearPoor: true,
+                    }),
+                ]);
+            return {
+                socialAffairs: {
+                    women,
+                    elderly,
+                    children,
+                    veterans,
+                    martyrs,
+                    poorHouseholds,
+                },
+            };
+        }
+        case "health": {
+            const diseaseMonitoredHouseholds = await Household.countDocuments({
+                neighborhoodId: { $in: neighborhoodIds },
+                diseaseStatus: { $ne: "none" },
+            });
+            return { health: { diseaseMonitoredHouseholds } };
+        }
+        case "education": {
+            const schoolAgeRange = birthDateRangeForAge(
+                SCHOOL_AGE_MIN,
+                SCHOOL_AGE_MAX,
+                new Date(),
+            );
+            const schoolAgeChildren = await citizenFilter({
+                birthDate: { $gte: schoolAgeRange.from, $lte: schoolAgeRange.to },
+            });
+            return { education: { schoolAgeChildren } };
+        }
+        case "economy_labor": {
+            const [businessCount, companyCount, unemployed] = await Promise.all([
+                capabilities.business
+                    ? Business.countDocuments({ neighborhoodId: { $in: neighborhoodIds } })
+                    : Promise.resolve(0),
+                capabilities.business
+                    ? Company.countDocuments({ neighborhoodId: { $in: neighborhoodIds } })
+                    : Promise.resolve(0),
+                citizenFilter({ isUnemployed: true }),
+            ]);
+            return {
+                economyLabor: {
+                    businessUnits: businessCount + companyCount,
+                    unemployed,
+                },
+            };
+        }
+        default:
+            return {};
+    }
+}
+
+/**
+ * Tinh TOAN BO DASHBOARD_METRIC_KEYS (khong phan biet audience) cho mot vai
+ * tro DA cau hinh dashboardMetrics (xem getUserAllowedDashboardMetrics) - chi
+ * duoc goi khi allowedDashboardMetrics khac null, tuc la co it nhat 1 vai tro
+ * cua actor da "chot" mot tap con cu the. Dung chung context.neighborhoodIds
+ * cho ca audience "ward"/"neighborhood" (dashboardAreaContext da chuan hoa
+ * ve cung mot danh sach neighborhoodId). Ket qua se duoc loc lai theo dung
+ * allowedDashboardMetrics truoc khi tra ve cho client (xem getDashboardSummary) -
+ * ham nay CHI tinh toan, khong tu loc.
+ */
+async function computeFlatDashboardMetrics(
+    context: DashboardAreaContext,
+    complaintSummary: ComplaintSummary,
+): Promise<Partial<Record<DashboardMetricKey, number | ComplaintSummary>>> {
+    const neighborhoodIds = context.neighborhoodIds;
+    if (neighborhoodIds.length === 0) {
+        return { complaints_summary: complaintSummary };
+    }
+
+    const [households, houseRows, businesses, companies] = await Promise.all([
+        Household.find({ neighborhoodId: { $in: neighborhoodIds } }).select(
+            "_id isNearPoor diseaseStatus",
+        ),
+        HouseRecord.find({ neighborhoodId: { $in: neighborhoodIds } }).select(
+            "_id status",
+        ),
+        Business.find({ neighborhoodId: { $in: neighborhoodIds } }).select("_id"),
+        Company.find({ neighborhoodId: { $in: neighborhoodIds } }).select("_id"),
+    ]);
+    const householdIds = households.map(h => h._id);
+    const houseIds = houseRows.map(h => h._id);
+    const citizenFilter = (extra: Record<string, unknown>) =>
+        householdIds.length > 0
+            ? Citizen.countDocuments({ householdId: { $in: householdIds }, ...extra })
+            : Promise.resolve(0);
+    const militaryAgeRange = birthDateRangeForAge(
+        MILITARY_AGE_MIN,
+        MILITARY_AGE_MAX,
+        new Date(),
+    );
+    const schoolAgeRange = birthDateRangeForAge(
+        SCHOOL_AGE_MIN,
+        SCHOOL_AGE_MAX,
+        new Date(),
+    );
+
+    const [
+        ownerIds,
+        women,
+        elderly,
+        children,
+        veterans,
+        martyrs,
+        unemployed,
+        militaryAgeMen,
+        undeclaredResidency,
+        schoolAgeChildren,
+    ] = await Promise.all([
+        houseIds.length > 0
+            ? HouseOwnership.distinct("ownerId", {
+                  houseId: { $in: houseIds },
+                  active: true,
+              })
+            : Promise.resolve([]),
+        citizenFilter({ gender: "nu" }),
+        citizenFilter({ isElderly: true }),
+        citizenFilter({ isChild: true }),
+        citizenFilter({ isVeteran: true }),
+        citizenFilter({ $or: [{ isMartyr: true }, { isMartyrFamily: true }] }),
+        citizenFilter({ isUnemployed: true }),
+        citizenFilter({
+            gender: "nam",
+            birthDate: { $gte: militaryAgeRange.from, $lte: militaryAgeRange.to },
+        }),
+        citizenFilter({ isResidencyDeclared: false }),
+        citizenFilter({
+            birthDate: { $gte: schoolAgeRange.from, $lte: schoolAgeRange.to },
+        }),
+    ]);
+
+    return {
+        neighborhoods_count: neighborhoodIds.length,
+        houses_count: houseIds.length,
+        owners_count: ownerIds.length,
+        business_units_count: businesses.length + companies.length,
+        complaints_summary: complaintSummary,
+        women_count: women,
+        elderly_count: elderly,
+        children_count: children,
+        veterans_count: veterans,
+        martyrs_count: martyrs,
+        poor_households_count: households.filter(h => h.isNearPoor).length,
+        unemployed_count: unemployed,
+        military_age_men_count: militaryAgeMen,
+        undeclared_residency_count: undeclaredResidency,
+        disease_monitored_households_count: households.filter(
+            h => h.diseaseStatus && h.diseaseStatus !== "none",
+        ).length,
+        registered_houses_count: houseRows.filter(h => h.status === "verified")
+            .length,
+        school_age_children_count: schoolAgeChildren,
     };
 }
 

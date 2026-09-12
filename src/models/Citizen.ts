@@ -33,16 +33,33 @@ export interface ICitizen extends Document {
     householdId: mongoose.Types.ObjectId;
     residenceType: LoaiCuTru;
     // Bat buoc khi residenceType="tam_tru" (xem validators/citizen.ts) - ngay
-    // het han khai bao tam tru, khong ap dung cho thuong_tru.
+    // bat dau va ket thuc khai bao tam tru, khong ap dung cho thuong_tru.
+    temporaryResidenceStartsAt?: Date;
     temporaryResidenceExpiresAt?: Date;
+    // Da/chua khai bao cu tru voi UBND - doc lap voi residenceType (thuong
+    // tru/tam tru la PHAN LOAI cu tru, con co nay la tinh trang DA THONG BAO
+    // phan loai do cho chinh quyen hay chua).
+    isResidencyDeclared: boolean;
     identityProvider: IdentityProvider;
     identityVerificationStatus: IdentityVerificationStatus;
     identityVerifiedAt?: Date;
     isElderly: boolean;
     isChild: boolean;
+    // Khai bao thu cong - khong suy tu occupation rong, vi occupation rong
+    // cung co the la chua khai bao/tre em/nguoi cao tuoi, khong dong nghia
+    // that nghiep (xem thao luan luc thiet ke tinh nang dashboard).
+    isUnemployed: boolean;
     isDisabledOrSupportNeeded: boolean;
+    isDisabledChild: boolean;
     isPartyMember: boolean;
     isUnionMember: boolean;
+    isMartyr: boolean;
+    isMartyrFamily: boolean;
+    isVeteran: boolean;
+    isOtherSpecial: boolean;
+    // Bat buoc khi isOtherSpecial=true (xem validators/citizen.ts) - mo ta
+    // dien khai tu do cho dien uu tien khong nam trong danh sach co san.
+    otherSpecialLabel?: string;
     zaloUserId?: mongoose.Types.ObjectId;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -75,7 +92,9 @@ const CitizenSchema = new Schema<ICitizen>(
             enum: LOAI_CU_TRU,
             default: "thuong_tru",
         },
+        temporaryResidenceStartsAt: { type: Date },
         temporaryResidenceExpiresAt: { type: Date },
+        isResidencyDeclared: { type: Boolean, default: false },
         // Du lieu nhap tay/CCCD hien tai chi la khai bao. Khong gan nhan
         // "verified" neu chua doi chieu that su qua VNeID/CSDLQGDC.
         identityProvider: {
@@ -93,9 +112,16 @@ const CitizenSchema = new Schema<ICitizen>(
         identityVerifiedAt: { type: Date },
         isElderly: { type: Boolean, default: false },
         isChild: { type: Boolean, default: false },
+        isUnemployed: { type: Boolean, default: false },
         isDisabledOrSupportNeeded: { type: Boolean, default: false },
+        isDisabledChild: { type: Boolean, default: false },
         isPartyMember: { type: Boolean, default: false },
         isUnionMember: { type: Boolean, default: false },
+        isMartyr: { type: Boolean, default: false },
+        isMartyrFamily: { type: Boolean, default: false },
+        isVeteran: { type: Boolean, default: false },
+        isOtherSpecial: { type: Boolean, default: false },
+        otherSpecialLabel: { type: String, trim: true },
         zaloUserId: { type: Schema.Types.ObjectId, ref: "User" },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

@@ -41,6 +41,10 @@ export const ROLE_LABEL: Record<string, string> = {
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
     people_committee_official: "Cán bộ UBND",
+    social_affairs_official: "Cán bộ Văn hóa – Xã hội",
+    health_official: "Cán bộ Y tế",
+    education_official: "Cán bộ Giáo dục",
+    economy_labor_official: "Cán bộ Kinh tế, Lao động",
     admin: "Quản trị viên",
 };
 
@@ -375,6 +379,23 @@ export const LOAI_SO_HUU_LABEL: Record<LoaiSoHuu, string> = {
     cho_thue: "Cho thuê",
 };
 
+// Tinh trang benh/dich benh cua ho dan - "khong co" la mac dinh, 3 gia tri con
+// lai deu bat buoc phai co diseaseName di kem (xem refine tren
+// createHouseholdSchema trong validators/household.ts).
+export const DISEASE_STATUS = [
+    "none",
+    "recorded",
+    "monitoring",
+    "resolved",
+] as const;
+export type DiseaseStatus = typeof DISEASE_STATUS[number];
+export const DISEASE_STATUS_LABEL: Record<DiseaseStatus, string> = {
+    none: "Không có",
+    recorded: "Mới ghi nhận",
+    monitoring: "Đang theo dõi",
+    resolved: "Đã xử lý - hết theo dõi",
+};
+
 // ---------------------------------------------------------------------------
 // Nhan khau
 // ---------------------------------------------------------------------------
@@ -424,6 +445,54 @@ export const NHOM_PHAN_ANH_LABEL: Record<NhomPhanAnh, string> = {
     gop_y_chung: "Góp ý chung",
     ha_tang: "Hạ tầng (đường, cống, cây, rác...)",
     khac: "Khác",
+};
+
+// ---------------------------------------------------------------------------
+// Dashboard - danh muc so lieu CO DINH (khac ComplaintTypeDefinition/
+// RequestTypeDefinition - danh muc nay KHONG cho admin tu mo rong), dung lam
+// gia tri hop le cho Role.dashboardMetrics (xem models/Role.ts). undefined tren
+// Role = khong gioi han (giu nguyen bo so lieu co dinh theo audience nhu truoc
+// day - xem dashboardService.ts); mot mang cu the = CHI hien dung nhung so
+// lieu do, bat ke audience/vai tro la gi.
+// ---------------------------------------------------------------------------
+export const DASHBOARD_METRIC_KEYS = [
+    "neighborhoods_count",
+    "houses_count",
+    "owners_count",
+    "business_units_count",
+    "complaints_summary",
+    "women_count",
+    "elderly_count",
+    "children_count",
+    "veterans_count",
+    "martyrs_count",
+    "poor_households_count",
+    "unemployed_count",
+    "military_age_men_count",
+    "undeclared_residency_count",
+    "disease_monitored_households_count",
+    "registered_houses_count",
+    "school_age_children_count",
+] as const;
+export type DashboardMetricKey = typeof DASHBOARD_METRIC_KEYS[number];
+export const DASHBOARD_METRIC_LABEL: Record<DashboardMetricKey, string> = {
+    neighborhoods_count: "Tổ dân phố",
+    houses_count: "Nhà số",
+    owners_count: "Chủ sở hữu",
+    business_units_count: "Đơn vị kinh doanh",
+    complaints_summary: "Phản ánh (chưa/đang/đã xử lý, tổng)",
+    women_count: "Phụ nữ",
+    elderly_count: "Người cao tuổi",
+    children_count: "Trẻ em",
+    veterans_count: "Cựu chiến binh",
+    martyrs_count: "Liệt sĩ / Thương binh / Bệnh binh",
+    poor_households_count: "Hộ nghèo / cận nghèo",
+    unemployed_count: "Đang thất nghiệp",
+    military_age_men_count: "Nam trong độ tuổi nhập ngũ",
+    undeclared_residency_count: "Chưa khai báo cư trú",
+    disease_monitored_households_count: "Có dịch bệnh theo dõi",
+    registered_houses_count: "Nhà số đã đăng ký",
+    school_age_children_count: "Trẻ trong độ tuổi đi học",
 };
 
 // ---------------------------------------------------------------------------

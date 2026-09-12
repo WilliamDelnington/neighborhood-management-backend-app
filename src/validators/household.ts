@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LOAI_SO_HUU, VERIFICATION_STATUS } from "@/types";
+import { DISEASE_STATUS, LOAI_SO_HUU, VERIFICATION_STATUS } from "@/types";
 
 // memberCount KHONG nam trong schema nay - so nhan khau duoc he thong tu tinh
 // (dua tren so ban ghi Citizen thuc te thuoc ho dan), khong cho phep nhap tay
@@ -27,18 +27,32 @@ const householdBaseSchema = z.object({
     contactName: z.string().optional(),
     ownershipType: z.enum(LOAI_SO_HUU).default("chinh_chu"),
     needsSupport: z.boolean().default(false),
+    isNearPoor: z.boolean().default(false),
+    isMartyrFamilyHousehold: z.boolean().default(false),
+    isLonelyElderly: z.boolean().default(false),
+    // hasDisabledChild/hasDisabledPerson KHONG nam trong schema nay - la co tu
+    // tinh (xem citizenService.recomputeHouseholdFlags), giong memberCount,
+    // khong cho phep nhap tay qua API.
+    diseaseStatus: z.enum(DISEASE_STATUS).default("none"),
+    // Bat buoc khi diseaseStatus khac "none" (xem refine ben duoi).
+    diseaseName: z.string().optional(),
     // null = go lien ket voi nha so (chua gan), undefined = khong doi.
     houseId: z.string().nullable().optional(),
     note: z.string().optional(),
 });
 
-export const createHouseholdSchema = householdBaseSchema.refine(
-    data => data.contactIsHead || !!data.contactName?.trim(),
-    {
+export const createHouseholdSchema = householdBaseSchema
+    .refine(data => data.contactIsHead || !!data.contactName?.trim(), {
         message: "Vui lòng nhập tên người liên hệ",
         path: ["contactName"],
-    },
-);
+    })
+    .refine(
+        data => data.diseaseStatus === "none" || !!data.diseaseName?.trim(),
+        {
+            message: "Vui lòng nhập tên bệnh/dịch bệnh",
+            path: ["diseaseName"],
+        },
+    );
 export type CreateHouseholdInput = z.infer<typeof createHouseholdSchema>;
 
 export const updateHouseholdSchema = householdBaseSchema.partial();
@@ -56,3 +70,17 @@ export const updateHouseholdStatusSchema = z
 export type UpdateHouseholdStatusInput = z.infer<
     typeof updateHouseholdStatusSchema
 >;
+
+// Danh sach day du 6 "trang thai dac biet" cua ho dan (4 nhap tay + 2 tu tinh -
+// xem citizenService.recomputeHouseholdFlags cho 2 co tu tinh). Dung de
+// whitelist query param `states` o route GET /households truoc khi dua vao
+// Mongo filter (khong duoc tin truc tiep chuoi client gui len lam ten truong).
+export const HOUSEHOLD_STATE_KEYS = [
+    "needsSupport",
+    "isNearPoor",
+    "isMartyrFamilyHousehold",
+    "isLonelyElderly",
+    "hasDisabledChild",
+    "hasDisabledPerson",
+] as const;
+export type HouseholdStateKey = (typeof HOUSEHOLD_STATE_KEYS)[number];

@@ -8,6 +8,7 @@ import {
     getCorrespondenceById,
     updateCorrespondence,
 } from "@/services/correspondenceService";
+import { markRelatedNotificationsRead } from "@/services/notificationReadService";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,14 @@ export async function GET(
             actorUser,
             correspondence,
             correspondence.correspondenceTypeId as unknown as ICorrespondenceType,
+        );
+        // Mo trang chi tiet duoc coi nhu da doc - tu dong danh dau thong bao
+        // "Văn bản mới"/"Phản hồi văn bản" lien quan la da doc, khong bat
+        // nguoi dung phai tu bam vao dung thong bao trong chuong.
+        await markRelatedNotificationsRead(
+            String(actorUser._id),
+            "Correspondence",
+            params.id,
         );
         return apiSuccess(correspondence);
     } catch (err) {

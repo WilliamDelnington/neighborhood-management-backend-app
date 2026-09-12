@@ -28,6 +28,7 @@ import { VERIFICATION_STATUS_LABEL, type VerificationStatus } from "@/types";
 import type {
     CreateHouseholdInput,
     UpdateHouseholdInput,
+    HouseholdStateKey,
 } from "@/validators/household";
 
 /**
@@ -170,6 +171,11 @@ export async function createHousehold(
         // xoa/chuyen ho dan.
         ownershipType: input.ownershipType ?? "chinh_chu",
         needsSupport: input.needsSupport ?? false,
+        isNearPoor: input.isNearPoor ?? false,
+        isMartyrFamilyHousehold: input.isMartyrFamilyHousehold ?? false,
+        isLonelyElderly: input.isLonelyElderly ?? false,
+        diseaseStatus: input.diseaseStatus ?? "none",
+        diseaseName: input.diseaseName,
         houseId: input.houseId || undefined,
         status: resolveInitialVerificationStatus(houseRecord),
         note: input.note,
@@ -254,6 +260,10 @@ export async function listHouseholds(params: {
     neighborhoodId?: string;
     unassigned?: boolean;
     status?: VerificationStatus;
+    // Da duoc whitelist o route (xem HOUSEHOLD_STATE_KEYS trong
+    // app/api/households/route.ts) truoc khi truyen xuong day - chi la ten
+    // truong boolean tren Household, dung lam key ${key}: true trong $or.
+    states?: HouseholdStateKey[];
     actorUser: IUser;
 }) {
     const isAdminUser = params.actorUser.roles.includes("admin");
@@ -341,6 +351,19 @@ export async function listHouseholds(params: {
 
     if (params.status) {
         filter.status = params.status;
+    }
+
+    if (params.states && params.states.length > 0) {
+        // Loc theo "co bat ky trang thai nao trong danh sach chon" (OR) - ket
+        // hop voi $or da co san cua params.search bang $and, khong duoc ghi de
+        // len $or do (se lam mat dieu kien tim kiem).
+        const stateOr = params.states.map(key => ({ [key]: true }));
+        if (filter.$or) {
+            filter.$and = [{ $or: filter.$or }, { $or: stateOr }];
+            delete filter.$or;
+        } else {
+            filter.$or = stateOr;
+        }
     }
 
     const [items, total] = await Promise.all([
