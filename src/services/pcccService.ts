@@ -387,8 +387,18 @@ export async function deletePcccAttachment(
     });
 }
 
-export async function getHouseRiskSummary() {
+export async function getHouseRiskSummary(actorUser: IUser) {
+    const match: Record<string, unknown> = {};
+    if (!actorUser.roles.includes("admin")) {
+        const scopeFilter = await areaScopeFilter(actorUser);
+        if (Object.keys(scopeFilter).length > 0) {
+            const houses = await HouseRecord.find(scopeFilter).select("_id");
+            match.houseId = { $in: houses.map(h => h._id) };
+        }
+    }
+
     const result = await PcccCheck.aggregate([
+        ...(Object.keys(match).length > 0 ? [{ $match: match }] : []),
         { $sort: { inspectionDate: -1, _id: -1 } },
         {
             $group: {

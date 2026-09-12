@@ -263,6 +263,30 @@ type WorksheetRow = { rowNumber: number; values: Record<string, unknown> };
  * doc) de caller luu lai va hien thi cho nguoi dung biet file co nhung sheet
  * nao, phong truong hop ho doc nham sheet (mac dinh) ma khong biet.
  */
+/**
+ * Tim dong header thuc su trong sheet, bo qua cac dong banner/tieu de bi gop
+ * o (merged cell) trai dai toan bo chieu rong sheet - vi ExcelJS tra ve cung
+ * MOT gia tri cho MOI cell nam trong vung merge, mot dong banner nhu vay se
+ * trong giong het mot dong header (nhieu cot) nhung tat ca cac cot deu co
+ * NOI DUNG GIONG HET NHAU. Quet tu dong 1, dong dau tien co nhieu hon 1 gia
+ * tri PHAN BIET duoc coi la dong header thuc su.
+ */
+function findHeaderRowNumber(worksheet: ExcelJS.Worksheet): number {
+    const maxRowsToScan = Math.min(worksheet.rowCount || 1, 15);
+    for (let rowNumber = 1; rowNumber <= maxRowsToScan; rowNumber++) {
+        const values: string[] = [];
+        worksheet.getRow(rowNumber).eachCell({ includeEmpty: false }, cell => {
+            const text = cellToString(cell.value).trim();
+            if (text) values.push(text);
+        });
+        if (values.length === 0) continue;
+        const distinctValues = new Set(values);
+        if (values.length > 1 && distinctValues.size === 1) continue;
+        return rowNumber;
+    }
+    return 1;
+}
+
 async function readWorksheetRows(
     fileBuffer: Buffer,
     sheetName?: string,
@@ -293,7 +317,8 @@ async function readWorksheetRows(
         throw new HttpError("File Excel không có sheet dữ liệu nào", 400);
     }
 
-    const headerRow = worksheet.getRow(1);
+    const headerRowNumber = findHeaderRowNumber(worksheet);
+    const headerRow = worksheet.getRow(headerRowNumber);
     const headers: string[] = [];
     headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
         headers[colNumber] = cellToString(cell.value).trim();
@@ -308,7 +333,7 @@ async function readWorksheetRows(
 
     const rows: WorksheetRow[] = [];
     worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber <= headerRowNumber) return;
         if (row.actualCellCount === 0) return;
 
         const values: Record<string, unknown> = {};

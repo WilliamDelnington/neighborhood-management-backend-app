@@ -10,7 +10,7 @@ export async function GET(req: Request) {
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "pccc.read");
-        const summary = await getHouseRiskSummary();
+        const summary = await getHouseRiskSummary(actorUser);
         return apiSuccess(summary);
     } catch (err) {
         return apiErrorFromException(err);

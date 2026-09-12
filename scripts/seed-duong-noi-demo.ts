@@ -11,7 +11,10 @@
  *   - Ho dan duoc da dang hoa cac "trang thai dac biet" (needsSupport/
  *     isNearPoor/isMartyrFamilyHousehold/isLonelyElderly) va tinh trang dich
  *     benh (diseaseStatus/diseaseName) de co du lieu mau cho danh sach "Xuat
- *     danh sach theo doi dich benh" va cac bo loc trang thai ho dan.
+ *     danh sach theo doi dich benh" va cac bo loc trang thai ho dan. Rieng
+ *     isNearPoor (Ho ngheo/can ngheo) CHI danh dau dung 4 ho dan cu the (4 ho
+ *     dau tien cua TDP-01) thay vi rai deu moi to dan pho, vi day la mot trang
+ *     thai it gap hon trong thuc te.
  *   - Moi ho dan co THEM 1 nhan khau phu (ngoai chu ho tu dong tao boi
  *     createHousehold) voi nghe nghiep, tinh trang viec lam (isUnemployed -
  *     khi that nghiep thi bo trong nghe nghiep, giong quy uoc cac CitizenForm
@@ -479,7 +482,12 @@ async function main() {
                 // nguoi lien he.
                 contactIsHead: true,
                 needsSupport: i % 5 === 0,
-                isNearPoor: i % 4 === 0,
+                // Chi danh dau 4 ho dan CU THE (TDP-01, ho so 1-4) la
+                // ngheo/can ngheo - dung dieu kien theo NOI DUNG (ma to dan
+                // pho + so thu tu ho, khong phai bo dem vi tri) de tong so ho
+                // ngheo trong toan bo du lieu mau luon la 4, khong phu thuoc
+                // so luong to dan pho duoc xu ly.
+                isNearPoor: neighborhood.code === "TDP-01" && i < 4,
                 isMartyrFamilyHousehold: i === 2,
                 isLonelyElderly: i === 3,
                 diseaseStatus: hasDisease ? disease.status : "none",
