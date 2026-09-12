@@ -125,13 +125,18 @@ describe("Import Excel: nha so (House)", () => {
                 subZone: "Zone",
                 ownerName: "Owner name",
                 ownerPhone: "Owner phone",
+                defaultCluster: "Khu mặc định",
             },
         );
         expect(res.status).toBe(200);
         expect(json.data.status).toBe("validated");
+        // "Phân khu/dãy" (subZone) la truong MO TA rieng, KHONG con duoc
+        // dung lam cluster (RBAC/scoping) nua - xem ghi chu dau
+        // importService.ts. cluster chi den tu "Cụm dân cư mặc định".
         expect(json.data.previewData[0]).toMatchObject({
             code: "CH-A01",
-            cluster: "Zone A",
+            cluster: "Khu mặc định",
+            subZone: "Zone A",
             ownerName: "Lê Thị B",
             ownerPhone: "0909111222",
         });
@@ -242,6 +247,7 @@ describe("Import Excel: nha so (House)", () => {
         const { json } = await applyMapping(adminHeaders, uploadJson.data._id, {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
         });
         expect(json.data.totalRows).toBe(2);
         expect(json.data.rowErrors).toHaveLength(1);
@@ -301,6 +307,42 @@ describe("Import Excel: nha so (House)", () => {
         expect(json.data.rowErrors[0].message).toContain("cụm dân cư");
     });
 
+    it("dong khong co 'Phân khu/dãy' van duoc nhap binh thuong khi da co cum mac dinh (subZone chi la truong mo ta, khong con la dieu kien bat buoc)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const adminHeaders = await authHeaders(admin);
+        const uploadJson = await upload(
+            adminHeaders,
+            ["Mã căn/hộ", "Phân khu/dãy"],
+            [
+                ["CH-O16", "Dãy O"],
+                ["CH-O17", ""],
+            ],
+        );
+
+        const { json } = await applyMapping(adminHeaders, uploadJson.data._id, {
+            code: "Mã căn/hộ",
+            subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
+        });
+        expect(json.data.rowErrors).toHaveLength(0);
+        expect(json.data.validRows).toBe(2);
+        expect(json.data.previewData).toMatchObject([
+            { code: "CH-O16", cluster: "Khu mặc định", subZone: "Dãy O" },
+            { code: "CH-O17", cluster: "Khu mặc định" },
+        ]);
+        expect(json.data.previewData[1].subZone).toBeUndefined();
+
+        await commit(adminHeaders, uploadJson.data._id);
+        const houseWithSubZone = await HouseRecord.findOne({ code: "CH-O16" });
+        const houseWithoutSubZone = await HouseRecord.findOne({
+            code: "CH-O17",
+        });
+        expect(houseWithSubZone!.cluster).toBe("Khu mặc định");
+        expect(houseWithSubZone!.subZone).toBe("Dãy O");
+        expect(houseWithoutSubZone!.cluster).toBe("Khu mặc định");
+        expect(houseWithoutSubZone!.subZone).toBeUndefined();
+    });
+
     it("co ten chu so huu nhung SDT khong hop le -> khong bao loi ca dong, khong tao tai khoan luc commit", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const adminHeaders = await authHeaders(admin);
@@ -315,6 +357,7 @@ describe("Import Excel: nha so (House)", () => {
             subZone: "Phân khu/dãy",
             ownerName: "Chủ sở hữu",
             ownerPhone: "SĐT",
+            defaultCluster: "Khu mặc định",
         });
         expect(json.data.rowErrors).toHaveLength(0);
         expect(json.data.previewData[0].ownerName).toBeUndefined();
@@ -342,6 +385,7 @@ describe("Import Excel: nha so (House)", () => {
             subZone: "Phân khu/dãy",
             memberCount: "Số nhân khẩu",
             note: "Ghi chú tự do",
+            defaultCluster: "Khu mặc định",
         });
         expect(json.data.previewData[0].note).toContain("Số nhân khẩu: 4");
         expect(json.data.previewData[0].note).toContain(
@@ -370,6 +414,7 @@ describe("Import Excel: nha so (House)", () => {
             subZone: "Phân khu/dãy",
             ownerName: "Chủ sở hữu",
             ownerPhone: "SĐT",
+            defaultCluster: "Khu mặc định",
         });
 
         const { json } = await commit(adminHeaders, uploadJson.data._id);
@@ -416,6 +461,7 @@ describe("Import Excel: nha so (House)", () => {
         await applyMapping(adminHeaders, goodUpload.data._id, {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
         });
 
         const firstCommit = await commit(adminHeaders, goodUpload.data._id);

@@ -48,6 +48,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const mapping: HouseColumnMapping = {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             contactPhone: "SĐT liên hệ",
             usageType: "Loại hình sử dụng",
@@ -119,6 +120,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             createHouseholds: true,
         });
@@ -177,6 +179,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             createHouseholds: true,
         });
@@ -200,6 +203,7 @@ describe("Import nhà số kèm tạo hộ dân (createHouseholds)", () => {
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
         });
         await commitHouseImport(admin, String(mapped._id));
@@ -224,6 +228,7 @@ describe("Import nhà số kèm mật khẩu mặc định cho chủ nhà mới 
         const mapping: HouseColumnMapping = {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             ownerName: "Chủ sở hữu đứng tên",
             ownerPhone: "SĐT chủ sở hữu",
             defaultPassword: "ImportDefault123",
@@ -251,6 +256,7 @@ describe("Import nhà số kèm mật khẩu mặc định cho chủ nhà mới 
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             ownerName: "Chủ sở hữu đứng tên",
             ownerPhone: "SĐT chủ sở hữu",
         });
@@ -279,6 +285,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const firstMapped = await applyHouseImportMapping(String(first._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
         });
         await commitHouseImport(admin, String(firstMapped._id));
         await waitForImportJobSettled(String(firstMapped._id));
@@ -296,6 +303,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const secondMapped = await applyHouseImportMapping(String(second._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             note: "Ghi chú",
         });
         // Khong con bao loi "da ton tai" nua.
@@ -327,6 +335,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             note: "Ghi chú",
         });
         await commitHouseImport(admin, String(mapped._id));
@@ -346,6 +355,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const reMapped = await applyHouseImportMapping(String(reImport._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             note: "Ghi chú",
         });
         expect(reMapped.rowErrors).toHaveLength(0);
@@ -373,6 +383,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const firstMapped = await applyHouseImportMapping(String(first._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             createHouseholds: true,
         });
@@ -393,6 +404,7 @@ describe("Import nhà số - dòng trùng 'Mã căn/hộ' với House đã có (
         const secondMapped = await applyHouseImportMapping(String(second._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             contactPhone: "SĐT liên hệ",
             createHouseholds: true,
@@ -419,6 +431,7 @@ describe("Import nhân khẩu (chọn cột, liên kết qua Mã hộ hoặc Mã
         const mapped = await applyHouseImportMapping(String(uploaded._id), {
             code: "Mã căn/hộ",
             subZone: "Phân khu/dãy",
+            defaultCluster: "Khu mặc định",
             headOfHousehold: "Chủ hộ",
             createHouseholds: true,
         });
