@@ -23,6 +23,7 @@ import { hashPassword } from "@/lib/auth";
 // chu trong validators/houseRecord.ts.
 export const HOUSE_RECORD_PROTECTED_FIELDS = [
     "address",
+    "subZone",
     "cluster",
     "streetId",
     "neighborhoodId",
@@ -703,6 +704,7 @@ export async function createHouseRecord(
             streetId,
             neighborhoodId: input.neighborhoodId || undefined,
             address: input.address,
+            subZone: input.subZone,
             ...administrativeDivisions,
             physicalStatus: input.physicalStatus,
             usageTypes: input.usageTypes?.length

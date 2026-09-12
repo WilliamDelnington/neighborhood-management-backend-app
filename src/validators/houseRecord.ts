@@ -62,6 +62,8 @@ const houseRecordBaseSchema = z.object({
     // co the chay qua nhieu to dan pho. Optional/nullable, admin gan thu cong.
     neighborhoodId: z.string().nullable().optional(),
     address: z.string().min(1, "Địa chỉ không được để trống"),
+    // Phan khu/day - mo ta khu vuc con trong cluster, khong dung de scoping.
+    subZone: z.string().optional(),
     // Phuong/xa va tinh/thanh pho - hien thi dia chi day du, khong bat buoc va
     // khong gan voi bat ky rang buoc/pham vi nao (xem lib/administrativeDivisions.ts).
     provinceCode: z.number().optional(),

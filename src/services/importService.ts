@@ -60,11 +60,19 @@ import {
 //     doi). KHONG tu gan/doi chu nha cho nha da ton tai du dong co "Chủ sở
 //     hữu đứng tên" hop le - gan chu nha la hanh dong rieng, phai lam thu
 //     cong qua man chi tiet nha.
-//   - "Phân khu/dãy" (neu co chon cot) duoc dung lam cluster (cum dan cu)
-//     cua dong do; neu cot nay khong duoc chon HOAC o rong, dung "cum mac
-//     dinh cho ca file" nguoi dung nhap luc chon cot (xem
-//     HouseColumnMapping.defaultCluster). Neu ca hai deu trong, dong bi bao
-//     loi (House bat buoc phai co cluster hoac streetId).
+//   - "Phân khu/dãy" (neu co chon cot) chi ghi vao House.subZone (truong
+//     rieng, thuan mo ta - xem models/HouseRecord.ts) - HOAN TOAN TUY CHON,
+//     KHONG con duoc dung lam cluster nua (khac cluster/RBAC scoping - da
+//     tach rieng, truoc day hai truong nay bi conflate voi nhau). Mot dong
+//     KHONG BAO GIO bi bao loi vi thieu "Phân khu/dãy".
+//   - cluster (cum dan cu, truong RBAC/scoping) CHI đến tu "Cụm dân cư mặc
+//     định" nguoi dung nhap MOT LAN cho ca file (xem
+//     HouseColumnMapping.defaultCluster) - MOI nha MOI tao trong lan import
+//     nay se dung CHUNG mot cluster nay (khong con tach theo tung dong nhu
+//     truoc). Dong nao TAO MOI (khong trung "Mã căn/hộ" voi nha da co) ma
+//     thieu "Cụm dân cư mặc định" se bi bao loi (House bat buoc phai co
+//     cluster hoac streetId) - dong cap nhat nha da co (existingHouseId)
+//     khong bi anh huong vi nha do da co cluster san.
 //   - "Chủ sở hữu đứng tên" + "SĐT chủ sở hữu" (neu co chon ca hai cot): CHI
 //     tao tai khoan chu nha (User, role house_owner) khi CA HAI co gia tri
 //     hop le (ten khong rong, SDT dung dinh dang VN qua isValidVnPhone) -
@@ -720,10 +728,15 @@ export async function applyHouseImportMapping(
             });
         }
 
-        const cluster = subZone || defaultCluster;
+        // "Phân khu/dãy" (subZone) la truong MO TA rieng, KHONG con duoc dung
+        // lam cluster (RBAC/scoping) nua - de mot dong thieu subZone khong
+        // bao gio bi tu choi vi ly do nay. cluster CHI đến tu "Cụm dân cư mặc
+        // định" (mot gia tri duy nhat cho ca file, xem defaultCluster o tren)
+        // - MOI nha moi tao trong lan import nay se dung CHUNG cluster nay.
+        const cluster = defaultCluster;
         if (!existingHouseId && !cluster) {
             rowErrors.push(
-                "Thiếu 'Phân khu/dãy' và chưa nhập cụm dân cư mặc định cho cả file",
+                "Cần nhập 'Cụm dân cư mặc định cho cả file' để tạo nhà mới (file không có cột riêng cho cụm dân cư)",
             );
         }
 
@@ -742,6 +755,7 @@ export async function applyHouseImportMapping(
             rowNumber: row.rowNumber,
             code,
             cluster: cluster || undefined,
+            subZone: subZone || undefined,
             address: cluster ? (subZone ? `${subZone} - ${code}` : code) : undefined,
             existingHouseId,
             neighborhoodId,
@@ -800,10 +814,15 @@ async function mergeIntoExistingHouse(
 
     if (houseRecord.status === "unverified" || houseRecord.status === "pending") {
         const note = row.note as string | undefined;
+        const subZone = row.subZone as string | undefined;
         const neighborhoodId = row.neighborhoodId as string | undefined;
         let changed = false;
         if (!houseRecord.note && note) {
             houseRecord.note = note;
+            changed = true;
+        }
+        if (!houseRecord.subZone && subZone) {
+            houseRecord.subZone = subZone;
             changed = true;
         }
         if (!houseRecord.neighborhoodId && neighborhoodId) {
@@ -915,6 +934,7 @@ async function processHouseImportRows(
                     code: row.code as string,
                     cluster: row.cluster as string,
                     address: row.address as string,
+                    subZone: row.subZone as string | undefined,
                     note: row.note as string | undefined,
                     neighborhoodId:
                         (row.neighborhoodId as string | undefined) ||

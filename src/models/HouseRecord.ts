@@ -18,6 +18,10 @@ export interface IHouseRecord extends Document {
     streetId?: mongoose.Types.ObjectId;
     neighborhoodId?: mongoose.Types.ObjectId;
     address: string;
+    // Phan khu/day (vd "Dãy A", "BT An Vượng") - mo ta khu vuc con trong
+    // pham vi mot cluster, KHONG dung de RBAC/scoping (khac `cluster`).
+    // Tuy chon: nhieu nha (vd nha mat pho don le) khong thuoc phan khu nao.
+    subZone?: string;
     // Phuong/xa va tinh/thanh pho - danh cho hien thi dia chi day du, khong
     // gan voi RBAC/pham vi quan ly nao (khac cluster/neighborhoodId). Khong co
     // collection Province/Ward rieng - nguon "su that" la API cong khai
@@ -113,6 +117,7 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
             index: true,
         },
         address: { type: String, required: true },
+        subZone: { type: String },
         provinceCode: { type: Number },
         provinceName: { type: String },
         wardCode: { type: Number, index: true },
