@@ -22,6 +22,7 @@ import { hashPassword } from "@/lib/auth";
 // physicalStatus, note) van sua tu do bat ke trang thai xac minh - xem ghi
 // chu trong validators/houseRecord.ts.
 export const HOUSE_RECORD_PROTECTED_FIELDS = [
+    "code",
     "address",
     "subZone",
     "cluster",
@@ -1009,7 +1010,14 @@ export async function updateHouseRecord(
         }
     }
     houseRecord.updatedBy = actorUser._id as any;
-    await houseRecord.save();
+    try {
+        await houseRecord.save();
+    } catch (err: any) {
+        if (err?.code === 11000) {
+            throw new HttpError(`Mã nhà "${patch.code}" đã tồn tại`, 409);
+        }
+        throw err;
+    }
 
     await writeAuditLog({
         actorId: String(actorUser._id),

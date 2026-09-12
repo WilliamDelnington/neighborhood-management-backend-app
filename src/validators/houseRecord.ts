@@ -146,6 +146,16 @@ export type CreateHouseRecordInput = z.infer<typeof createHouseRecordSchema>;
 
 export const updateHouseRecordSchema = houseRecordBaseSchema
     .partial()
+    .extend({
+        // CHI co y nghia luc SUA (cap nhat) mot House da co - luc TAO MOI qua
+        // API/UI van luon tu sinh (generateSequentialCode, xem
+        // houseRecordService.createHouseRecord), khong nhan code tu client.
+        // Truong nay cho phep sua lai ma sau khi tao (vd sua ma nhap sai/khong
+        // dung quy uoc tu Excel) - nam trong HOUSE_RECORD_PROTECTED_FIELDS nen
+        // sau khi da "verified" phai qua ChangeRequest. Kiem tra trung ma o
+        // service (giong luc tao).
+        code: z.string().min(1, "Mã căn/hộ không được để trống").optional(),
+    })
     .refine(requiresGeoConsent, GEO_CONSENT_ISSUE);
 export type UpdateHouseRecordInput = z.infer<typeof updateHouseRecordSchema>;
 
