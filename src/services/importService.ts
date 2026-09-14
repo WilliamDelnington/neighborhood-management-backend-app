@@ -6,6 +6,8 @@ import {
     HouseRecord,
     Business,
     BusinessType,
+    Company,
+    CompanyType,
     ImportJob,
     type IImportJob,
     type IUser,
@@ -24,6 +26,7 @@ import {
     assertHouseRecordInScope,
 } from "@/services/houseRecordService";
 import { createBusiness } from "@/services/businessService";
+import { createCompany } from "@/services/companyService";
 import {
     GIOI_TINH,
     LOAI_CU_TRU,
@@ -249,6 +252,22 @@ const BUSINESS_COLUMNS = {
     businessTypeName: "Loại hình kinh doanh",
     ownerName: "Chủ hộ kinh doanh",
     taxCode: "Mã số thuế",
+    phone: "Số điện thoại",
+    active: "Trạng thái",
+    note: "Ghi chú",
+} as const;
+
+// "Mã số thuế" la truong BAT BUOC (khac Business - tuy chon) vi Company.taxCode
+// la required+unique o schema (xem models/Company.ts va validators/company.ts) -
+// khong the tao cong ty ma khong co ma so thue, nen dong thieu cot nay se bi
+// bao loi thay vi am tham bo qua doi chieu trung lap nhu Business.
+const COMPANY_COLUMNS = {
+    name: "Tên công ty",
+    houseCode: "Mã nhà",
+    taxCode: "Mã số thuế",
+    companyTypeName: "Loại hình doanh nghiệp",
+    businessTypeName: "Loại hình kinh doanh",
+    ownerName: "Người đại diện",
     phone: "Số điện thoại",
     active: "Trạng thái",
     note: "Ghi chú",
@@ -2293,6 +2312,54 @@ export function buildBusinessImportTemplateWorkbook(): ExcelJS.Workbook {
     return workbook;
 }
 
+export function buildCompanyImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Công ty");
+    worksheet.columns = [
+        { header: COMPANY_COLUMNS.name, key: "name", width: 30 },
+        { header: COMPANY_COLUMNS.houseCode, key: "houseCode", width: 14 },
+        { header: COMPANY_COLUMNS.taxCode, key: "taxCode", width: 16 },
+        {
+            header: COMPANY_COLUMNS.companyTypeName,
+            key: "companyTypeName",
+            width: 20,
+        },
+        {
+            header: COMPANY_COLUMNS.businessTypeName,
+            key: "businessTypeName",
+            width: 20,
+        },
+        { header: COMPANY_COLUMNS.ownerName, key: "ownerName", width: 22 },
+        { header: COMPANY_COLUMNS.phone, key: "phone", width: 16 },
+        { header: COMPANY_COLUMNS.active, key: "active", width: 18 },
+        { header: COMPANY_COLUMNS.note, key: "note", width: 24 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        name: "Công ty TNHH Thương mại Hòa Bình",
+        houseCode: "CH-A101",
+        taxCode: "0112345678",
+        companyTypeName: "TNHH",
+        businessTypeName: "Bán lẻ",
+        ownerName: "Nguyễn Văn A",
+        phone: "0912345678",
+        active: "Đang hoạt động",
+        note: "",
+    });
+    worksheet.addRow({
+        name: "Công ty Cổ phần Xây dựng Dương Nội",
+        houseCode: "CH-A102",
+        taxCode: "0187654321",
+        companyTypeName: "Cổ phần",
+        businessTypeName: "Xây dựng / Nội thất / Kiến trúc",
+        ownerName: "Trần Thị B",
+        phone: "0987654321",
+        active: "Ngừng hoạt động",
+        note: "Tạm ngừng kinh doanh",
+    });
+    return workbook;
+}
+
 /**
  * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
  * STREET_COLUMNS co dinh - nguoi dung se chon cot ung voi tung truong o buoc
@@ -2951,6 +3018,400 @@ async function processBusinessImportRows(
         targetModel: "ImportJob",
         targetId: jobId,
         metadata: { type: "business", count: committedCount, createdCount, skippedCount },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Import cong ty
+// ---------------------------------------------------------------------------
+
+export type CompanyColumnMapping = {
+    name: string;
+    houseCode: string;
+    // Khac Business (tuy chon) - Company.taxCode la required+unique o schema
+    // (xem models/Company.ts), nen phai chon cot va co gia tri o MOI dong.
+    taxCode: string;
+    companyTypeName?: string;
+    businessTypeName?: string;
+    ownerName?: string;
+    phone?: string;
+    active?: string;
+    note?: string;
+};
+
+// Cac truong tuong ung 1-1 voi cot trong file, tru "name"/"houseCode"/"taxCode"
+// (bat buoc, xu ly rieng - xem applyCompanyImportMapping).
+const COMPANY_MAPPING_COLUMN_FIELDS: Exclude<
+    keyof typeof COMPANY_COLUMNS,
+    "name" | "houseCode" | "taxCode"
+>[] = ["companyTypeName", "businessTypeName", "ownerName", "phone", "active", "note"];
+
+/**
+ * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
+ * COMPANY_COLUMNS co dinh - nguoi dung se chon cot ung voi tung truong o buoc
+ * sau (xem applyCompanyImportMapping), giong uploadBusinessImportFile.
+ */
+export async function uploadCompanyImportFile(
+    actorId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    sheetName?: string,
+): Promise<IImportJob> {
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
+
+    const rawRows = rows.map(row => {
+        const values: Record<string, string> = {};
+        for (const header of headers) {
+            if (header in row.values) {
+                values[header] = cellToString(row.values[header]).trim();
+            }
+        }
+        return { rowNumber: row.rowNumber, values };
+    });
+
+    const suggestedMapping: Record<string, string> = {};
+    for (const [field, expectedLabel] of Object.entries(COMPANY_COLUMNS)) {
+        const match = headers.find(
+            h => normalizeEnumInput(h) === normalizeEnumInput(expectedLabel),
+        );
+        if (match) suggestedMapping[field] = match;
+    }
+
+    const job = await ImportJob.create({
+        type: "company",
+        status: "awaiting_mapping",
+        fileName,
+        totalRows: rows.length,
+        validRows: 0,
+        headers,
+        rawRows,
+        availableSheetNames,
+        sourceSheetName,
+        suggestedMapping,
+        columnMapping: {},
+        rowErrors: [],
+        previewData: [],
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+/**
+ * Buoc 2 (chon cot): ap dung mapping do nguoi dung xac nhan len du lieu tho
+ * da luu o buoc upload, roi chay lai logic validate/preview - bat buoc chon
+ * cot cho "Tên công ty", "Mã nhà" (phai khop mot HouseRecord da ton tai), va
+ * "Mã số thuế" (khac Business - o day BAT BUOC, vi Company.taxCode required+
+ * unique). Doi chieu "Loại hình doanh nghiệp"/"Loại hình kinh doanh" (neu co)
+ * voi CompanyType/BusinessType da co, chong trung "Mã số thuế" ca trong file
+ * va he thong. Co the goi lai nhieu lan mien la job chua commit - giong
+ * applyBusinessImportMapping.
+ */
+export async function applyCompanyImportMapping(
+    importJobId: string,
+    mapping: CompanyColumnMapping,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "company") {
+        throw new HttpError("Import job này không phải loại công ty", 400);
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+
+    const headers = job.headers;
+    if (!mapping.name || !headers.includes(mapping.name)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Tên công ty'",
+            422,
+        );
+    }
+    if (!mapping.houseCode || !headers.includes(mapping.houseCode)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Mã nhà'",
+            422,
+        );
+    }
+    if (!mapping.taxCode || !headers.includes(mapping.taxCode)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Mã số thuế'",
+            422,
+        );
+    }
+    for (const field of COMPANY_MAPPING_COLUMN_FIELDS) {
+        const column = mapping[field];
+        if (column && !headers.includes(column)) {
+            throw new HttpError(
+                `Cột đã chọn cho '${COMPANY_COLUMNS[field]}' không hợp lệ`,
+                422,
+            );
+        }
+    }
+    const mappedColumns = [
+        mapping.name,
+        mapping.houseCode,
+        mapping.taxCode,
+        ...COMPANY_MAPPING_COLUMN_FIELDS.map(field => mapping[field]),
+    ].filter(Boolean) as string[];
+    if (new Set(mappedColumns).size !== mappedColumns.length) {
+        throw new HttpError(
+            "Không thể chọn cùng một cột cho nhiều trường dữ liệu khác nhau",
+            422,
+        );
+    }
+
+    const rows = job.rawRows;
+
+    // Tra cuu truoc (mot lan) ma nha, loai hinh doanh nghiep, loai hinh kinh
+    // doanh, va ma so thue da co trong DB - tranh N truy van rieng le cho
+    // tung dong, giong applyBusinessImportMapping.
+    const houseCodesInFile = new Set<string>();
+    const taxCodesInFile = new Set<string>();
+    for (const row of rows) {
+        const houseCode = (row.values[mapping.houseCode] || "").trim();
+        if (houseCode) houseCodesInFile.add(houseCode);
+        const taxCode = (row.values[mapping.taxCode] || "").trim();
+        if (taxCode) taxCodesInFile.add(taxCode);
+    }
+    const houses = await HouseRecord.find({
+        code: { $in: Array.from(houseCodesInFile) },
+    }).select("code");
+    const houseCodeToId = new Map(houses.map(h => [h.code, String(h._id)]));
+
+    const companyTypes = await CompanyType.find({}).select("name");
+    const companyTypeNameToId = new Map(
+        companyTypes.map(ct => [normalizeEnumInput(ct.name), String(ct._id)]),
+    );
+
+    const businessTypes = await BusinessType.find({}).select("name");
+    const businessTypeNameToId = new Map(
+        businessTypes.map(bt => [normalizeEnumInput(bt.name), String(bt._id)]),
+    );
+
+    const existingCompanies = await Company.find({
+        taxCode: { $in: Array.from(taxCodesInFile) },
+    }).select("taxCode");
+    const existingTaxCodes = new Set(
+        existingCompanies.map(c => c.taxCode).filter(Boolean),
+    );
+    const seenTaxCodes = new Set<string>();
+
+    const errors: { row: number; message: string }[] = [];
+    // Trung ma so thue khong bi coi la loi/chan commit - chi bi bo qua (khong
+    // tao trung), tach rieng khoi rowErrors that su - xem ghi chu
+    // IImportJob.skippedRows, giong applyBusinessImportMapping.
+    const skipped: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    for (const row of rows) {
+        const name = (row.values[mapping.name] || "").trim();
+        const houseCode = (row.values[mapping.houseCode] || "").trim();
+        const taxCode = (row.values[mapping.taxCode] || "").trim();
+        const companyTypeNameRaw = mapping.companyTypeName
+            ? (row.values[mapping.companyTypeName] || "").trim()
+            : "";
+        const businessTypeNameRaw = mapping.businessTypeName
+            ? (row.values[mapping.businessTypeName] || "").trim()
+            : "";
+        const ownerName = mapping.ownerName
+            ? (row.values[mapping.ownerName] || "").trim()
+            : "";
+        const phone = mapping.phone
+            ? (row.values[mapping.phone] || "").trim()
+            : "";
+        const note = mapping.note
+            ? (row.values[mapping.note] || "").trim()
+            : "";
+
+        const rowErrors: string[] = [];
+        if (!name) rowErrors.push("Thiếu 'Tên công ty'");
+        if (!taxCode) rowErrors.push("Thiếu 'Mã số thuế'");
+
+        const houseId = houseCode ? houseCodeToId.get(houseCode) : undefined;
+        if (!houseCode) {
+            rowErrors.push("Thiếu 'Mã nhà'");
+        } else if (!houseId) {
+            rowErrors.push(`Không tìm thấy nhà số có mã "${houseCode}"`);
+        }
+
+        let companyTypeId: string | undefined;
+        if (companyTypeNameRaw) {
+            companyTypeId = companyTypeNameToId.get(
+                normalizeEnumInput(companyTypeNameRaw),
+            );
+            if (!companyTypeId) {
+                rowErrors.push(
+                    `Không tìm thấy loại hình doanh nghiệp "${companyTypeNameRaw}"`,
+                );
+            }
+        }
+
+        let businessTypeId: string | undefined;
+        if (businessTypeNameRaw) {
+            businessTypeId = businessTypeNameToId.get(
+                normalizeEnumInput(businessTypeNameRaw),
+            );
+            if (!businessTypeId) {
+                rowErrors.push(
+                    `Không tìm thấy loại hình kinh doanh "${businessTypeNameRaw}"`,
+                );
+            }
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        if (existingTaxCodes.has(taxCode) || seenTaxCodes.has(taxCode)) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Mã số thuế "${taxCode}" đã tồn tại`,
+            });
+            continue;
+        }
+        seenTaxCodes.add(taxCode);
+
+        previewData.push({
+            rowNumber: row.rowNumber,
+            name,
+            houseCode,
+            houseId,
+            taxCode,
+            companyTypeId,
+            companyTypeName: companyTypeNameRaw || undefined,
+            businessTypeId,
+            businessTypeName: businessTypeNameRaw || undefined,
+            ownerName: ownerName || undefined,
+            phone: phone || undefined,
+            active: mapping.active
+                ? parseStreetActiveCell(row.values[mapping.active])
+                : true,
+            note: note || undefined,
+        });
+    }
+
+    job.columnMapping = mapping;
+    job.rowErrors = errors;
+    job.skippedRows = skipped;
+    job.previewData = previewData;
+    job.validRows = previewData.length;
+    job.status = errors.length === 0 ? "validated" : "previewing";
+    await job.save();
+
+    return job;
+}
+
+export async function commitCompanyImport(
+    actorUser: IUser,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "company") {
+        throw new HttpError("Import job này không phải loại công ty", 400);
+    }
+    if (job.status === "committed" || job.status === "committing") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.status === "awaiting_mapping") {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu (mapping) trước khi commit",
+            400,
+        );
+    }
+    // Khong con chan commit chi vi co dong loi - nhung dong do se bi bo qua
+    // (khong nhap), nguoi dung da duoc canh bao va xac nhan dieu nay o
+    // frontend (xem ImportErrorConfirmDialog) truoc khi goi den day. Chi tu
+    // choi khi KHONG co dong nao de xu ly (moi dong deu loi va khong co dong
+    // nao trung du lieu de bo qua).
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
+    }
+
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processCompanyImportRows(String(job._id), actorUser).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] Company job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processCompanyImportRows(
+    jobId: string,
+    actorUser: IUser,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
+    let committedCount = 0;
+    let createdCount = 0;
+    // Cac dong "da ton tai" (trung ma so thue) da bi loai khoi previewData
+    // ngay tu buoc mapping (xem applyCompanyImportMapping) nen khong can xu
+    // ly gi them o day - skippedCount lay thang tu skippedRows.length.
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await createCompany(actorUser, {
+                name: row.name as string,
+                houseId: row.houseId as string,
+                taxCode: row.taxCode as string,
+                companyTypeId:
+                    (row.companyTypeId as string | undefined) || null,
+                businessTypeIds: row.businessTypeId
+                    ? [row.businessTypeId as string]
+                    : [],
+                ownerName: row.ownerName as string | undefined,
+                phone: row.phone as string | undefined,
+                active: row.active as boolean,
+                note: row.note as string | undefined,
+            });
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
+        committedCount += 1;
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne(
+                { _id: jobId },
+                { committedCount, createdCount, skippedCount, rowErrors: commitErrors },
+            );
+        }
+    }
+
+    await ImportJob.updateOne(
+        { _id: jobId },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
+    );
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: jobId,
+        metadata: { type: "company", count: committedCount, createdCount, skippedCount },
     });
 }
 
