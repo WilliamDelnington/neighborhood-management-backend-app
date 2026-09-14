@@ -589,40 +589,38 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
 };
 
 // Pham vi du lieu mac dinh cho tung vai tro he thong (xem Role.scopeType/
-// scopeMechanism/maxActivePerScope/maxActiveScopesPerUser/subScopeKinds) -
-// dung chung boi scripts/seed.ts va tests/helpers.ts, cung ly do/quy uoc voi
-// SYSTEM_ROLE_PERMISSIONS o tren (mot noi duy nhat, tranh drift). Day CHI la
-// gia tri KHOI TAO - mot khi da seed vao Role collection, admin co the doi lai
-// tung vai tro (ke ca vai tro he thong) qua man Quan ly vai tro ma KHONG can
-// sua code, dung y nghia "soft-coded" cua tinh nang nay.
+// scopeMechanism/subScopeKinds) - dung chung boi scripts/seed.ts va
+// tests/helpers.ts, cung ly do/quy uoc voi SYSTEM_ROLE_PERMISSIONS o tren (mot
+// noi duy nhat, tranh drift). Day CHI la gia tri KHOI TAO - mot khi da seed
+// vao Role collection, admin co the doi lai tung vai tro (ke ca vai tro he
+// thong) qua man Quan ly vai tro ma KHONG can sua code, dung y nghia
+// "soft-coded" cua tinh nang nay.
 export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
     string,
     {
         scopeType: "ALL" | "WARD" | "NEIGHBORHOOD" | "HOUSE" | "HOUSEHOLD" | "BUSINESS" | "COMPANY";
         scopeMechanism?: "ASSIGNED" | "OWNED";
-        maxActivePerScope?: number | null;
-        maxActiveScopesPerUser?: number | null;
         subScopeKinds?: string[];
     }
 > = {
     admin: { scopeType: "ALL" },
+    // "1 To truong active/1 To dan pho" duoc thuc thi hardcode o
+    // neighborhoodService.assignNeighborhoodLeader, khong phai qua config nay.
     neighborhood_leader: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: 1,
     },
     // Xem NeighborhoodColeaderAssignment.ts:48-51 - 1 nguoi chi duoc active To
-    // pho o 1 To dan pho cung luc, nhung 1 To dan pho co the co nhieu To pho.
+    // pho o 1 To dan pho cung luc (thuc thi hardcode o
+    // neighborhoodService.assignNeighborhoodColeader), nhung 1 To dan pho co
+    // the co nhieu To pho.
     neighborhood_coleader: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
-        maxActiveScopesPerUser: 1,
     },
     neighborhood_collaborator: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
         subScopeKinds: [
             "WHOLE_NEIGHBORHOOD",
             "STREET",
@@ -630,44 +628,36 @@ export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
             "CAMPAIGN",
         ],
     },
-    // Truoc day khong co gioi han nao (User.wardCode gan tu do) - tu day chi 1
-    // Bi thu duoc active tren 1 Phuong/Xa cung luc, giong quy uoc To truong.
-    secretary: { scopeType: "WARD", scopeMechanism: "ASSIGNED", maxActivePerScope: 1 },
+    secretary: { scopeType: "WARD", scopeMechanism: "ASSIGNED" },
     people_committee_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     // Truoc day khong the gan theo Phuong/Xa qua man Quan ly Phuong (nang luc
-    // moi hoan toan) - mac dinh khong gioi han so Cong an khu vuc/Phuong, giong
-    // Can bo UBND; dieu chinh lai qua man Quan ly vai tro neu can khac.
+    // moi hoan toan) - giong Can bo UBND; dieu chinh lai qua man Quan ly vai
+    // tro neu can khac.
     regional_police: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
-    // 4 vai tro "phong ban" moi - cung pham vi WARD/ASSIGNED, khong gioi han so
-    // luong nhu people_committee_official/regional_police (xem SYSTEM_ROLE_PERMISSIONS
+    // 4 vai tro "phong ban" moi - cung pham vi WARD/ASSIGNED nhu
+    // people_committee_official/regional_police (xem SYSTEM_ROLE_PERMISSIONS
     // o tren cho tap permission cua tung vai tro).
     social_affairs_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     health_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     education_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     economy_labor_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     house_owner: { scopeType: "HOUSE", scopeMechanism: "OWNED" },
     household_head: { scopeType: "HOUSEHOLD", scopeMechanism: "OWNED" },

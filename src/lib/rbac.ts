@@ -433,12 +433,18 @@ export async function areaScopeFilter(
         return clusterScopeFilter(user, opts.clusterField ?? "cluster");
     }
 
+    // QUAN TRONG: [] (mang rong) phai duoc coi NHU undefined (khong gioi han) -
+    // KHONG dung truthy check tran (`!r.subScopeKinds`/`r.subScopeKinds`) vi
+    // mang rong la truthy trong JS, se lam To truong/Bi thu bi coi nham la
+    // "Cong tac vien" (hasDenyOnlyRole) va mat het pham vi neu Role document co
+    // subScopeKinds: [] (vd da tung bi luu nham qua man Quan ly vai tro truoc
+    // khi RoleListPage.tsx chi gui truong nay cho scopeType=NEIGHBORHOOD).
     const grantsBroadNeighborhood = assignedRoles.some(
-        r => r.scopeType === "NEIGHBORHOOD" && !r.subScopeKinds,
+        r => r.scopeType === "NEIGHBORHOOD" && !r.subScopeKinds?.length,
     );
     const hasWardRole = assignedRoles.some(r => r.scopeType === "WARD");
     const hasDenyOnlyRole = assignedRoles.some(
-        r => r.scopeType === "NEIGHBORHOOD" && r.subScopeKinds,
+        r => r.scopeType === "NEIGHBORHOOD" && !!r.subScopeKinds?.length,
     );
 
     const orClauses: Record<string, unknown>[] = [];

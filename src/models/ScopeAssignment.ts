@@ -86,26 +86,24 @@ ScopeAssignmentSchema.index({
     roleKey: 1,
     unassignedAt: 1,
 });
-// Phong thu 2 lop (defense-in-depth) cho cac vai tro co maxActivePerScope=1 DA
-// BIET truoc (vd neighborhood_leader, secretary) - Mongo partial index khong
-// the tham chieu Role.maxActivePerScope (khac collection) nen day KHONG phai
-// co che thuc thi chinh; thuc thi thuc su nam o scopeAssignmentService.assignScope
-// (doc Role.maxActivePerScope truc tiep, phan anh dung cau hinh moi nhat).
+// Phong thu 2 lop (defense-in-depth) cho neighborhood_leader - "1 To truong
+// active/1 To dan pho" duoc thuc thi hardcode o
+// neighborhoodService.assignNeighborhoodLeader; index nay chi la luoi an toan
+// bo sung, khong phai co che thuc thi chinh.
 ScopeAssignmentSchema.index(
     { roleKey: 1, scopeType: 1, scopeId: 1 },
     {
         unique: true,
         partialFilterExpression: {
             unassignedAt: { $exists: false },
-            roleKey: { $in: ["neighborhood_leader", "secretary"] },
+            roleKey: "neighborhood_leader",
         },
     },
 );
-// Phong thu 2 lop rieng cho truc "toi da bao nhieu pham vi 1 nguoi duoc active
-// cung luc" (maxActiveScopesPerUser) - KHAC truc tren (moi pham vi toi da bao
-// nhieu nguoi). Hien chi neighborhood_coleader dung gia tri 1 (1 nguoi khong
-// duoc la to pho active o 2 to dan pho cung luc) - xem
-// neighborhoodService.assignNeighborhoodColeader.
+// Phong thu 2 lop rieng cho "1 nguoi khong duoc la To pho active o 2 To dan
+// pho cung luc" - thuc thi hardcode o
+// neighborhoodService.assignNeighborhoodColeader, index nay la luoi an toan
+// bo sung.
 ScopeAssignmentSchema.index(
     { userId: 1, roleKey: 1 },
     {
