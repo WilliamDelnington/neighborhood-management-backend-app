@@ -43,8 +43,6 @@ const scopeFields = {
     // duoc cap nhat o Phase 2; admin co the sua lai sau qua man Quan ly vai tro.
     scopeType: z.enum(ACCESS_SCOPE_TIERS).default("ALL"),
     scopeMechanism: z.enum(SCOPE_ASSIGNMENT_MECHANISMS).optional(),
-    maxActivePerScope: z.number().int().positive().nullable().optional(),
-    maxActiveScopesPerUser: z.number().int().positive().nullable().optional(),
     subScopeKinds: z.array(z.enum(NEIGHBORHOOD_COLLABORATOR_SCOPES)).optional(),
 };
 

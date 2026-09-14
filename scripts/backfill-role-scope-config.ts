@@ -3,10 +3,14 @@ import { config as loadEnv } from "dotenv";
 
 /**
  * Backfill/repair truong pham vi (Role.scopeType/scopeMechanism/
- * maxActivePerScope/maxActiveScopesPerUser/subScopeKinds - xem models/Role.ts)
- * cho cac vai tro he thong, doc gia tri tu SYSTEM_ROLE_SCOPE_CONFIG. AN TOAN
- * de chay tren du lieu thuc (dev/production):
- * - Voi vai tro DA CO SAN: chi $set 5 truong pham vi noi tren, KHONG dong den
+ * subScopeKinds - xem models/Role.ts) cho cac vai tro he thong, doc gia tri tu
+ * SYSTEM_ROLE_SCOPE_CONFIG. Cung don dep 2 truong maxActivePerScope/
+ * maxActiveScopesPerUser da bi go bo khoi schema (tinh nang gioi han so
+ * nguoi/so pham vi active da bi xoa - xem RoleListPage.tsx) khoi cac Role
+ * document CU con sot lai gia tri nay tu truoc. AN TOAN de chay tren du lieu
+ * thuc (dev/production):
+ * - Voi vai tro DA CO SAN: chi $set 3 truong pham vi noi tren (va $unset 2
+ *   truong cu), KHONG dong den
  *   permissions/allowedCreatableRoles/allowedComplaintCategories/
  *   allowedRequestTypes/sortOrder/... - khac scripts/backfill-roles.ts (script
  *   do truyen object khong co toan tu $ nao, MongoDB coi la THAY THE toan bo
@@ -58,6 +62,10 @@ async function main() {
                     $set: {
                         ...scopeConfig,
                         ...(actorId ? { updatedBy: actorId } : {}),
+                    },
+                    $unset: {
+                        maxActivePerScope: "",
+                        maxActiveScopesPerUser: "",
                     },
                 },
             );
