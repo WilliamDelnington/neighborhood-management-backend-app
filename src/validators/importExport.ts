@@ -99,18 +99,19 @@ export type BusinessImportMappingInput = z.infer<
 
 /**
  * Mapping cot Excel -> truong du lieu Company (cong ty), giong
- * businessImportMappingSchema o tren nhung "taxCode" BAT BUOC phai chon cot
- * (khac Business - tuy chon), vi Company.taxCode la required+unique o
- * schema (xem models/Company.ts) - khong the tao cong ty ma khong co ma so
- * thue. Doi chieu "companyTypeName" voi CompanyType (loai hinh doanh nghiep,
- * moi cong ty chi co MOT), doc lap voi "businessTypeName" (loai hinh kinh
- * doanh, Company ho tro nhieu nhung import chi nhan 1 cot/dong - xem
- * applyCompanyImportMapping trong importService.ts).
+ * businessImportMappingSchema o tren - "taxCode" TUY CHON (khong con bat
+ * buoc nhu truoc), vi Company.taxCode la unique+sparse o schema (khong
+ * `required: true`, xem models/Company.ts) nen van tao duoc cong ty khong
+ * co ma so thue; dong thieu ma so thue chi duoc gan them canh bao vao "note"
+ * (xem applyCompanyImportMapping trong importService.ts) thay vi bi loai.
+ * Doi chieu "companyTypeName" voi CompanyType (loai hinh doanh nghiep, moi
+ * cong ty chi co MOT), doc lap voi "businessTypeName" (loai hinh kinh
+ * doanh, Company ho tro nhieu nhung import chi nhan 1 cot/dong).
  */
 export const companyImportMappingSchema = z.object({
     name: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Tên công ty'"),
     houseCode: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Mã nhà'"),
-    taxCode: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Mã số thuế'"),
+    taxCode: z.string().optional(),
     companyTypeName: z.string().optional(),
     businessTypeName: z.string().optional(),
     ownerName: z.string().optional(),
