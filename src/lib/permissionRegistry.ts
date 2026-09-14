@@ -21,6 +21,17 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         permissions: [{ key: "dashboard.read", label: "Xem bảng điều khiển" }],
     },
     {
+        key: "ai_chat",
+        label: "Trợ lý AI",
+        permissions: [
+            {
+                key: "ai_chat.use",
+                label:
+                    "Sử dụng trợ lý AI (chatbot Gemini) - phạm vi dữ liệu tự động theo các quyền xem khác của tài khoản",
+            },
+        ],
+    },
+    {
         key: "users",
         label: "Người dùng",
         permissions: [

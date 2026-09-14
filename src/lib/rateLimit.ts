@@ -47,3 +47,8 @@ export const passwordResetRequestRateLimiter = createRateLimiter(
     3,
     60 * 60 * 1000,
 );
+
+// Gioi han so cau hoi gui cho chatbot AI (Gemini) theo tung user - moi request
+// deu ton phi goi Gemini API, khong gioi han se de bi lam dung/dội chi phi (xem
+// services/aiChatService.ts).
+export const aiChatRateLimiter = createRateLimiter(20, 5 * 60 * 1000);
