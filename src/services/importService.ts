@@ -3028,9 +3028,13 @@ async function processBusinessImportRows(
 export type CompanyColumnMapping = {
     name: string;
     houseCode: string;
-    // Khac Business (tuy chon) - Company.taxCode la required+unique o schema
-    // (xem models/Company.ts), nen phai chon cot va co gia tri o MOI dong.
-    taxCode: string;
+    // Tuy chon, giong Business - Company.taxCode la unique+sparse o schema
+    // (khong `required: true`, xem models/Company.ts), nen mot cong ty van
+    // tao duoc ma khong co ma so thue. Dong khong co ma so thue KHONG con bi
+    // loai (rowError) nhu truoc nua - van duoc nhap, chi gan them canh bao
+    // vao truong "note" de nguoi dung biet ma bo sung sau (xem
+    // applyCompanyImportMapping).
+    taxCode?: string;
     companyTypeName?: string;
     businessTypeName?: string;
     ownerName?: string;
@@ -3039,12 +3043,21 @@ export type CompanyColumnMapping = {
     note?: string;
 };
 
-// Cac truong tuong ung 1-1 voi cot trong file, tru "name"/"houseCode"/"taxCode"
-// (bat buoc, xu ly rieng - xem applyCompanyImportMapping).
+// Cac truong tuong ung 1-1 voi cot trong file, tru "name"/"houseCode" (bat
+// buoc, xu ly rieng - xem applyCompanyImportMapping). "taxCode" gio nam
+// trong nhom tuy chon nay, giong Business.
 const COMPANY_MAPPING_COLUMN_FIELDS: Exclude<
     keyof typeof COMPANY_COLUMNS,
-    "name" | "houseCode" | "taxCode"
->[] = ["companyTypeName", "businessTypeName", "ownerName", "phone", "active", "note"];
+    "name" | "houseCode"
+>[] = [
+    "taxCode",
+    "companyTypeName",
+    "businessTypeName",
+    "ownerName",
+    "phone",
+    "active",
+    "note",
+];
 
 /**
  * Buoc 1 (upload): chi doc header + tung dong tho, CHUA validate theo
@@ -3102,11 +3115,13 @@ export async function uploadCompanyImportFile(
 /**
  * Buoc 2 (chon cot): ap dung mapping do nguoi dung xac nhan len du lieu tho
  * da luu o buoc upload, roi chay lai logic validate/preview - bat buoc chon
- * cot cho "Tên công ty", "Mã nhà" (phai khop mot HouseRecord da ton tai), va
- * "Mã số thuế" (khac Business - o day BAT BUOC, vi Company.taxCode required+
- * unique). Doi chieu "Loại hình doanh nghiệp"/"Loại hình kinh doanh" (neu co)
- * voi CompanyType/BusinessType da co, chong trung "Mã số thuế" ca trong file
- * va he thong. Co the goi lai nhieu lan mien la job chua commit - giong
+ * cot cho "Tên công ty", "Mã nhà" (phai khop mot HouseRecord da ton tai).
+ * "Mã số thuế" gio la TUY CHON (giong Business) - dong khong co ma so thue
+ * van duoc nhap binh thuong, chi gan them canh bao vao "note" de biet ma bo
+ * sung sau (xem vong lap ben duoi), thay vi bi loai nhu truoc. Doi chieu
+ * "Loại hình doanh nghiệp"/"Loại hình kinh doanh" (neu co) voi CompanyType/
+ * BusinessType da co, chong trung "Mã số thuế" (chi khi co gia tri) ca trong
+ * file va he thong. Co the goi lai nhieu lan mien la job chua commit - giong
  * applyBusinessImportMapping.
  */
 export async function applyCompanyImportMapping(
@@ -3135,12 +3150,6 @@ export async function applyCompanyImportMapping(
             422,
         );
     }
-    if (!mapping.taxCode || !headers.includes(mapping.taxCode)) {
-        throw new HttpError(
-            "Vui lòng chọn cột dữ liệu tương ứng với 'Mã số thuế'",
-            422,
-        );
-    }
     for (const field of COMPANY_MAPPING_COLUMN_FIELDS) {
         const column = mapping[field];
         if (column && !headers.includes(column)) {
@@ -3153,7 +3162,6 @@ export async function applyCompanyImportMapping(
     const mappedColumns = [
         mapping.name,
         mapping.houseCode,
-        mapping.taxCode,
         ...COMPANY_MAPPING_COLUMN_FIELDS.map(field => mapping[field]),
     ].filter(Boolean) as string[];
     if (new Set(mappedColumns).size !== mappedColumns.length) {
@@ -3173,8 +3181,10 @@ export async function applyCompanyImportMapping(
     for (const row of rows) {
         const houseCode = (row.values[mapping.houseCode] || "").trim();
         if (houseCode) houseCodesInFile.add(houseCode);
-        const taxCode = (row.values[mapping.taxCode] || "").trim();
-        if (taxCode) taxCodesInFile.add(taxCode);
+        if (mapping.taxCode) {
+            const taxCode = (row.values[mapping.taxCode] || "").trim();
+            if (taxCode) taxCodesInFile.add(taxCode);
+        }
     }
     const houses = await HouseRecord.find({
         code: { $in: Array.from(houseCodesInFile) },
@@ -3209,7 +3219,9 @@ export async function applyCompanyImportMapping(
     for (const row of rows) {
         const name = (row.values[mapping.name] || "").trim();
         const houseCode = (row.values[mapping.houseCode] || "").trim();
-        const taxCode = (row.values[mapping.taxCode] || "").trim();
+        const taxCode = mapping.taxCode
+            ? (row.values[mapping.taxCode] || "").trim()
+            : "";
         const companyTypeNameRaw = mapping.companyTypeName
             ? (row.values[mapping.companyTypeName] || "").trim()
             : "";
@@ -3228,7 +3240,6 @@ export async function applyCompanyImportMapping(
 
         const rowErrors: string[] = [];
         if (!name) rowErrors.push("Thiếu 'Tên công ty'");
-        if (!taxCode) rowErrors.push("Thiếu 'Mã số thuế'");
 
         const houseId = houseCode ? houseCodeToId.get(houseCode) : undefined;
         if (!houseCode) {
@@ -3266,21 +3277,39 @@ export async function applyCompanyImportMapping(
             continue;
         }
 
-        if (existingTaxCodes.has(taxCode) || seenTaxCodes.has(taxCode)) {
-            skipped.push({
-                row: row.rowNumber,
-                message: `Mã số thuế "${taxCode}" đã tồn tại`,
-            });
-            continue;
+        if (taxCode) {
+            if (existingTaxCodes.has(taxCode) || seenTaxCodes.has(taxCode)) {
+                skipped.push({
+                    row: row.rowNumber,
+                    message: `Mã số thuế "${taxCode}" đã tồn tại`,
+                });
+                continue;
+            }
+            seenTaxCodes.add(taxCode);
         }
-        seenTaxCodes.add(taxCode);
+
+        // Cong ty khong co ma so thue van duoc nhap (khac truoc - tung bi
+        // loai vi "Thiếu 'Mã số thuế'") - chi gan them canh bao vao "note" de
+        // nguoi dung biet ma nay con thieu, can bo sung sau. Khong the doi
+        // chieu trung lap (khong co khoa dang tin cay) nen KHONG bi bo qua
+        // du trung ten/nha voi mot dong khac trong file - moi dong deu duoc
+        // tao rieng, chap nhan rui ro tao trung ve sau neu nguoi dung tu vo
+        // tinh nhap lai cung dong nay.
+        const finalNote = taxCode
+            ? note || undefined
+            : [
+                  "⚠ Chưa có mã số thuế trong dữ liệu nguồn - cần bổ sung sau",
+                  note,
+              ]
+                  .filter(Boolean)
+                  .join("; ");
 
         previewData.push({
             rowNumber: row.rowNumber,
             name,
             houseCode,
             houseId,
-            taxCode,
+            taxCode: taxCode || undefined,
             companyTypeId,
             companyTypeName: companyTypeNameRaw || undefined,
             businessTypeId,
@@ -3290,7 +3319,7 @@ export async function applyCompanyImportMapping(
             active: mapping.active
                 ? parseStreetActiveCell(row.values[mapping.active])
                 : true,
-            note: note || undefined,
+            note: finalNote,
         });
     }
 
@@ -3367,6 +3396,12 @@ async function processCompanyImportRows(
             await createCompany(actorUser, {
                 name: row.name as string,
                 houseId: row.houseId as string,
+                // CreateCompanyInput.taxCode khai bao la string (bat buoc
+                // qua createCompanySchema, dung cho luong tao thu cong) -
+                // nhung import goi thang createCompany(), bo qua buoc
+                // .parse() do, nen truyen undefined o day van an toan luc
+                // chay (Company.taxCode la unique+sparse, chap nhan vang
+                // mat - xem applyCompanyImportMapping).
                 taxCode: row.taxCode as string,
                 companyTypeId:
                     (row.companyTypeId as string | undefined) || null,
