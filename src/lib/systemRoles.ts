@@ -33,6 +33,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     admin: ALL_PERMISSION_KEYS,
     neighborhood_leader: [
         "dashboard.read",
+        "ai_chat.use",
         "users.create",
         // users.read/users.lock/users.reset_password deu duoc userService
         // (listUsers/getUserById/lockUserStatus/resetUserPasswordByAdmin) tu
@@ -137,6 +138,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // hai vai tro le ra phai giong nhau.
     neighborhood_coleader: [
         "dashboard.read",
+        "ai_chat.use",
         "users.create",
         "users.read",
         "users.lock",
@@ -207,6 +209,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // scope filter moi la lop chan thuc su quyet dinh thay duoc gi.
     neighborhood_collaborator: [
         "dashboard.read",
+        "ai_chat.use",
         "requests.read",
         "inspections.read",
         "inspections.execute",
@@ -219,6 +222,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     secretary: [
         "dashboard.read",
+        "ai_chat.use",
         // Can de chon "Tổ dân phố" khi nham doi tuong gui Thong bao (xem
         // AnnouncementFormPage.tsx).
         "neighborhoods.read",
@@ -306,6 +310,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     regional_police: [
         "dashboard.read",
+        "ai_chat.use",
         "houses.read",
         "houses.update_gis",
         "households.read",
@@ -353,6 +358,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     people_committee_official: [
         "dashboard.read",
+        "ai_chat.use",
         "neighborhoods.read",
         "neighborhoods.manage",
         "streets.read",
@@ -425,20 +431,33 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // cac chi so dashboard rieng cua minh) - xem dashboardService.buildDepartmentOverview.
     social_affairs_official: [
         "dashboard.read",
+        "ai_chat.use",
         "citizens.read",
         "households.read",
         "reports.read",
     ],
-    health_official: ["dashboard.read", "households.read", "reports.read"],
-    education_official: ["dashboard.read", "citizens.read", "reports.read"],
+    health_official: [
+        "dashboard.read",
+        "ai_chat.use",
+        "households.read",
+        "reports.read",
+    ],
+    education_official: [
+        "dashboard.read",
+        "ai_chat.use",
+        "citizens.read",
+        "reports.read",
+    ],
     economy_labor_official: [
         "dashboard.read",
+        "ai_chat.use",
         "citizens.read",
         "businesses.read",
         "companies.read",
         "reports.read",
     ],
     house_owner: [
+        "ai_chat.use",
         "organizations.read",
         "organizations.create",
         "organizations.update",
@@ -500,6 +519,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // chu ho rieng quan ly nhan khau cua ho minh nhung khong so huu/cap nhat
     // ban ghi nha (houses.*) - viec do thuoc ve house_owner.
     household_head: [
+        "ai_chat.use",
         "houses.read",
         "households.read",
         "households.update",
@@ -529,6 +549,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // chi la mot nhan tuy dinh tuyen yeu cau (xem REQUEST_HOUSE_ROLES trong
     // types/index.ts - do la khai niem KHAC, chi la nhan dinh tuyen).
     business_representative: [
+        "ai_chat.use",
         "houses.read",
         "business_types.read",
         "businesses.read",
@@ -548,6 +569,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // Nguoi dai dien cong ty/doanh nghiep - cung mo hinh voi business_representative
     // o tren, ap dung cho Company thay vi Business.
     company_representative: [
+        "ai_chat.use",
         "houses.read",
         "company_types.read",
         "companies.read",
