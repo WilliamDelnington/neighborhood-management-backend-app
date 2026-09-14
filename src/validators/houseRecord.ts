@@ -208,6 +208,16 @@ export type BulkAssignHouseNeighborhoodInput = z.infer<
     typeof bulkAssignHouseNeighborhoodSchema
 >;
 
+// Xoa hang loat nha so (chon nhieu dong tren "Danh sach nha so") - xem
+// houseRecordService.bulkDeleteHouseRecords. Nha con ho dan/ho kinh doanh
+// lien ket, hoac ngoai pham vi actor, se rot vao "failed" rieng.
+export const bulkDeleteHouseRecordSchema = z.object({
+    ...bulkHouseIdsSchema,
+});
+export type BulkDeleteHouseRecordInput = z.infer<
+    typeof bulkDeleteHouseRecordSchema
+>;
+
 // Duyet/tu choi hang loat (vd cac nha dang "Chờ duyệt") - cung quy tac voi
 // updateHouseRecordStatusSchema (ly do bat buoc khi tu choi/yeu cau cap nhat).
 export const bulkUpdateHouseRecordStatusSchema = z
