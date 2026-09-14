@@ -1288,6 +1288,40 @@ export async function bulkTransitionHouseRecordStatus(
     return { succeededIds, failed };
 }
 
+/**
+ * Xoa NHIEU nha so cung luc (chon nhieu dong tren "Danh sach nha so") - kiem
+ * tra pham vi actor (assertHouseRecordInScope, giong route DELETE
+ * /api/houses/:id) roi goi lai deleteHouseRecord() TUNG nha mot, cung ly do
+ * voi cac ham bulk khac o tren. Nha khong ton tai, ngoai pham vi, hoac con ho
+ * dan/ho kinh doanh lien ket se rot vao "failed" voi ly do tuong ung, khong
+ * lam dung nhung nha con lai.
+ */
+export async function bulkDeleteHouseRecords(
+    actorUser: IUser,
+    ids: string[],
+): Promise<BulkHouseActionResult> {
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+    for (const id of ids) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const houseRecord = await getHouseRecordById(id);
+            // eslint-disable-next-line no-await-in-loop
+            await assertHouseRecordInScope(actorUser, houseRecord);
+            // eslint-disable-next-line no-await-in-loop
+            await deleteHouseRecord(String(actorUser._id), id);
+            succeededIds.push(id);
+        } catch (err) {
+            failed.push({
+                id,
+                message:
+                    err instanceof HttpError ? err.message : "Có lỗi xảy ra",
+            });
+        }
+    }
+    return { succeededIds, failed };
+}
+
 export async function deleteHouseRecord(
     actorId: string,
     id: string,
