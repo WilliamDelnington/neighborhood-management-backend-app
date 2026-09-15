@@ -11,7 +11,11 @@ const geometrySchema = z.object({
     coordinates: z.array(z.unknown()),
 });
 
-export const createNeighborhoodSchema = z.object({
+// streetIds/alleyDescriptions CHI quan ly duoc sau khi to dan pho da ton tai
+// (chinh o man chi tiet/sua) - KHONG con trong createNeighborhoodSchema nua
+// (bo di cung UI "Tuyến đường/Hẻm ngõ phụ trách" luc tao moi, xem
+// NeighborhoodForm.tsx), chi them lai o updateNeighborhoodSchema ben duoi.
+const neighborhoodFields = z.object({
     name: z.string().min(1, "Tên tổ dân phố không được để trống"),
     code: z.string().min(1, "Mã tổ dân phố không được để trống"),
     sequence: z.number().int().positive("Số thứ tự phải là số nguyên dương"),
@@ -30,35 +34,40 @@ export const createNeighborhoodSchema = z.object({
     description: z.string().optional(),
     contactPhone: z.string().optional(),
     notes: z.string().optional(),
-    streetIds: z.array(z.string()).default([]),
-    alleyDescriptions: z.array(z.string().trim().min(1)).default([]),
     boundaryType: z.enum(NEIGHBORHOOD_BOUNDARY_TYPES).default("NONE"),
     geometry: geometrySchema.optional(),
-}).superRefine((value, ctx) => {
-    if (
-        value.effectiveFrom &&
-        value.effectiveTo &&
-        value.effectiveTo < value.effectiveFrom
-    ) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["effectiveTo"],
-            message: "Ngày kết thúc hiệu lực phải sau ngày bắt đầu",
-        });
-    }
-    if (value.boundaryType === "GEOJSON" && !value.geometry) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["geometry"],
-            message: "Cần có dữ liệu geometry khi chọn GEOJSON",
-        });
-    }
 });
+
+export const createNeighborhoodSchema = neighborhoodFields.superRefine(
+    (value, ctx) => {
+        if (
+            value.effectiveFrom &&
+            value.effectiveTo &&
+            value.effectiveTo < value.effectiveFrom
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["effectiveTo"],
+                message: "Ngày kết thúc hiệu lực phải sau ngày bắt đầu",
+            });
+        }
+        if (value.boundaryType === "GEOJSON" && !value.geometry) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["geometry"],
+                message: "Cần có dữ liệu geometry khi chọn GEOJSON",
+            });
+        }
+    },
+);
 export type CreateNeighborhoodInput = z.infer<typeof createNeighborhoodSchema>;
 
 // code/sequence la bat bien (immutable) sau khi tao - khong cho sua qua API.
-export const updateNeighborhoodSchema = createNeighborhoodSchema
-    .innerType()
+export const updateNeighborhoodSchema = neighborhoodFields
+    .extend({
+        streetIds: z.array(z.string()),
+        alleyDescriptions: z.array(z.string().trim().min(1)),
+    })
     .omit({ code: true, sequence: true })
     .partial();
 export type UpdateNeighborhoodInput = z.infer<typeof updateNeighborhoodSchema>;

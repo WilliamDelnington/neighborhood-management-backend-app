@@ -435,18 +435,21 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "citizens.read",
         "households.read",
         "reports.read",
+        "reports.kpi_read",
     ],
     health_official: [
         "dashboard.read",
         "ai_chat.use",
         "households.read",
         "reports.read",
+        "reports.kpi_read",
     ],
     education_official: [
         "dashboard.read",
         "ai_chat.use",
         "citizens.read",
         "reports.read",
+        "reports.kpi_read",
     ],
     economy_labor_official: [
         "dashboard.read",
@@ -455,6 +458,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "businesses.read",
         "companies.read",
         "reports.read",
+        "reports.kpi_read",
     ],
     house_owner: [
         "ai_chat.use",
