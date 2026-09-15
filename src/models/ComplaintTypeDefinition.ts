@@ -8,6 +8,13 @@ export interface IComplaintTypeDefinition extends Document {
     // resolveComplaintTypeRecipientIds trong complaintService.ts - vai tro dung
     // TRUOC trong mang duoc uu tien thu nguoi phu trach truoc.
     allowedReceiverRoles: string[];
+    // Vai tro duoc phep GUI loai phan anh nay - cung quy uoc voi
+    // RequestTypeDefinition.allowedSenderRoles: [] (rong) = KHONG ai duoc gui
+    // (xem createComplaint o complaintService.ts). Danh muc CU (seed truoc khi
+    // co truong nay) phai duoc backfill ngay (xem
+    // scripts/backfill-complaint-type-sender-roles.ts) neu khong se khoa het
+    // nguoi gui hien tai.
+    allowedSenderRoles: string[];
     // true = loai duoc seed san tu NHOM_PHAN_ANH (xem scripts/seed-complaint-types.ts)
     // - khoa key/xoa, chi cho sua name/description/allowedReceiverRoles/active.
     isBuiltIn: boolean;
@@ -32,6 +39,7 @@ const ComplaintTypeDefinitionSchema = new Schema<IComplaintTypeDefinition>(
         name: { type: String, required: true, trim: true },
         description: { type: String, trim: true },
         allowedReceiverRoles: { type: [String], default: [] },
+        allowedSenderRoles: { type: [String], default: [] },
         isBuiltIn: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
         wardCode: { type: Number, index: true },

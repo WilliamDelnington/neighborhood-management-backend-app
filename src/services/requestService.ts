@@ -6,12 +6,10 @@ import {
     Household,
     HouseOwnership,
     HouseRecord,
-    Neighborhood,
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
     RequestTypeDefinition,
-    ScopeAssignment,
     SecurityRecord,
     User,
     type IRequest,
@@ -28,6 +26,7 @@ import {
 } from "@/lib/rbac";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
+import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import { writeAuditLog } from "@/services/auditService";
 import {
     findRequestTypeForActor,
@@ -384,24 +383,9 @@ async function resolveHouseRoleRecipientIds(
 async function resolveHouseLeaderRecipientIds(
     houseId: string,
 ): Promise<Set<string>> {
-    const ids = new Set<string>();
     const house = await HouseRecord.findById(houseId).select("neighborhoodId");
-    if (!house?.neighborhoodId) return ids;
-
-    const neighborhood = await Neighborhood.findById(
-        house.neighborhoodId,
-    ).select("leaderUserId");
-    if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
-
-    const coleaderAssignments = await ScopeAssignment.find({
-        roleKey: "neighborhood_coleader",
-        scopeType: "NEIGHBORHOOD",
-        scopeId: house.neighborhoodId,
-        unassignedAt: { $exists: false },
-    }).select("userId");
-    coleaderAssignments.forEach(a => ids.add(String(a.userId)));
-
-    return ids;
+    if (!house?.neighborhoodId) return new Set();
+    return getNeighborhoodLeadershipUserIds(house.neighborhoodId);
 }
 
 export async function createRequest(

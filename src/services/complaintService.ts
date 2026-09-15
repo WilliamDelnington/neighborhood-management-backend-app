@@ -22,6 +22,7 @@ import { areaScopeFilter } from "@/lib/rbac";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
 import { getSetting } from "@/services/settingsService";
 import { getComplaintTypeByKey } from "@/services/complaintTypeDefinitionService";
+import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import {
     NHOM_PHAN_ANH,
     TRANG_THAI_PHAN_ANH_LABEL,
@@ -279,12 +280,29 @@ const LEGACY_COMPLAINT_CATEGORIES = new Set<string>(NHOM_PHAN_ANH);
  * ung trong DB, tranh chan phan anh trong giai doan migrate.
  */
 async function assertValidComplaintCategory(
+    actorUser: IUser,
     category: string,
 ): Promise<IComplaintTypeDefinition | null> {
     const definition = await getComplaintTypeByKey(category);
     if (definition) {
         if (!definition.active) {
             throw new HttpError("Loại phản ánh này đã ngừng sử dụng", 422);
+        }
+        // Cung quy uoc voi requestService.createRequest - [] (rong) nghia la
+        // KHONG ai duoc gui (xem ghi chu allowedSenderRoles o
+        // ComplaintTypeDefinition.ts). Danh muc CU phai duoc backfill truoc
+        // khi trien khai truong nay (xem
+        // scripts/backfill-complaint-type-sender-roles.ts).
+        if (
+            !actorUser.roles.includes("admin") &&
+            !definition.allowedSenderRoles.some(role =>
+                actorUser.roles.includes(role),
+            )
+        ) {
+            throw new HttpError(
+                "Vai trò của bạn không được gửi loại phản ánh này",
+                403,
+            );
         }
         return definition;
     }
@@ -440,7 +458,11 @@ export async function createComplaint(
     // seed script), roi ve dung logic INLINE cu (to truong cua nha duoc chon,
     // hoac thong bao rong cap to/phuong) de khong lam gian doan phan anh dang
     // gui - khong duoc throw o day.
+    // assertValidComplaintCategory cung kiem actorUser.roles co nam trong
+    // allowedSenderRoles cua danh muc hay khong (danh muc CU/legacy enum
+    // khong co dinh nghia nen khong gioi han, giu nguyen hanh vi cu).
     const complaintTypeDefinition = await assertValidComplaintCategory(
+        actorUser,
         input.category,
     );
 
@@ -486,68 +508,21 @@ export async function createComplaint(
         actorId: userId,
     });
 
-    if (complaintTypeDefinition) {
-        if (recipientIds.size > 0) {
-            await createNotification({
-                title: "Phản ánh mới cần xử lý",
-                body: `Mã ${code}: ${input.title}`,
-                type: "complaint.created",
-                targetUserIds: [...recipientIds],
-                relatedModel: "Complaint",
-                relatedId: complaint._id,
-                createdBy: userId,
-            });
-        }
-        await createNotification({
-            title: "Phản ánh mới cần xử lý",
-            body: `Mã ${code}: ${input.title}`,
-            type: "complaint.created",
-            targetRoles: ["admin"],
-            relatedModel: "Complaint",
-            relatedId: complaint._id,
-            createdBy: userId,
-        });
-    } else if (neighborhoodId) {
-        // Neu xac dinh duoc to dan pho, chi bao To truong/To pho CUA TO DO
-        // (khong blast toi moi neighborhood_leader trong he thong). Nhanh nay
-        // chi con dung khi CHUA co ComplaintTypeDefinition cho category.
-        const neighborhood = await Neighborhood.findById(
+    // Bao gio cung bao To truong/To pho DANG HOAT DONG cua to dan pho nguoi
+    // gui (neu xac dinh duoc), BAT KE danh muc co cau hinh ho lam nguoi nhan
+    // hay khong - truoc day chi nhanh "chua co ComplaintTypeDefinition" moi
+    // lam dieu nay, nen To truong bi bo sot bat cu khi nao danh muc that su
+    // duoc cau hinh (truong hop pho bien) va nguoi gui khong chon Nha so cu
+    // the. Hop (union) voi ket qua dinh tuyen theo danh muc thay vi thay the.
+    if (neighborhoodId) {
+        const leadershipIds = await getNeighborhoodLeadershipUserIds(
             neighborhoodId,
-        ).select("leaderUserId");
-        const coleaders = await ScopeAssignment.find({
-            roleKey: "neighborhood_coleader",
-            scopeType: "NEIGHBORHOOD",
-            scopeId: neighborhoodId,
-            unassignedAt: { $exists: false },
-        }).select("userId");
-        const targetUserIds = [
-            neighborhood?.leaderUserId,
-            ...coleaders.map(c => c.userId),
-        ].filter(Boolean) as mongoose.Types.ObjectId[];
-        if (targetUserIds.length) {
-            await createNotification({
-                title: "Phản ánh mới cần xử lý",
-                body: `Mã ${code}: ${input.title}`,
-                type: "complaint.created",
-                targetUserIds,
-                relatedModel: "Complaint",
-                relatedId: complaint._id,
-                createdBy: userId,
-            });
-        }
-        await createNotification({
-            title: "Phản ánh mới cần xử lý",
-            body: `Mã ${code}: ${input.title}`,
-            type: "complaint.created",
-            targetRoles: ["admin"],
-            relatedModel: "Complaint",
-            relatedId: complaint._id,
-            createdBy: userId,
-        });
-    } else {
-        // Day chinh la truong hop can chuyen tiep len cap Phuong - bao bi
-        // thu/can bo UBND thay vi de phan anh "mat tich". Nhanh nay chi con
-        // dung khi CHUA co ComplaintTypeDefinition cho category.
+        );
+        leadershipIds.forEach(id => recipientIds.add(id));
+    } else if (!complaintTypeDefinition) {
+        // Chua xac dinh duoc to dan pho VA chua co danh muc - day chinh la
+        // truong hop can chuyen tiep len cap Phuong thay vi de phan anh "mat
+        // tich" (nhanh legacy, chi con dung trong giai doan migrate).
         const wardRecipients = wardCode
             ? await User.find({
                   status: "active",
@@ -555,17 +530,33 @@ export async function createComplaint(
                   roles: { $in: ["secretary", "people_committee_official"] },
               }).select("_id")
             : [];
+        wardRecipients.forEach(user => recipientIds.add(String(user._id)));
+    }
+
+    if (recipientIds.size > 0) {
         await createNotification({
-            title: "Phản ánh mới cần xử lý (chưa xác định tổ dân phố)",
+            title: "Phản ánh mới cần xử lý",
             body: `Mã ${code}: ${input.title}`,
             type: "complaint.created",
-            targetUserIds: wardRecipients.map(user => user._id),
-            targetRoles: ["admin"],
+            targetUserIds: [...recipientIds],
             relatedModel: "Complaint",
             relatedId: complaint._id,
             createdBy: userId,
         });
     }
+    // Rieng, KHONG chung mot lan goi voi targetUserIds o tren - createNotification
+    // chi xet targetRoles khi targetUserIds rong (xem notificationService.ts),
+    // nen gop chung se lam admin khong nhan duoc thong bao bat cu khi nao co
+    // recipientIds cu the (loi da gap truoc do o nhanh chuyen tiep Phuong).
+    await createNotification({
+        title: "Phản ánh mới cần xử lý",
+        body: `Mã ${code}: ${input.title}`,
+        type: "complaint.created",
+        targetRoles: ["admin"],
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+        createdBy: userId,
+    });
 
     return complaint;
 }
@@ -865,7 +856,7 @@ export async function updateComplaint(
         // Chi kiem tra gia tri hop le (co ton tai/active hay khong) - khong
         // can dung ket qua dinh tuyen o day, sua category KHONG lam lai dinh
         // tuyen nguoi phu trach da co (xem ghi chu EDITABLE_COMPLAINT_FIELDS).
-        await assertValidComplaintCategory(patch.category);
+        await assertValidComplaintCategory(actorUser, patch.category);
     }
 
     const previousSnapshot: Record<string, unknown> = {};

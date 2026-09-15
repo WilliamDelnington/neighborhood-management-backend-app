@@ -93,6 +93,7 @@ export async function createComplaintTypeDefinition(
         throw new HttpError("Mã loại phản ánh đã tồn tại", 409);
     }
     await assertRoleKeysExist(input.allowedReceiverRoles);
+    await assertRoleKeysExist(input.allowedSenderRoles);
 
     const definition = await ComplaintTypeDefinition.create({
         ...input,
@@ -123,6 +124,9 @@ export async function updateComplaintTypeDefinition(
     assertDefinitionInScope(actorUser, definition);
     if (input.allowedReceiverRoles) {
         await assertRoleKeysExist(input.allowedReceiverRoles);
+    }
+    if (input.allowedSenderRoles) {
+        await assertRoleKeysExist(input.allowedSenderRoles);
     }
 
     // updateComplaintTypeDefinitionSchema da bo truong `key` (omit), nen loai

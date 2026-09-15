@@ -73,6 +73,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
+        // To truong/To pho duoc gui phan anh/de xuat len cap Phuong (danh
+        // muc rieng "to_de_xuat_len_phuong", xem scripts/seed-complaint-types.ts) -
+        // cung co che voi requests.create, khong tu dong mo them danh muc nao
+        // khac ma vai tro nay khong nam trong allowedSenderRoles (xem
+        // ComplaintTypeDefinition.ts).
+        "complaints.create",
         "pccc.read",
         "security.read",
         "residents.read",
@@ -162,6 +168,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
+        // To truong/To pho duoc gui phan anh/de xuat len cap Phuong (danh
+        // muc rieng "to_de_xuat_len_phuong", xem scripts/seed-complaint-types.ts) -
+        // cung co che voi requests.create, khong tu dong mo them danh muc nao
+        // khac ma vai tro nay khong nam trong allowedSenderRoles (xem
+        // ComplaintTypeDefinition.ts).
+        "complaints.create",
         "pccc.read",
         "security.read",
         "residents.read",
