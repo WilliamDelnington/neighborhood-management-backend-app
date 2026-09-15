@@ -265,6 +265,50 @@ describe("Migration loại nhiệm vụ built-in -> RequestTypeDefinition", () =
         expect(createRes.status).toBe(403);
     });
 
+    it("neighborhood_leader (không có wardCode) vẫn thấy và gửi được loại tự tạo có wardCode khi đã được chốt rõ trong allowedSenderRoles", async () => {
+        // Tai hien dung bug thuc te thu 3: wardCode CHI la pham vi cua
+        // secretary/people_committee_official (xem User.ts) -
+        // neighborhood_leader/neighborhood_coleader dung neighborhoodId, KHONG
+        // BAO GIO co wardCode. definitionScope/assertDefinitionInScope dua vao
+        // wardCode se loai het loai tu tao co wardCode khoi to truong, KE CA
+        // khi admin da CHOT RO vai tro cua ho trong allowedSenderRoles cua
+        // chinh dinh nghia do - loi thuc te phat hien 2026-09-15 ("Kiểm tra
+        // tình hình" co allowedSenderRoles=["neighborhood_leader"] nhung To
+        // truong van thay rong).
+        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        const officer = await createTestUser({ roles: ["regional_police"] });
+        await RequestTypeDefinition.create({
+            key: "kiem_tra_tinh_hinh_fake",
+            name: "Kiểm tra tình hình (giả lập)",
+            fields: [],
+            allowedSenderRoles: ["neighborhood_leader"],
+            allowedReceiverRoles: ["regional_police"],
+            dataEntryMode: "sender",
+            isBuiltIn: false,
+            active: true,
+            wardCode: 9886,
+        });
+
+        const metaRes = await getMetaRoute(
+            makeRequest("/api/requests/meta", { headers: await authHeaders(leader) }),
+        );
+        const meta = (await readJson(metaRes)).data;
+        expect(meta.allowedTypes).toContain("kiem_tra_tinh_hinh_fake");
+
+        const createRes = await createRequestRoute(
+            makeRequest("/api/requests", {
+                method: "POST",
+                headers: await authHeaders(leader),
+                body: {
+                    type: "kiem_tra_tinh_hinh_fake",
+                    title: "Kiểm tra tình hình khu vực",
+                    targetUserIds: [String(officer._id)],
+                },
+            }),
+        );
+        expect(createRes.status).toBe(201);
+    });
+
     it("chỉ admin sửa/khóa được loại built-in, người quản lý không phải admin bị 403", async () => {
         const secretary = await createTestUser({
             roles: ["secretary"],
