@@ -196,3 +196,42 @@ export function complaintTypeLabel(
 ) {
     return definition?.name || key;
 }
+
+// 4 vai tro cu dan (nguoi duy nhat duoc gui phan anh truoc khi co tinh nang
+// To truong/To pho gui de xuat len Phuong) - dung de phan biet danh muc "cho
+// cu dan" voi danh muc "chi danh cho nhan vien" (xem
+// getStaffOnlyComplaintCategoryKeys ben duoi).
+const CITIZEN_COMPLAINT_SENDER_ROLES = [
+    "house_owner",
+    "household_head",
+    "business_representative",
+    "company_representative",
+];
+
+/**
+ * Danh sach key cac danh muc phan anh CHI danh cho nhan vien gui (vd To
+ * truong/To pho gui de xuat len Phuong: "to_de_xuat_len_phuong") - la danh
+ * muc co allowedSenderRoles khong giao voi CITIZEN_COMPLAINT_SENDER_ROLES.
+ * Dung de:
+ *   - An can bo cap Phuong danh sach phan anh cua cu dan (ho chi duoc xem
+ *     phan anh do To truong/To pho GUI LEN, khong phai toan bo phan anh trong
+ *     dia ban - xem complaintScopeFilter).
+ *   - Tach rieng tab "Da gui" khoi "Nhan tu cu dan" cho To truong/To pho
+ *     (xem listComplaints).
+ * Danh muc CHUA co ComplaintTypeDefinition (legacy/dang migrate) luon duoc
+ * coi la "cho cu dan" (khong nam trong danh sach nay) - giu nguyen hanh vi cu.
+ */
+export async function getStaffOnlyComplaintCategoryKeys(): Promise<string[]> {
+    const definitions = await ComplaintTypeDefinition.find({
+        active: true,
+    }).select("key allowedSenderRoles");
+    return definitions
+        .filter(
+            d =>
+                (d.allowedSenderRoles || []).length > 0 &&
+                !d.allowedSenderRoles.some(role =>
+                    CITIZEN_COMPLAINT_SENDER_ROLES.includes(role),
+                ),
+        )
+        .map(d => d.key);
+}

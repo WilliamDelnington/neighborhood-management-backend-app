@@ -307,6 +307,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "request_types.manage",
         "complaint_types.read",
         "complaint_types.manage",
+        // Bi thu la mot trong 2 vai tro nhan de xuat To truong/To pho gui len
+        // Phuong ("to_de_xuat_len_phuong" - xem seed-complaint-types.ts), can
+        // 3 quyen nay de thuc su xem/tiep nhan duoc, khong chi cau hinh danh
+        // muc (complaint_types.*) - truoc day bi thieu, chi nhan thong bao
+        // nhung khong mo duoc trang Phan anh.
+        "complaints.read",
+        "complaints.assign",
+        "complaints.update_status",
         "inspections.read",
         "inspections.create",
         "inspections.manage",

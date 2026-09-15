@@ -21,7 +21,10 @@ import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter } from "@/lib/rbac";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
 import { getSetting } from "@/services/settingsService";
-import { getComplaintTypeByKey } from "@/services/complaintTypeDefinitionService";
+import {
+    getComplaintTypeByKey,
+    getStaffOnlyComplaintCategoryKeys,
+} from "@/services/complaintTypeDefinitionService";
 import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import {
     NHOM_PHAN_ANH,
@@ -572,6 +575,11 @@ export async function listComplaints(params: {
     allowedCategories?: string[] | null;
     actorUser: IUser;
     canReadEscalated: boolean;
+    // Chi co y nghia voi To truong/To pho (xem duoi) - "received" (mac dinh)
+    // = phan anh cua cu dan trong To (khong gom cac de xuat CHINH HO/dong
+    // nghiep da gui len Phuong), "sent" = chi cac de xuat HO da gui len
+    // Phuong. Vai tro khac bo qua tham so nay.
+    view?: "received" | "sent";
 }) {
     const clauses: Record<string, unknown>[] = [];
     if (params.status) clauses.push({ status: params.status });
@@ -597,6 +605,35 @@ export async function listComplaints(params: {
             ],
         });
     }
+
+    const isAdmin = params.actorUser.roles.includes("admin");
+    const isNeighborhoodTier =
+        params.actorUser.roles.includes("neighborhood_leader") ||
+        params.actorUser.roles.includes("neighborhood_coleader");
+    // Can bo cap Phuong duoc nhan dien qua wardCode (giong quy uoc
+    // definitionScope trong complaintTypeDefinitionService.ts) - khong dung
+    // complaints.read_escalated (permission nay khong duoc gan mac dinh cho
+    // vai tro nao, xem ghi chu o complaintScopeFilter).
+    const isWardTier = !isAdmin && !!params.actorUser.wardCode;
+
+    if (!isAdmin && (isNeighborhoodTier || isWardTier)) {
+        const staffOnlyKeys = await getStaffOnlyComplaintCategoryKeys();
+        if (isWardTier) {
+            // "Chi thay phan anh To truong/To pho GUI LEN" - thay the hoan
+            // toan cach xem "moi phan anh trong Phuong" truoc day (areaScopeFilter
+            // qua nhanh khong canReadEscalated cua complaintScopeFilter).
+            clauses.push({
+                category: staffOnlyKeys.length ? { $in: staffOnlyKeys } : { $in: [] },
+            });
+        } else if (params.view === "sent") {
+            clauses.push({ createdByUserId: params.actorUser._id });
+        } else if (staffOnlyKeys.length) {
+            // "received" (mac dinh) - khong gom cac de xuat To truong/To pho
+            // (chinh minh hoac dong nghiep) da gui len Phuong.
+            clauses.push({ category: { $nin: staffOnlyKeys } });
+        }
+    }
+
     const scope = await complaintScopeFilter(params.actorUser, params.canReadEscalated);
     if (Object.keys(scope).length > 0) clauses.push(scope);
     const filter: Record<string, unknown> =
