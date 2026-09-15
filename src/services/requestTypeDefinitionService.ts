@@ -187,15 +187,35 @@ export async function findRequestTypeForActor(actorUser: IUser, key: string) {
 
 export async function getAvailableRequestTypes(actorUser: IUser) {
     const isAdmin = actorUser.roles.includes("admin");
-    const items = await RequestTypeDefinition.find({
-        ...definitionScope(actorUser),
-        active: true,
-        // Admin bo qua dieu kien nguoi gui (giong cach admin da bo qua moi
-        // scope check khac trong he thong nay) - khong co ngoai le nay thi
-        // admin cung khong gui duoc loai nhiem vu nao neu "admin" khong nam
-        // trong allowedSenderRoles cua loai do.
-        ...(isAdmin ? {} : { allowedSenderRoles: { $in: actorUser.roles } }),
-    }).sort({ name: 1 });
+    // Ket hop bang $and (khong gan truc tiep vao filter.$or) - definitionScope
+    // co the tra ve chinh mot dieu kien $or (isBuiltIn/wardCode); gan de hai
+    // filter.$or de ghi de mat scope, giong luu y trong listRequestTypeDefinitions.
+    const conditions: Record<string, unknown>[] = [
+        definitionScope(actorUser),
+        { active: true },
+    ];
+    if (!isAdmin) {
+        // Loai isBuiltIn (4 loai "he thong" cu - xem scripts/seed-request-types.ts)
+        // phai luon gui duoc boi BAT KY ai dang giu quyen requests.create (route
+        // /api/requests/meta da tu kiem tra quyen nay truoc khi goi ham nay) -
+        // day la dieu kien gui THAT SU duy nhat von co cho 4 loai nay TRUOC KHI
+        // allowedSenderRoles ton tai. allowedSenderRoles chi la MOT SNAPSHOT ghi
+        // mot lan luc seed; vai tro nao duoc cap requests.create SAU do (vd
+        // neighborhood_leader - xem systemRoles.ts) se khong nam trong snapshot
+        // va bi loai het loai nhiem vu he thong khoi form tao yeu cau, du nut
+        // "Tạo yêu cầu" (gate boi requests.create song) van hien binh thuong.
+        // Loai tu tao (khong phai isBuiltIn) van CHI tuan theo allowedSenderRoles
+        // ma admin cau hinh rieng qua RequestTypeListPage - khong bi anh huong.
+        conditions.push({
+            $or: [
+                { isBuiltIn: true },
+                { allowedSenderRoles: { $in: actorUser.roles } },
+            ],
+        });
+    }
+    const items = await RequestTypeDefinition.find({ $and: conditions }).sort({
+        name: 1,
+    });
 
     return items.map(item => ({
         _id: item._id,

@@ -395,6 +395,13 @@ export async function createRequest(
     const definition = await findRequestTypeForActor(actorUser, input.type);
     if (
         definition &&
+        // Loai isBuiltIn bo qua allowedSenderRoles, giong getAvailableRequestTypes
+        // (requestTypeDefinitionService.ts) - route da tu requirePermission
+        // "requests.create" truoc khi goi ham nay nen day la dieu kien gui du.
+        // Khong bo qua o day trong khi meta/danh sach cho phep thay se tao
+        // nghich ly "thay trong dropdown nhung gui bi 403". Loai tu tao van
+        // CHI tuan theo allowedSenderRoles nguoi quan tri cau hinh rieng.
+        !definition.isBuiltIn &&
         !actorUser.roles.includes("admin") &&
         !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
     ) {

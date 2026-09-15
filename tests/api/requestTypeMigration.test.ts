@@ -198,6 +198,73 @@ describe("Migration loại nhiệm vụ built-in -> RequestTypeDefinition", () =
         ).toBe(false);
     });
 
+    it("vai trò được cấp requests.create SAU khi seed vẫn thấy và gửi được loại built-in dù không có trong allowedSenderRoles", async () => {
+        // Tai hien dung bug thuc te: allowedSenderRoles la MOT SNAPSHOT ghi
+        // luc seed (xem scripts/seed-request-types.ts), khong tu dong cap
+        // nhat khi mot vai tro duoc cap them quyen requests.create ve sau
+        // (vd neighborhood_leader) - loai isBuiltIn phai van gui duoc boi BAT
+        // KY ai dang giu requests.create, bat ke allowedSenderRoles.
+        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        const officer = await createTestUser({ roles: ["regional_police"] });
+        await seedBuiltInType({
+            allowedSenderRoles: ["secretary"], // "neighborhood_leader" KHONG co trong danh sach
+            allowedReceiverRoles: ["regional_police"],
+        });
+
+        const metaRes = await getMetaRoute(
+            makeRequest("/api/requests/meta", { headers: await authHeaders(leader) }),
+        );
+        const meta = (await readJson(metaRes)).data;
+        expect(meta.allowedTypes).toContain("pccc_fake");
+
+        const createRes = await createRequestRoute(
+            makeRequest("/api/requests", {
+                method: "POST",
+                headers: await authHeaders(leader),
+                body: {
+                    type: "pccc_fake",
+                    title: "Kiểm tra PCCC (tổ trưởng gửi)",
+                    targetUserIds: [String(officer._id)],
+                },
+            }),
+        );
+        expect(createRes.status).toBe(201);
+    });
+
+    it("loại KHÔNG phải built-in vẫn chỉ gửi được bởi vai trò trong allowedSenderRoles (không bị bỏ qua theo requests.create)", async () => {
+        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        const officer = await createTestUser({ roles: ["regional_police"] });
+        await RequestTypeDefinition.create({
+            key: "custom_restricted",
+            name: "Loại tự tạo giới hạn",
+            fields: [],
+            allowedSenderRoles: ["secretary"],
+            allowedReceiverRoles: ["regional_police"],
+            dataEntryMode: "sender",
+            isBuiltIn: false,
+            active: true,
+        });
+
+        const metaRes = await getMetaRoute(
+            makeRequest("/api/requests/meta", { headers: await authHeaders(leader) }),
+        );
+        const meta = (await readJson(metaRes)).data;
+        expect(meta.allowedTypes).not.toContain("custom_restricted");
+
+        const createRes = await createRequestRoute(
+            makeRequest("/api/requests", {
+                method: "POST",
+                headers: await authHeaders(leader),
+                body: {
+                    type: "custom_restricted",
+                    title: "Không được phép",
+                    targetUserIds: [String(officer._id)],
+                },
+            }),
+        );
+        expect(createRes.status).toBe(403);
+    });
+
     it("chỉ admin sửa/khóa được loại built-in, người quản lý không phải admin bị 403", async () => {
         const secretary = await createTestUser({
             roles: ["secretary"],
