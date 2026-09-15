@@ -263,43 +263,12 @@ export async function getUserAllowedComplaintCategories(
 }
 
 /**
- * Tra ve danh sach loai yeu cau (RequestType) ma user duoc phep gui, hoac null
- * neu khong bi gioi han. Cung quy uoc voi getUserAllowedComplaintCategories:
- * chi gioi han khi TAT CA cac role dang active cua user deu da duoc admin
- * "chot" danh sach allowedRequestTypes; nhieu role bi gioi han thi hop (union).
- */
-export async function getUserAllowedRequestTypes(
-    user: IUser,
-): Promise<string[] | null> {
-    if (user.roles.includes("admin")) return null;
-
-    const roleDocs = await RoleModel.find({
-        key: { $in: user.roles },
-        active: true,
-    });
-    if (roleDocs.length === 0) return null;
-
-    const hasUnrestrictedRole = roleDocs.some(
-        r => r.allowedRequestTypes === undefined,
-    );
-    if (hasUnrestrictedRole) return null;
-
-    const allowed = new Set<string>();
-    for (const role of roleDocs) {
-        for (const type of role.allowedRequestTypes || []) {
-            allowed.add(type);
-        }
-    }
-    return [...allowed];
-}
-
-/**
  * Tra ve danh sach DashboardMetricKey (xem types/index.ts) ma user duoc phep
  * xem tren dashboard, hoac null neu khong gioi han (giu nguyen bo so lieu co
  * dinh theo audience nhu truoc day - xem dashboardService.ts). Cung quy uoc
- * voi getUserAllowedComplaintCategories/getUserAllowedRequestTypes: chi gioi
- * han khi TAT CA cac role dang active cua user deu da duoc admin "chot" danh
- * sach dashboardMetrics; nhieu role bi gioi han thi hop (union).
+ * voi getUserAllowedComplaintCategories: chi gioi han khi TAT CA cac role
+ * dang active cua user deu da duoc admin "chot" danh sach dashboardMetrics;
+ * nhieu role bi gioi han thi hop (union).
  */
 export async function getUserAllowedDashboardMetrics(
     user: IUser,

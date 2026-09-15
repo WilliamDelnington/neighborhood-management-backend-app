@@ -133,12 +133,6 @@ export async function updateRole(
                 ? undefined
                 : input.allowedComplaintCategories;
     }
-    if (input.allowedRequestTypes !== undefined) {
-        role.allowedRequestTypes =
-            input.allowedRequestTypes === null
-                ? undefined
-                : input.allowedRequestTypes;
-    }
     if (input.dashboardMetrics !== undefined) {
         role.dashboardMetrics =
             input.dashboardMetrics === null ? undefined : input.dashboardMetrics;

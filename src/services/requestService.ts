@@ -21,7 +21,6 @@ import { HttpError } from "@/lib/response";
 import {
     areaScopeFilter,
     getRoleKeysWithPermission,
-    getUserAllowedRequestTypes,
     userHasPermission,
 } from "@/lib/rbac";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
@@ -406,13 +405,6 @@ export async function createRequest(
         !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
     ) {
         throw new HttpError("Vai trò của bạn không được gửi loại nhiệm vụ này", 403);
-    }
-    const allowedTypes = await getUserAllowedRequestTypes(actorUser);
-    if (allowedTypes !== null && !allowedTypes.includes(input.type)) {
-        throw new HttpError(
-            `Bạn không được phép gửi yêu cầu loại "${requestTypeLabel(input.type, definition)}"`,
-            403,
-        );
     }
 
     const recipientIds = await resolveRecipientIds(
@@ -1453,11 +1445,8 @@ export async function updateRequestFormData(
 }
 
 export async function getRequestMeta(actorUser: IUser) {
-    const allowedTypes = await getUserAllowedRequestTypes(actorUser);
     const availableDefinitions = await getAvailableRequestTypes(actorUser);
-    const types = availableDefinitions
-        .map(type => type.key)
-        .filter(type => allowedTypes === null || allowedTypes.includes(type));
+    const types = availableDefinitions.map(type => type.key);
 
     // Moi type gio deu la mot RequestTypeDefinition that (ke ca 4 loai "he
     // thong" cu - xem RequestTypeDefinition.isBuiltIn), nen allowedReceiverRoles

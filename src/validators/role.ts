@@ -14,13 +14,9 @@ const permissionsField = z
 
 // Truoc la z.array(z.enum(NHOM_PHAN_ANH)) (danh sach tinh) - nay category la
 // key cua ComplaintTypeDefinition (danh muc quan tri duoc, co the la danh
-// muc tuy chinh do admin tao sau nay), nen chuyen sang permissive regex-string
-// cung quy uoc voi requestTypesField ben duoi.
+// muc tuy chinh do admin tao sau nay), nen chuyen sang permissive regex-string.
 const complaintCategoriesField = z.array(
     z.string().regex(/^[a-z][a-z0-9_]*$/, "Nhóm phản ánh không hợp lệ"),
-);
-const requestTypesField = z.array(
-    z.string().regex(/^[a-z][a-z0-9_]*$/, "Loại yêu cầu không hợp lệ"),
 );
 // Khac 2 truong tren: danh muc so lieu dashboard la CO DINH (khong co collection
 // quan tri duoc tuong ung nhu ComplaintTypeDefinition/RequestTypeDefinition),
@@ -59,8 +55,6 @@ export const createRoleSchema = z.object({
     permissions: permissionsField,
     // Bo trong = khong gioi han (xem tat ca nhom phan anh).
     allowedComplaintCategories: complaintCategoriesField.optional(),
-    // Bo trong = khong gioi han (gui duoc tat ca loai yeu cau).
-    allowedRequestTypes: requestTypesField.optional(),
     // Bo trong = khong gioi han (giu nguyen bo so lieu dashboard co dinh theo
     // audience nhu truoc day - xem dashboardService.ts).
     dashboardMetrics: dashboardMetricsField.optional(),
@@ -79,7 +73,6 @@ export const updateRoleSchema = z.object({
     permissions: permissionsField.optional(),
     // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
     allowedComplaintCategories: complaintCategoriesField.nullable().optional(),
-    allowedRequestTypes: requestTypesField.nullable().optional(),
     dashboardMetrics: dashboardMetricsField.nullable().optional(),
     // undefined = khong doi, mang (ke ca rong) = thay the toan bo danh sach -
     // khong co gia tri null o day (xem ghi chu creatableRolesField).

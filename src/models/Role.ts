@@ -36,8 +36,7 @@ export interface IRole extends Document {
     description?: string;
     permissions: string[];
     allowedComplaintCategories?: string[];
-    allowedRequestTypes?: string[];
-    // Cung quy uoc voi 2 truong tren: undefined = khong gioi han (giu nguyen
+    // Cung quy uoc voi truong tren: undefined = khong gioi han (giu nguyen
     // bo so lieu dashboard co dinh theo audience nhu truoc day - xem
     // dashboardService.ts), mot mang cu the = CHI hien dung nhung so lieu do
     // (DASHBOARD_METRIC_KEYS trong types/index.ts), bat ke audience/vai tro.
@@ -51,7 +50,7 @@ export interface IRole extends Document {
     // Vai tro (KHONG ke house_owner - luon mo san cho bat ky ai co
     // "users.create") ma NGUOI GIU vai tro nay duoc phep chon khi "Tạo tài
     // khoản" (xem userService.getCreatableRolesForActor). Khac
-    // allowedComplaintCategories/allowedRequestTypes: KHONG dung quy uoc
+    // allowedComplaintCategories: KHONG dung quy uoc
     // undefined = khong gioi han - default rong (khong duoc tao vai tro nao
     // ngoai house_owner) la lua chon AN TOAN vi day la quyen han nhay cam
     // (tao tai khoan voi vai tro tuy y), phai admin CHOT tung vai tro duoc
@@ -82,9 +81,6 @@ const RoleSchema = new Schema<IRole>(
         // Khong dat default [] - can phan biet "chua cau hinh" (undefined, xem
         // tat ca nhu truoc day) voi "admin da chot chi cho xem mot so nhom" ([]).
         allowedComplaintCategories: { type: [String], default: undefined },
-        // Cung quy uoc voi allowedComplaintCategories: undefined = khong gioi
-        // han loai yeu cau duoc gui, [] = admin da chot khong cho gui loai nao.
-        allowedRequestTypes: { type: [String], default: undefined },
         dashboardMetrics: { type: [String], default: undefined },
         allowedCreatableRoles: { type: [String], default: [] },
         scopeType: {
