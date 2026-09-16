@@ -4,6 +4,10 @@ import {
     POST as createHouseholdRoute,
 } from "@/app/api/households/route";
 import { GET as getHouseholdRoute } from "@/app/api/households/[id]/route";
+import {
+    POST as createCitizenRoute,
+} from "@/app/api/citizens/route";
+import { GET as getCitizenRoute } from "@/app/api/citizens/[id]/route";
 import { POST as createHouseRoute } from "@/app/api/houses/route";
 import { POST as createNeighborhoodRoute } from "@/app/api/neighborhoods/route";
 import {
@@ -141,6 +145,83 @@ describe("Neighborhood-scoped RBAC: to truong chi thay du lieu trong to dan pho 
             { params: { id: householdA._id } },
         );
         expect(getHouseholdAAsLeaderA.status).toBe(200);
+    });
+
+    // Regression: getCitizenById() populate("householdId", "...") thieu
+    // neighborhoodId khien assertCitizenInScope luon doc household.neighborhoodId
+    // la undefined va tu choi TAT CA to truong/to pho (ke ca dung to dan pho
+    // minh phu trach) - xem ghi chu o citizenService.getCitizenById.
+    it("citizens: to truong chi xem duoc nhan khau trong to dan pho duoc phan cong (GET /api/citizens/:id)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const adminHeaders = await authHeaders(admin);
+
+        const neighborhoodA = await createNeighborhood(adminHeaders, "TDP-61", 61);
+        const neighborhoodB = await createNeighborhood(adminHeaders, "TDP-62", 62);
+        const houseA = await createHouseInNeighborhood(
+            adminHeaders,
+            neighborhoodA._id,
+            "Số 3 A",
+        );
+        const houseB = await createHouseInNeighborhood(
+            adminHeaders,
+            neighborhoodB._id,
+            "Số 3 B",
+        );
+        const householdA = await createHouseholdInHouse(
+            adminHeaders,
+            houseA._id,
+            "Chủ hộ nhân khẩu A",
+        );
+        const householdB = await createHouseholdInHouse(
+            adminHeaders,
+            houseB._id,
+            "Chủ hộ nhân khẩu B",
+        );
+
+        const citizenARes = await createCitizenRoute(
+            makeRequest("/api/citizens", {
+                method: "POST",
+                headers: adminHeaders,
+                body: {
+                    fullName: "Nhân khẩu A",
+                    householdId: householdA._id,
+                },
+            }),
+        );
+        const citizenA = (await readJson(citizenARes)).data;
+        const citizenBRes = await createCitizenRoute(
+            makeRequest("/api/citizens", {
+                method: "POST",
+                headers: adminHeaders,
+                body: {
+                    fullName: "Nhân khẩu B",
+                    householdId: householdB._id,
+                },
+            }),
+        );
+        const citizenB = (await readJson(citizenBRes)).data;
+
+        const leaderA = await createTestUser({
+            roles: ["neighborhood_leader"],
+            neighborhoodId: neighborhoodA._id,
+        });
+        const leaderAHeaders = await authHeaders(leaderA);
+
+        const getCitizenAAsLeaderA = await getCitizenRoute(
+            makeRequest(`/api/citizens/${citizenA._id}`, {
+                headers: leaderAHeaders,
+            }),
+            { params: { id: citizenA._id } },
+        );
+        expect(getCitizenAAsLeaderA.status).toBe(200);
+
+        const getCitizenBAsLeaderA = await getCitizenRoute(
+            makeRequest(`/api/citizens/${citizenB._id}`, {
+                headers: leaderAHeaders,
+            }),
+            { params: { id: citizenB._id } },
+        );
+        expect(getCitizenBAsLeaderA.status).toBe(403);
     });
 
     it("complaints: to truong chi thay/xem duoc phan anh cua nguoi thuoc to dan pho cua minh", async () => {

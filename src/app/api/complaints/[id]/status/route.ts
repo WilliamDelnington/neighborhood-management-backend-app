@@ -16,7 +16,7 @@ export async function PATCH(
         await requirePermission(actorUser, "complaints.update_status");
         const body = updateComplaintStatusSchema.parse(await req.json());
         const complaint = await updateComplaintStatus(
-            String(actorUser._id),
+            actorUser,
             params.id,
             body,
         );

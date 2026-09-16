@@ -899,37 +899,65 @@ export async function getUserManagementScope(
                 roleKey: role.key,
                 unassignedAt: { $exists: false },
             });
-            if (assignments.length === 0) continue;
 
             if (role.scopeType === "NEIGHBORHOOD") {
+                // Hop nhat ScopeAssignment VOI user.neighborhoodId/
+                // assignedNeighborhoodIds (truong cache tren User, duoc
+                // rebuildUserScopeCache trong scopeAssignmentService.ts ghi
+                // lai sau moi lan assign/unassign) - day cung chinh la truong
+                // ma rbac.neighborhoodScopeFilter dung de loc du lieu THUC SU
+                // cho to truong/to pho, KHONG doc ScopeAssignment truc tiep.
+                // Tai khoan duoc gan TRUOC khi
+                // scripts/migrate-neighborhood-assignments-to-scope-assignment.ts
+                // chay (hoac du lieu seed/nhap tay cu) co the co truong cache
+                // nhung thieu ban ghi ScopeAssignment tuong ung - chi doc
+                // ScopeAssignment se hien thi sai "khong quan ly gi" cho mot
+                // to truong/to pho dang thuc su quan ly du lieu.
+                const idsFromAssignments = assignments.map(a => String(a.scopeId));
+                const idsFromUserCache = [
+                    targetUser.neighborhoodId,
+                    ...(targetUser.assignedNeighborhoodIds || []),
+                ]
+                    .filter(Boolean)
+                    .map(String);
+                const allIds = [
+                    ...new Set([...idsFromAssignments, ...idsFromUserCache]),
+                ];
+                if (allIds.length === 0) continue;
+
                 // eslint-disable-next-line no-await-in-loop
                 const neighborhoods = await Neighborhood.find({
-                    _id: { $in: assignments.map(a => a.scopeId) },
+                    _id: { $in: allIds },
                 }).select("name code");
-                const nameById = new Map(
-                    neighborhoods.map(n => [String(n._id), `${n.name} (${n.code})`]),
-                );
                 entries.push({
                     roleKey: role.key,
                     scopeType: role.scopeType,
                     unrestricted: false,
-                    items: assignments.map(a => ({
-                        id: String(a._id),
-                        label: nameById.get(String(a.scopeId)) || String(a.scopeId),
+                    items: neighborhoods.map(n => ({
+                        id: String(n._id),
+                        label: `${n.name} (${n.code})`,
                     })),
                 });
             } else {
-                // WARD - chi co ma phuong/xa (Mixed scopeId la so), khong co
-                // model Ward rieng de tra ten - dung wardName da cache tren
-                // chinh User (xem targetUser.wardName) lam nhan hien thi.
+                // WARD - cung ly do voi nhanh NEIGHBORHOOD o tren: uu tien
+                // targetUser.wardCode (truong cache rbac.wardScopeFilter thuc
+                // su dung), chi roi ve ScopeAssignment neu truong cache trong
+                // (chua duoc backfill). Khong co model Ward rieng de tra ten -
+                // dung wardName da cache tren chinh User lam nhan hien thi.
+                const wardCode = targetUser.wardCode ?? assignments[0]?.scopeId;
+                if (wardCode === undefined) continue;
                 entries.push({
                     roleKey: role.key,
                     scopeType: role.scopeType,
                     unrestricted: false,
-                    items: assignments.map(a => ({
-                        id: String(a._id),
-                        label: targetUser.wardName || `Phường/Xã mã ${a.scopeId}`,
-                    })),
+                    items: [
+                        {
+                            id: String(wardCode),
+                            label:
+                                targetUser.wardName ||
+                                `Phường/Xã mã ${wardCode}`,
+                        },
+                    ],
                 });
             }
             continue;

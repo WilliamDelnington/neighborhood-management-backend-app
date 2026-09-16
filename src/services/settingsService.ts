@@ -10,6 +10,11 @@ const APP_LOGO_SETTING_KEY = "app_logo_url";
 // xem DocumentMeta.tsx o admin web app.
 const APP_TAB_TITLE_SETTING_KEY = "app_tab_title";
 const APP_FAVICON_SETTING_KEY = "app_favicon_url";
+// Anh banner/logo rieng cho app "Cong thong tin dien tu" (announcement-gate,
+// mot frontend cong khai khac voi resident-web-app/admin-web-app) - dat ten
+// key rieng de khong dung chung/de bi ghi de boi app_logo_url cua 2 app kia.
+const ANNOUNCEMENT_GATE_BILLBOARD_SETTING_KEY = "announcement_gate_billboard_url";
+const ANNOUNCEMENT_GATE_LOGO_SETTING_KEY = "announcement_gate_logo_url";
 
 // Danh sach key duoc phep hien thi cong khai cho nguoi dan (khong can dang nhap).
 // Tuyet doi khong tra ve toan bo Setting cho client khong xac thuc vi co the
@@ -32,6 +37,10 @@ const PUBLIC_SETTING_KEYS = [
     // la chuoi hien thi/duong dan anh.
     APP_TAB_TITLE_SETTING_KEY,
     APP_FAVICON_SETTING_KEY,
+    // Anh banner/logo cua trang Cong thong tin dien tu - cung chi la duong dan
+    // anh, an toan cong khai vi chinh trang do doc key nay khi khong dang nhap.
+    ANNOUNCEMENT_GATE_BILLBOARD_SETTING_KEY,
+    ANNOUNCEMENT_GATE_LOGO_SETTING_KEY,
     // Mo ta tuy chinh cho tung muc menu sidebar (de admin sua qua UI thay vi
     // sua code) - xem constants/modules.ts (mac dinh) va man Cai dat o admin
     // web app. Chi la chuoi mo ta hien thi, khong nhay cam nen an toan cong
@@ -100,6 +109,9 @@ const ALLOWED_LOGO_EXTENSIONS = [".jpg", ".jpeg", ".png", ".svg", ".webp"];
 
 const MAX_FAVICON_SIZE_BYTES = 1 * 1024 * 1024;
 const ALLOWED_FAVICON_EXTENSIONS = [".ico", ".png", ".svg", ".webp"];
+
+const MAX_BILLBOARD_SIZE_BYTES = 4 * 1024 * 1024;
+const ALLOWED_BILLBOARD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 
 // Logo va favicon deu la "anh thay the mac dinh, luu qua 1 Setting key, xoa
 // file cu khi doi/xoa" - gom chung logic o day de them anh cau hinh tuong tu
@@ -173,4 +185,30 @@ export async function uploadAppFavicon(actorId: string, file: File) {
 
 export async function removeAppFavicon(actorId: string) {
     return removeImageSetting(actorId, APP_FAVICON_SETTING_KEY);
+}
+
+export async function uploadAnnouncementGateBillboard(actorId: string, file: File) {
+    return uploadImageSetting(actorId, file, {
+        settingKey: ANNOUNCEMENT_GATE_BILLBOARD_SETTING_KEY,
+        maxSizeBytes: MAX_BILLBOARD_SIZE_BYTES,
+        allowedExtensions: ALLOWED_BILLBOARD_EXTENSIONS,
+        sizeErrorMessage: "File vượt quá dung lượng cho phép (tối đa 4MB)",
+    });
+}
+
+export async function removeAnnouncementGateBillboard(actorId: string) {
+    return removeImageSetting(actorId, ANNOUNCEMENT_GATE_BILLBOARD_SETTING_KEY);
+}
+
+export async function uploadAnnouncementGateLogo(actorId: string, file: File) {
+    return uploadImageSetting(actorId, file, {
+        settingKey: ANNOUNCEMENT_GATE_LOGO_SETTING_KEY,
+        maxSizeBytes: MAX_LOGO_SIZE_BYTES,
+        allowedExtensions: ALLOWED_LOGO_EXTENSIONS,
+        sizeErrorMessage: "File vượt quá dung lượng cho phép (tối đa 2MB)",
+    });
+}
+
+export async function removeAnnouncementGateLogo(actorId: string) {
+    return removeImageSetting(actorId, ANNOUNCEMENT_GATE_LOGO_SETTING_KEY);
 }
