@@ -267,9 +267,15 @@ export async function listCitizens(params: {
 }
 
 export async function getCitizenById(id: string): Promise<ICitizen> {
+    // neighborhoodId PHAI co trong select - assertCitizenInScope (o route)
+    // dung truc tiep object populate nay lam resolvedHousehold (khong fetch
+    // lai) de kiem tra pham vi to truong/to pho qua household.neighborhoodId;
+    // thieu truong nay se khien household.neighborhoodId luon undefined va
+    // to truong/to pho bi tu choi truy cap MOI nhan khau, ke ca thuoc dung to
+    // dan pho minh phu trach.
     const citizen = await Citizen.findById(id).populate(
         "householdId",
-        "code address cluster houseId",
+        "code address cluster houseId neighborhoodId",
     );
     if (!citizen) throw new HttpError("Không tìm thấy nhân khẩu", 404);
     return citizen;
