@@ -229,6 +229,7 @@ export async function updateOwnProfile(
     if (!user) throw new Error("Khong tim thay tai khoan");
     if (input.email !== undefined) user.email = input.email;
     if (input.address !== undefined) user.address = input.address;
+    if (input.idNumber !== undefined) user.idNumber = input.idNumber;
     if (input.notificationPermission !== undefined) {
         user.notificationPermission = input.notificationPermission;
     }

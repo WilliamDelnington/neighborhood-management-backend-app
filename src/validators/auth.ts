@@ -29,9 +29,13 @@ export type ZaloLoginInput = z.infer<typeof zaloLoginSchema>;
 // day la thong tin dang nhap (xem phoneLoginSchema), doi truc tiep khong xac
 // thuc la mot lo hong - phai di qua changePhoneSchema/changeOwnPhone (xac
 // thuc lai qua Zalo getPhoneNumber, xem app/api/auth/change-phone).
+// idNumber KHONG nam trong CHANGE_REQUEST_EDITABLE_FIELDS.User (chi
+// "displayName" - xem changeRequestService.ts) nen duoc phep tu sua truc tiep
+// o day, khac voi displayName o tren.
 export const updateProfileSchema = z.object({
     email: z.string().email("Email không hợp lệ").optional(),
     address: z.string().optional(),
+    idNumber: z.string().optional(),
     householdId: z.string().optional(),
     notificationPermission: z.boolean().optional(),
 });
