@@ -267,6 +267,29 @@ export function assertComplaintInScope(
     }
 }
 
+/**
+ * Nem HttpError(403) neu actor CHINH LA nguoi da gui phan anh nay - khong
+ * duoc tu tiep nhan/chon nguoi phu trach/doi trang thai phan anh cua chinh
+ * minh. Quan trong nhat voi To truong/To pho gui de xuat len Phuong (xem
+ * to_de_xuat_len_phuong o seed-complaint-types.ts): ho co du quyen
+ * complaints.assign/complaints.update_status (de xu ly phan anh CUA CU DAN
+ * trong to minh), nhung tu "Tiep nhan"/doi trang thai chinh de xuat ho vua
+ * gui len cap tren se lam mat y nghia cua viec chuyen tiep (Phuong khong con
+ * biet ma xu ly). Admin luon duoc bo qua, giong moi ham assert khac.
+ */
+function assertNotComplaintCreator(
+    actorUser: IUser,
+    complaint: IComplaint,
+): void {
+    if (actorUser.roles.includes("admin")) return;
+    if (String(complaint.createdByUserId) === String(actorUser._id)) {
+        throw new HttpError(
+            "Bạn là người gửi phản ánh này, không thể tự tiếp nhận/xử lý",
+            403,
+        );
+    }
+}
+
 // Danh sach NHOM_PHAN_ANH cu (hardcode) - chi con dung lam fallback trong
 // assertValidComplaintCategory ben duoi, cho giai doan migrate TRUOC khi chay
 // scripts/seed-complaint-types.ts (luc do MOI category deu chua co
@@ -799,12 +822,20 @@ export async function getComplaintByCode(code: string) {
 }
 
 export async function updateComplaintStatus(
-    actorId: string,
+    actorUser: IUser,
     complaintId: string,
     input: UpdateComplaintStatusInput,
 ): Promise<IComplaint> {
+    const actorId = String(actorUser._id);
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
+
+    // Truoc day ham nay KHONG kiem tra pham vi/nguoi gui gi ca - bat ky ai co
+    // complaints.update_status deu doi duoc trang thai CUA BAT KY phan anh
+    // nao trong toan he thong. Them 2 kiem tra nay giong het cac ham xu ly
+    // khac (receiveComplaint/choosePersonInCharge/assignComplaint).
+    assertComplaintInScope(actorUser, complaint, false);
+    assertNotComplaintCreator(actorUser, complaint);
 
     // "hoan_thanh" la nguoi gui phan anh TU XAC NHAN hai long - nhan vien
     // khong duoc dat trang thai nay thay ho, xem confirmComplaintResolution.
@@ -1077,6 +1108,7 @@ export async function assignComplaint(
     if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
 
     assertComplaintInScope(actorUser, complaint, false);
+    assertNotComplaintCreator(actorUser, complaint);
     const wasAssigned = !!complaint.assigneeId;
     if (wasAssigned && !input.transferReason?.trim()) {
         throw new HttpError("Phải nhập lý do khi chuyển người phụ trách", 422);
@@ -1268,6 +1300,7 @@ export async function receiveComplaint(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
+    assertNotComplaintCreator(actorUser, complaint);
     if (!(await canReceiveOrChooseAssignee(complaint))) {
         throw new HttpError(
             "Phản ánh đã kết thúc hoặc đang có yêu cầu xử lý còn hiệu lực, không thể tiếp nhận",
@@ -1328,6 +1361,7 @@ export async function choosePersonInCharge(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
+    assertNotComplaintCreator(actorUser, complaint);
     if (!(await canReceiveOrChooseAssignee(complaint))) {
         throw new HttpError(
             "Phản ánh đã kết thúc hoặc đang có yêu cầu xử lý còn hiệu lực, không thể chọn người phụ trách",
@@ -1404,6 +1438,7 @@ export async function requestComplaintInfo(
     const complaint = await Complaint.findById(complaintId);
     if (!complaint) throw new HttpError("Không tìm thấy phản ánh", 404);
     assertComplaintInScope(actorUser, complaint, false);
+    assertNotComplaintCreator(actorUser, complaint);
     if (complaint.status !== "moi_tiep_nhan") {
         throw new HttpError("Phản ánh không ở trạng thái mới tiếp nhận", 409);
     }
