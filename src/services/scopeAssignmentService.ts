@@ -135,55 +135,6 @@ export async function assignScope(
 
     const now = new Date();
 
-    // Truc 1: gioi han so nguoi active tren CUNG mot pham vi (vd 1 To truong/1
-    // Bi thu cho 1 To dan pho/Phuong). maxActivePerScope=1 duoc phep "thay the"
-    // tu dong (dong ban ghi cu, KHONG xoa - giu lich su) - hanh vi nay duoc
-    // xac nhan giong quy uoc To truong hien tai. Cac gia tri >1 (chua dung
-    // thuc te, du phong cho tuong lai) bi tu choi thay vi tu dong thay, vi
-    // chua co quy uoc UI/UX ro rang cho truong hop do.
-    if (role.maxActivePerScope != null) {
-        const holders = await ScopeAssignment.find({
-            roleKey: input.roleKey,
-            scopeType: input.scopeType,
-            scopeId: input.scopeId,
-            unassignedAt: { $exists: false },
-        });
-        if (holders.length >= role.maxActivePerScope) {
-            if (role.maxActivePerScope === 1) {
-                await ScopeAssignment.updateMany(
-                    { _id: { $in: holders.map(h => h._id) } },
-                    { unassignedAt: now, unassignedBy: actorId },
-                );
-                await Promise.all(
-                    holders.map(h => rebuildUserScopeCache(String(h.userId))),
-                );
-            } else {
-                throw new HttpError(
-                    `Phạm vi này đã đạt số lượng "${role.name}" tối đa cho phép (${role.maxActivePerScope})`,
-                    422,
-                );
-            }
-        }
-    }
-
-    // Truc 2: gioi han so pham vi MA MOT NGUOI duoc active cung luc voi vai
-    // tro nay (vd 1 nguoi chi duoc active To pho o DUY NHAT 1 To dan pho).
-    // Doc lap voi truc 1 o tren - xem ghi chu maxActiveScopesPerUser o Role.ts.
-    if (role.maxActiveScopesPerUser != null) {
-        const otherScopes = await ScopeAssignment.countDocuments({
-            userId: input.userId,
-            roleKey: input.roleKey,
-            unassignedAt: { $exists: false },
-            scopeId: { $ne: input.scopeId },
-        });
-        if (otherScopes >= role.maxActiveScopesPerUser) {
-            throw new HttpError(
-                `Tài khoản này đã giữ vai trò "${role.name}" ở phạm vi khác - phải gỡ phân công đó trước`,
-                422,
-            );
-        }
-    }
-
     const created = await ScopeAssignment.create({
         userId: input.userId,
         roleKey: input.roleKey,

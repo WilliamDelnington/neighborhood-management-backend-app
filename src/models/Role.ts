@@ -36,32 +36,21 @@ export interface IRole extends Document {
     description?: string;
     permissions: string[];
     allowedComplaintCategories?: string[];
-    allowedRequestTypes?: string[];
-    // Cung quy uoc voi 2 truong tren: undefined = khong gioi han (giu nguyen
+    // Cung quy uoc voi truong tren: undefined = khong gioi han (giu nguyen
     // bo so lieu dashboard co dinh theo audience nhu truoc day - xem
     // dashboardService.ts), mot mang cu the = CHI hien dung nhung so lieu do
     // (DASHBOARD_METRIC_KEYS trong types/index.ts), bat ke audience/vai tro.
     dashboardMetrics?: string[];
     scopeType: AccessScopeTier;
     scopeMechanism?: ScopeAssignmentMechanism;
-    // Chi co y nghia khi scopeMechanism === "ASSIGNED". 1 = chi 1 nguoi duoc
-    // active tai 1 pham vi (vd To truong/Bi thu). null/undefined = khong gioi
-    // han so nguoi active tai cung 1 pham vi (vd To pho/Cong tac vien/Can bo
-    // UBND/Cong an khu vuc).
-    maxActivePerScope?: number | null;
-    // Truc doc lap voi maxActivePerScope: gioi han so pham vi MA MOT NGUOI
-    // duoc active cung luc voi vai tro nay (vd To pho: khong gioi han so To
-    // pho/To dan pho, nhung 1 nguoi chi duoc active To pho o DUY NHAT 1 To dan
-    // pho cung luc - xem NeighborhoodColeaderAssignment.ts).
-    maxActiveScopesPerUser?: number | null;
-    // Chi co y nghia voi vai tro dang "Cong tac vien" (scopeMechanism=ASSIGNED,
-    // maxActivePerScope=null): cac kieu pham vi con (hep hon NEIGHBORHOOD) ma
-    // vai tro nay duoc phep chon khi gan - xem NEIGHBORHOOD_COLLABORATOR_SCOPES.
+    // Chi co y nghia voi vai tro dang "Cong tac vien" (scopeMechanism=ASSIGNED):
+    // cac kieu pham vi con (hep hon NEIGHBORHOOD) ma vai tro nay duoc phep chon
+    // khi gan - xem NEIGHBORHOOD_COLLABORATOR_SCOPES.
     subScopeKinds?: (typeof NEIGHBORHOOD_COLLABORATOR_SCOPES)[number][];
     // Vai tro (KHONG ke house_owner - luon mo san cho bat ky ai co
     // "users.create") ma NGUOI GIU vai tro nay duoc phep chon khi "Tạo tài
     // khoản" (xem userService.getCreatableRolesForActor). Khac
-    // allowedComplaintCategories/allowedRequestTypes: KHONG dung quy uoc
+    // allowedComplaintCategories: KHONG dung quy uoc
     // undefined = khong gioi han - default rong (khong duoc tao vai tro nao
     // ngoai house_owner) la lua chon AN TOAN vi day la quyen han nhay cam
     // (tao tai khoan voi vai tro tuy y), phai admin CHOT tung vai tro duoc
@@ -92,9 +81,6 @@ const RoleSchema = new Schema<IRole>(
         // Khong dat default [] - can phan biet "chua cau hinh" (undefined, xem
         // tat ca nhu truoc day) voi "admin da chot chi cho xem mot so nhom" ([]).
         allowedComplaintCategories: { type: [String], default: undefined },
-        // Cung quy uoc voi allowedComplaintCategories: undefined = khong gioi
-        // han loai yeu cau duoc gui, [] = admin da chot khong cho gui loai nao.
-        allowedRequestTypes: { type: [String], default: undefined },
         dashboardMetrics: { type: [String], default: undefined },
         allowedCreatableRoles: { type: [String], default: [] },
         scopeType: {
@@ -107,8 +93,6 @@ const RoleSchema = new Schema<IRole>(
             type: String,
             enum: SCOPE_ASSIGNMENT_MECHANISMS,
         },
-        maxActivePerScope: { type: Number, default: null },
-        maxActiveScopesPerUser: { type: Number, default: null },
         subScopeKinds: {
             type: [String],
             enum: NEIGHBORHOOD_COLLABORATOR_SCOPES,
@@ -126,14 +110,12 @@ const RoleSchema = new Schema<IRole>(
 RoleSchema.index({ active: 1, sortOrder: 1, name: 1 });
 
 // Rang buoc giua cac truong scope - khong the bieu dien bang enum/required don
-// thuan vi phu thuoc lan nhau (vd maxActivePerScope chi hop le khi
-// scopeMechanism="ASSIGNED").
+// thuan vi phu thuoc lan nhau (vd subScopeKinds chi hop le khi
+// scopeType="NEIGHBORHOOD").
 RoleSchema.pre("validate", function (next) {
     const role = this as unknown as IRole;
     if (role.scopeType === "ALL") {
         role.scopeMechanism = undefined;
-        role.maxActivePerScope = null;
-        role.maxActiveScopesPerUser = null;
         role.subScopeKinds = undefined;
         return next();
     }
@@ -145,8 +127,6 @@ RoleSchema.pre("validate", function (next) {
         );
     }
     if (role.scopeMechanism === "OWNED") {
-        role.maxActivePerScope = null;
-        role.maxActiveScopesPerUser = null;
         role.subScopeKinds = undefined;
     }
     // subScopeKinds chi co y nghia voi vai tro dang "Cong tac vien" (scopeType=
@@ -155,6 +135,15 @@ RoleSchema.pre("validate", function (next) {
     // rieng o day (ngoai nhanh OWNED o tren) de doi tu NEIGHBORHOOD sang WARD
     // khong con giu lai gia tri "con sot" tu luc con la NEIGHBORHOOD.
     if (role.scopeType !== "NEIGHBORHOOD") {
+        role.subScopeKinds = undefined;
+    }
+    // [] (mang rong) va undefined phai dong nghia "khong gioi han pham vi con"
+    // (xem rbac.areaScopeFilter) - chuan hoa ve undefined ngay tu day de tranh
+    // luu nham [] (vd To truong/Bi thu duoc luu qua man Quan ly vai tro, UI
+    // hien checkbox subScopeKinds cho moi vai tro scopeType=NEIGHBORHOOD chu
+    // khong rieng Cong tac vien) khien rbac hieu nham la vai tro hep pham vi va
+    // tra ve rong cho ca To truong/Bi thu.
+    if (role.subScopeKinds && role.subScopeKinds.length === 0) {
         role.subScopeKinds = undefined;
     }
     return next();

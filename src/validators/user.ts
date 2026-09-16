@@ -85,6 +85,11 @@ export const updateUserSchema = z
         statusReason: z.string().optional(),
         householdId: z.string().nullable().optional(),
         citizenId: z.string().nullable().optional(),
+        // Truoc day chi dat duoc luc tao tai khoan (createHouseOwnerSchema/
+        // createOwnerManagedAccountSchema) - nay cho sua lai qua trang chi
+        // tiet nguoi dung (UserDetailPage.tsx).
+        idNumber: z.string().optional(),
+        address: z.string().optional(),
         assignedClusters: z.array(z.string()).optional(),
         // Vai tro la du lieu dong - tinh hop le (ton tai, active) duoc kiem tra
         // trong updateUserByAdmin, khong con the kiem bang z.enum tinh.

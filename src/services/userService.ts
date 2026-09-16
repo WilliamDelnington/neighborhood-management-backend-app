@@ -1,16 +1,20 @@
 import {
     Business,
     Company,
+    FileAsset,
     Household,
     HouseRecord,
+    Neighborhood,
     Role as RoleModel,
     RoleAssignment,
+    ScopeAssignment,
     User,
     type IUser,
 } from "@/models";
 import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
 import { hashPassword } from "@/lib/auth";
+import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
 import {
@@ -686,6 +690,10 @@ export async function updateUserByAdmin(
     if (patch.citizenId !== undefined) {
         user.citizenId = (patch.citizenId as any) || undefined;
     }
+    // idNumber duoc ma hoa boi hook pre("save") san co tren model (giong luc
+    // tao tai khoan) - chi can gan gia tri tho o day.
+    if (patch.idNumber !== undefined) user.idNumber = patch.idNumber;
+    if (patch.address !== undefined) user.address = patch.address;
     if (patch.assignedClusters !== undefined)
         user.assignedClusters = patch.assignedClusters;
     if (patch.provinceCode !== undefined)
@@ -727,6 +735,260 @@ export async function updateUserByAdmin(
     });
 
     return await sanitizeUser(user);
+}
+
+const MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_AVATAR_EXTENSIONS = [".jpg", ".jpeg", ".png"];
+
+/**
+ * Tai len/thay anh dai dien - cung khuon mau voi newsService.uploadNewsImage
+ * (upload truc tiep tu admin-web-app, KHAC co che token cua
+ * /api/uploads/attachments danh cho client Zalo).
+ */
+export async function uploadUserAvatar(
+    actorId: string,
+    targetId: string,
+    file: File,
+) {
+    const user = await User.findById(targetId);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
+
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+        throw new HttpError("File vượt quá dung lượng cho phép (tối đa 10MB)", 400);
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Định dạng ảnh không được hỗ trợ (chỉ chấp nhận ${ALLOWED_AVATAR_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(buffer, file.name, `users/${targetId}`);
+
+    const oldAvatar = user.avatarUrl;
+    user.avatarUrl = url;
+    user.updatedBy = actorId as any;
+    await user.save();
+    if (oldAvatar) await deleteUploadedFile(oldAvatar);
+
+    await writeAuditLog({
+        actorId,
+        action: "user.avatar.upload",
+        targetModel: "User",
+        targetId,
+        metadata: { url },
+    });
+
+    return await sanitizeUser(user);
+}
+
+const MAX_USER_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_USER_ATTACHMENT_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".doc",
+    ".docx",
+];
+
+/**
+ * Tai len tai lieu dinh kem cho ho so nguoi dung - dau tien trong app nay
+ * duoc thuc hien TRUC TIEP tu admin-web-app (cac module khac - Nha so/Ho kinh
+ * doanh/... - chi cho tai len tu client Zalo qua /api/uploads/attachments, xem
+ * ghi chu o route do). Danh sach/xoa van dung chung attachmentService.ts.
+ */
+export async function uploadUserAttachment(
+    actorId: string,
+    targetId: string,
+    file: File,
+) {
+    const user = await User.findById(targetId);
+    if (!user) throw new HttpError("Không tìm thấy người dùng", 404);
+
+    if (file.size > MAX_USER_ATTACHMENT_SIZE_BYTES) {
+        throw new HttpError("File vượt quá dung lượng cho phép (tối đa 10MB)", 400);
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_USER_ATTACHMENT_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Định dạng file không được hỗ trợ (chỉ chấp nhận ${ALLOWED_USER_ATTACHMENT_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(
+        buffer,
+        file.name,
+        `users/${targetId}/documents`,
+    );
+
+    const fileAsset = await FileAsset.create({
+        name: file.name,
+        url,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        category: "attachment",
+        relatedModel: "User",
+        relatedId: targetId,
+        isPublic: false,
+        audienceAll: false,
+        targetRoles: [],
+        uploadedBy: actorId,
+    });
+
+    await writeAuditLog({
+        actorId,
+        action: "attachment.upload",
+        targetModel: "User",
+        targetId,
+        metadata: { fileAssetId: fileAsset._id, name: file.name },
+    });
+
+    return fileAsset;
+}
+
+export type UserManagementScopeItem = {
+    id: string;
+    label: string;
+};
+
+export type UserManagementScopeEntry = {
+    roleKey: string;
+    scopeType: string;
+    /** true neu vai tro nay khong gioi han pham vi (vd admin) - items luon rong. */
+    unrestricted: boolean;
+    items: UserManagementScopeItem[];
+};
+
+/**
+ * "Phạm vi quản lý" cua mot nguoi dung - doc Role.scopeType/scopeMechanism
+ * cua TUNG vai tro dang giu (xem models/Role.ts) roi tra ve du lieu cu the
+ * tuong ung: ScopeAssignment cho vai tro ASSIGNED (WARD/NEIGHBORHOOD), truy
+ * van truc tiep theo truong so huu cho vai tro OWNED (HOUSE/HOUSEHOLD/
+ * BUSINESS/COMPANY), khong truy van gi cho ALL (admin).
+ */
+export async function getUserManagementScope(
+    targetUser: IUser,
+): Promise<UserManagementScopeEntry[]> {
+    const roleDocs = await RoleModel.find({
+        key: { $in: targetUser.roles },
+        active: true,
+    });
+
+    const entries: UserManagementScopeEntry[] = [];
+
+    for (const role of roleDocs) {
+        if (role.scopeType === "ALL") {
+            entries.push({
+                roleKey: role.key,
+                scopeType: "ALL",
+                unrestricted: true,
+                items: [],
+            });
+            continue;
+        }
+
+        if (role.scopeMechanism === "ASSIGNED") {
+            // eslint-disable-next-line no-await-in-loop
+            const assignments = await ScopeAssignment.find({
+                userId: targetUser._id,
+                roleKey: role.key,
+                unassignedAt: { $exists: false },
+            });
+            if (assignments.length === 0) continue;
+
+            if (role.scopeType === "NEIGHBORHOOD") {
+                // eslint-disable-next-line no-await-in-loop
+                const neighborhoods = await Neighborhood.find({
+                    _id: { $in: assignments.map(a => a.scopeId) },
+                }).select("name code");
+                const nameById = new Map(
+                    neighborhoods.map(n => [String(n._id), `${n.name} (${n.code})`]),
+                );
+                entries.push({
+                    roleKey: role.key,
+                    scopeType: role.scopeType,
+                    unrestricted: false,
+                    items: assignments.map(a => ({
+                        id: String(a._id),
+                        label: nameById.get(String(a.scopeId)) || String(a.scopeId),
+                    })),
+                });
+            } else {
+                // WARD - chi co ma phuong/xa (Mixed scopeId la so), khong co
+                // model Ward rieng de tra ten - dung wardName da cache tren
+                // chinh User (xem targetUser.wardName) lam nhan hien thi.
+                entries.push({
+                    roleKey: role.key,
+                    scopeType: role.scopeType,
+                    unrestricted: false,
+                    items: assignments.map(a => ({
+                        id: String(a._id),
+                        label: targetUser.wardName || `Phường/Xã mã ${a.scopeId}`,
+                    })),
+                });
+            }
+            continue;
+        }
+
+        if (role.scopeMechanism === "OWNED") {
+            let items: UserManagementScopeItem[] = [];
+            if (role.scopeType === "HOUSE") {
+                // eslint-disable-next-line no-await-in-loop
+                const houseIds = await getHouseIdsForActingOwner(targetUser._id);
+                if (houseIds.length > 0) {
+                    // eslint-disable-next-line no-await-in-loop
+                    const houses = await HouseRecord.find({
+                        _id: { $in: houseIds },
+                    }).select("code address");
+                    items = houses.map(h => ({
+                        id: String(h._id),
+                        label: `${h.code} — ${h.address}`,
+                    }));
+                }
+            } else if (role.scopeType === "HOUSEHOLD") {
+                // eslint-disable-next-line no-await-in-loop
+                const households = await Household.find({
+                    headOfHouseholdUserId: targetUser._id,
+                }).select("code");
+                items = households.map(h => ({
+                    id: String(h._id),
+                    label: h.code,
+                }));
+            } else if (role.scopeType === "BUSINESS") {
+                // eslint-disable-next-line no-await-in-loop
+                const businesses = await Business.find({
+                    representativeUserId: targetUser._id,
+                }).select("name");
+                items = businesses.map(b => ({
+                    id: String(b._id),
+                    label: b.name,
+                }));
+            } else if (role.scopeType === "COMPANY") {
+                // eslint-disable-next-line no-await-in-loop
+                const companies = await Company.find({
+                    representativeUserId: targetUser._id,
+                }).select("name");
+                items = companies.map(c => ({
+                    id: String(c._id),
+                    label: c.name,
+                }));
+            }
+            if (items.length === 0) continue;
+            entries.push({
+                roleKey: role.key,
+                scopeType: role.scopeType,
+                unrestricted: false,
+                items,
+            });
+        }
+    }
+
+    return entries;
 }
 
 export async function assignRole(actorId: string, input: AssignRoleInput) {

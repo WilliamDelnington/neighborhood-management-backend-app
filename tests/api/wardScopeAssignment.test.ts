@@ -11,7 +11,7 @@ import { authHeaders, createTestUser, makeRequest, readJson } from "../helpers";
 const WARD_CODE = 88123;
 
 describe("Config-driven ward scope assignment", () => {
-    it("mot phuong chi co 1 Bi thu active - gan nguoi moi tu dong thay the nguoi cu (van giu lich su)", async () => {
+    it("mot phuong duoc phep co nhieu Bi thu active cung luc (khong con gioi han so nguoi/pham vi)", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const headers = await authHeaders(admin);
         const secretaryA = await createTestUser({ roles: ["secretary"] });
@@ -51,19 +51,7 @@ describe("Config-driven ward scope assignment", () => {
             scopeId: WARD_CODE,
             unassignedAt: { $exists: false },
         });
-        expect(activeRows).toHaveLength(1);
-        expect(String(activeRows[0].userId)).toBe(String(secretaryB._id));
-
-        const historyRows = await ScopeAssignment.find({
-            roleKey: "secretary",
-            scopeType: "WARD",
-            scopeId: WARD_CODE,
-        });
-        expect(historyRows).toHaveLength(2);
-        const closedRow = historyRows.find(
-            r => String(r.userId) === String(secretaryA._id),
-        );
-        expect(closedRow?.unassignedAt).toBeDefined();
+        expect(activeRows).toHaveLength(2);
     });
 
     it("mot phuong duoc phep co nhieu Can bo UBND / Cong an khu vuc active cung luc", async () => {

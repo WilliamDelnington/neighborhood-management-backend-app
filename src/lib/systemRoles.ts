@@ -33,6 +33,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     admin: ALL_PERMISSION_KEYS,
     neighborhood_leader: [
         "dashboard.read",
+        "ai_chat.use",
         "users.create",
         // users.read/users.lock/users.reset_password deu duoc userService
         // (listUsers/getUserById/lockUserStatus/resetUserPasswordByAdmin) tu
@@ -72,6 +73,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
+        // To truong/To pho duoc gui phan anh/de xuat len cap Phuong (danh
+        // muc rieng "to_de_xuat_len_phuong", xem scripts/seed-complaint-types.ts) -
+        // cung co che voi requests.create, khong tu dong mo them danh muc nao
+        // khac ma vai tro nay khong nam trong allowedSenderRoles (xem
+        // ComplaintTypeDefinition.ts).
+        "complaints.create",
         "pccc.read",
         "security.read",
         "residents.read",
@@ -137,6 +144,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // hai vai tro le ra phai giong nhau.
     neighborhood_coleader: [
         "dashboard.read",
+        "ai_chat.use",
         "users.create",
         "users.read",
         "users.lock",
@@ -160,6 +168,12 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "complaints.read",
         "complaints.assign",
         "complaints.update_status",
+        // To truong/To pho duoc gui phan anh/de xuat len cap Phuong (danh
+        // muc rieng "to_de_xuat_len_phuong", xem scripts/seed-complaint-types.ts) -
+        // cung co che voi requests.create, khong tu dong mo them danh muc nao
+        // khac ma vai tro nay khong nam trong allowedSenderRoles (xem
+        // ComplaintTypeDefinition.ts).
+        "complaints.create",
         "pccc.read",
         "security.read",
         "residents.read",
@@ -207,6 +221,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // scope filter moi la lop chan thuc su quyet dinh thay duoc gi.
     neighborhood_collaborator: [
         "dashboard.read",
+        "ai_chat.use",
         "requests.read",
         "inspections.read",
         "inspections.execute",
@@ -219,6 +234,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     secretary: [
         "dashboard.read",
+        "ai_chat.use",
         // Can de chon "Tổ dân phố" khi nham doi tuong gui Thong bao (xem
         // AnnouncementFormPage.tsx).
         "neighborhoods.read",
@@ -291,6 +307,14 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "request_types.manage",
         "complaint_types.read",
         "complaint_types.manage",
+        // Bi thu la mot trong 2 vai tro nhan de xuat To truong/To pho gui len
+        // Phuong ("to_de_xuat_len_phuong" - xem seed-complaint-types.ts), can
+        // 3 quyen nay de thuc su xem/tiep nhan duoc, khong chi cau hinh danh
+        // muc (complaint_types.*) - truoc day bi thieu, chi nhan thong bao
+        // nhung khong mo duoc trang Phan anh.
+        "complaints.read",
+        "complaints.assign",
+        "complaints.update_status",
         "inspections.read",
         "inspections.create",
         "inspections.manage",
@@ -306,6 +330,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     regional_police: [
         "dashboard.read",
+        "ai_chat.use",
         "houses.read",
         "houses.update_gis",
         "households.read",
@@ -353,6 +378,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     people_committee_official: [
         "dashboard.read",
+        "ai_chat.use",
         "neighborhoods.read",
         "neighborhoods.manage",
         "streets.read",
@@ -425,20 +451,37 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // cac chi so dashboard rieng cua minh) - xem dashboardService.buildDepartmentOverview.
     social_affairs_official: [
         "dashboard.read",
+        "ai_chat.use",
         "citizens.read",
         "households.read",
         "reports.read",
+        "reports.kpi_read",
     ],
-    health_official: ["dashboard.read", "households.read", "reports.read"],
-    education_official: ["dashboard.read", "citizens.read", "reports.read"],
+    health_official: [
+        "dashboard.read",
+        "ai_chat.use",
+        "households.read",
+        "reports.read",
+        "reports.kpi_read",
+    ],
+    education_official: [
+        "dashboard.read",
+        "ai_chat.use",
+        "citizens.read",
+        "reports.read",
+        "reports.kpi_read",
+    ],
     economy_labor_official: [
         "dashboard.read",
+        "ai_chat.use",
         "citizens.read",
         "businesses.read",
         "companies.read",
         "reports.read",
+        "reports.kpi_read",
     ],
     house_owner: [
+        "ai_chat.use",
         "organizations.read",
         "organizations.create",
         "organizations.update",
@@ -500,6 +543,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // chu ho rieng quan ly nhan khau cua ho minh nhung khong so huu/cap nhat
     // ban ghi nha (houses.*) - viec do thuoc ve house_owner.
     household_head: [
+        "ai_chat.use",
         "houses.read",
         "households.read",
         "households.update",
@@ -529,6 +573,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // chi la mot nhan tuy dinh tuyen yeu cau (xem REQUEST_HOUSE_ROLES trong
     // types/index.ts - do la khai niem KHAC, chi la nhan dinh tuyen).
     business_representative: [
+        "ai_chat.use",
         "houses.read",
         "business_types.read",
         "businesses.read",
@@ -548,6 +593,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     // Nguoi dai dien cong ty/doanh nghiep - cung mo hinh voi business_representative
     // o tren, ap dung cho Company thay vi Business.
     company_representative: [
+        "ai_chat.use",
         "houses.read",
         "company_types.read",
         "companies.read",
@@ -567,40 +613,38 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
 };
 
 // Pham vi du lieu mac dinh cho tung vai tro he thong (xem Role.scopeType/
-// scopeMechanism/maxActivePerScope/maxActiveScopesPerUser/subScopeKinds) -
-// dung chung boi scripts/seed.ts va tests/helpers.ts, cung ly do/quy uoc voi
-// SYSTEM_ROLE_PERMISSIONS o tren (mot noi duy nhat, tranh drift). Day CHI la
-// gia tri KHOI TAO - mot khi da seed vao Role collection, admin co the doi lai
-// tung vai tro (ke ca vai tro he thong) qua man Quan ly vai tro ma KHONG can
-// sua code, dung y nghia "soft-coded" cua tinh nang nay.
+// scopeMechanism/subScopeKinds) - dung chung boi scripts/seed.ts va
+// tests/helpers.ts, cung ly do/quy uoc voi SYSTEM_ROLE_PERMISSIONS o tren (mot
+// noi duy nhat, tranh drift). Day CHI la gia tri KHOI TAO - mot khi da seed
+// vao Role collection, admin co the doi lai tung vai tro (ke ca vai tro he
+// thong) qua man Quan ly vai tro ma KHONG can sua code, dung y nghia
+// "soft-coded" cua tinh nang nay.
 export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
     string,
     {
         scopeType: "ALL" | "WARD" | "NEIGHBORHOOD" | "HOUSE" | "HOUSEHOLD" | "BUSINESS" | "COMPANY";
         scopeMechanism?: "ASSIGNED" | "OWNED";
-        maxActivePerScope?: number | null;
-        maxActiveScopesPerUser?: number | null;
         subScopeKinds?: string[];
     }
 > = {
     admin: { scopeType: "ALL" },
+    // "1 To truong active/1 To dan pho" duoc thuc thi hardcode o
+    // neighborhoodService.assignNeighborhoodLeader, khong phai qua config nay.
     neighborhood_leader: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: 1,
     },
     // Xem NeighborhoodColeaderAssignment.ts:48-51 - 1 nguoi chi duoc active To
-    // pho o 1 To dan pho cung luc, nhung 1 To dan pho co the co nhieu To pho.
+    // pho o 1 To dan pho cung luc (thuc thi hardcode o
+    // neighborhoodService.assignNeighborhoodColeader), nhung 1 To dan pho co
+    // the co nhieu To pho.
     neighborhood_coleader: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
-        maxActiveScopesPerUser: 1,
     },
     neighborhood_collaborator: {
         scopeType: "NEIGHBORHOOD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
         subScopeKinds: [
             "WHOLE_NEIGHBORHOOD",
             "STREET",
@@ -608,44 +652,36 @@ export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
             "CAMPAIGN",
         ],
     },
-    // Truoc day khong co gioi han nao (User.wardCode gan tu do) - tu day chi 1
-    // Bi thu duoc active tren 1 Phuong/Xa cung luc, giong quy uoc To truong.
-    secretary: { scopeType: "WARD", scopeMechanism: "ASSIGNED", maxActivePerScope: 1 },
+    secretary: { scopeType: "WARD", scopeMechanism: "ASSIGNED" },
     people_committee_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     // Truoc day khong the gan theo Phuong/Xa qua man Quan ly Phuong (nang luc
-    // moi hoan toan) - mac dinh khong gioi han so Cong an khu vuc/Phuong, giong
-    // Can bo UBND; dieu chinh lai qua man Quan ly vai tro neu can khac.
+    // moi hoan toan) - giong Can bo UBND; dieu chinh lai qua man Quan ly vai
+    // tro neu can khac.
     regional_police: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
-    // 4 vai tro "phong ban" moi - cung pham vi WARD/ASSIGNED, khong gioi han so
-    // luong nhu people_committee_official/regional_police (xem SYSTEM_ROLE_PERMISSIONS
+    // 4 vai tro "phong ban" moi - cung pham vi WARD/ASSIGNED nhu
+    // people_committee_official/regional_police (xem SYSTEM_ROLE_PERMISSIONS
     // o tren cho tap permission cua tung vai tro).
     social_affairs_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     health_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     education_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     economy_labor_official: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
-        maxActivePerScope: null,
     },
     house_owner: { scopeType: "HOUSE", scopeMechanism: "OWNED" },
     household_head: { scopeType: "HOUSEHOLD", scopeMechanism: "OWNED" },

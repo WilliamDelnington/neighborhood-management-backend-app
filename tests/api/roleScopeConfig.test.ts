@@ -19,7 +19,7 @@ describe("Pham vi du lieu (scopeType/scopeMechanism/...) khi tao/sua vai tro", (
         expect(json.data.scopeMechanism).toBeUndefined();
     });
 
-    it("tao vai tro NEIGHBORHOOD voi subScopeKinds, roi sua sang WARD phai xoa subScopeKinds/gioi han", async () => {
+    it("tao vai tro NEIGHBORHOOD voi subScopeKinds, roi sua sang WARD phai xoa subScopeKinds", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const created = await readJson(
             await createRoleRoute(
@@ -32,7 +32,6 @@ describe("Pham vi du lieu (scopeType/scopeMechanism/...) khi tao/sua vai tro", (
                         permissions: [],
                         scopeType: "NEIGHBORHOOD",
                         scopeMechanism: "ASSIGNED",
-                        maxActivePerScope: null,
                         subScopeKinds: ["STREET", "CAMPAIGN"],
                     },
                 }),
@@ -49,21 +48,19 @@ describe("Pham vi du lieu (scopeType/scopeMechanism/...) khi tao/sua vai tro", (
                     body: {
                         scopeType: "WARD",
                         scopeMechanism: "ASSIGNED",
-                        maxActivePerScope: 1,
                     },
                 }),
                 { params: { id: created.data._id } },
             ),
         );
         expect(updated.data.scopeType).toBe("WARD");
-        expect(updated.data.maxActivePerScope).toBe(1);
         // subScopeKinds chi co y nghia voi NEIGHBORHOOD - phai duoc don dep
         // (xem Role.ts pre("validate")), khong duoc "con sot" tu luc con la
         // NEIGHBORHOOD.
         expect(updated.data.subScopeKinds).toBeUndefined();
     });
 
-    it("sua sang scopeType OWNED (HOUSE) phai xoa maxActivePerScope/maxActiveScopesPerUser/scopeMechanism ve OWNED", async () => {
+    it("sua sang scopeType OWNED (HOUSE) phai xoa scopeMechanism ve OWNED", async () => {
         const admin = await createTestUser({ roles: ["admin"] });
         const created = await readJson(
             await createRoleRoute(
@@ -76,13 +73,11 @@ describe("Pham vi du lieu (scopeType/scopeMechanism/...) khi tao/sua vai tro", (
                         permissions: [],
                         scopeType: "WARD",
                         scopeMechanism: "ASSIGNED",
-                        maxActivePerScope: 1,
-                        maxActiveScopesPerUser: 1,
                     },
                 }),
             ),
         );
-        expect(created.data.maxActivePerScope).toBe(1);
+        expect(created.data.scopeType).toBe("WARD");
 
         const updated = await readJson(
             await updateRoleRoute(
@@ -99,8 +94,6 @@ describe("Pham vi du lieu (scopeType/scopeMechanism/...) khi tao/sua vai tro", (
         );
         expect(updated.data.scopeType).toBe("HOUSE");
         expect(updated.data.scopeMechanism).toBe("OWNED");
-        expect(updated.data.maxActivePerScope).toBeNull();
-        expect(updated.data.maxActiveScopesPerUser).toBeNull();
     });
 
     it("tu choi neu scopeType khac ALL nhung thieu scopeMechanism", async () => {

@@ -544,6 +544,33 @@ export async function listColeaders(neighborhoodId: string) {
 }
 
 /**
+ * Tra ve userId cua To truong + cac To pho DANG HOAT DONG cua mot to dan pho -
+ * dung chung boi bat ky noi nao can "bao cho lanh dao To" (Complaint,
+ * Request...). Truoc day co 3 ban sao gan giong nhau: 2 cho inline trong
+ * complaintService.ts va 1 rieng (resolveHouseLeaderRecipientIds) trong
+ * requestService.ts - gop lai day, cac noi do goi ham nay thay vi tu truy van.
+ */
+export async function getNeighborhoodLeadershipUserIds(
+    neighborhoodId: unknown,
+): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const neighborhood = await Neighborhood.findById(neighborhoodId).select(
+        "leaderUserId",
+    );
+    if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
+
+    const coleaderAssignments = await ScopeAssignment.find({
+        roleKey: "neighborhood_coleader",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        unassignedAt: { $exists: false },
+    }).select("userId");
+    coleaderAssignments.forEach(a => ids.add(String(a.userId)));
+
+    return ids;
+}
+
+/**
  * Gan mot nguoi lam To pho cua mot to dan pho. Khac assignNeighborhoodLeader:
  * khong co logic "1 nguoi 1 to" o cap to dan pho (nhieu to pho cung luc duoc),
  * nhung van gioi han 1 nguoi khong the la to pho active o 2 to KHAC nhau cung

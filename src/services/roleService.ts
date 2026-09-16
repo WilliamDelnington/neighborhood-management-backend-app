@@ -133,12 +133,6 @@ export async function updateRole(
                 ? undefined
                 : input.allowedComplaintCategories;
     }
-    if (input.allowedRequestTypes !== undefined) {
-        role.allowedRequestTypes =
-            input.allowedRequestTypes === null
-                ? undefined
-                : input.allowedRequestTypes;
-    }
     if (input.dashboardMetrics !== undefined) {
         role.dashboardMetrics =
             input.dashboardMetrics === null ? undefined : input.dashboardMetrics;
@@ -150,17 +144,11 @@ export async function updateRole(
     if (input.sortOrder !== undefined) role.sortOrder = input.sortOrder;
     // Pham vi du lieu (Config-Driven Account Scope System) - xem Role.ts
     // pre("validate") de biet cach cac truong con (scopeMechanism/
-    // maxActivePerScope/maxActiveScopesPerUser/subScopeKinds) tu dong duoc don
-    // dep lai theo scopeType/scopeMechanism moi khi role.save() ben duoi chay.
+    // subScopeKinds) tu dong duoc don dep lai theo scopeType/scopeMechanism
+    // moi khi role.save() ben duoi chay.
     if (input.scopeType !== undefined) role.scopeType = input.scopeType;
     if (input.scopeMechanism !== undefined) {
         role.scopeMechanism = input.scopeMechanism;
-    }
-    if (input.maxActivePerScope !== undefined) {
-        role.maxActivePerScope = input.maxActivePerScope;
-    }
-    if (input.maxActiveScopesPerUser !== undefined) {
-        role.maxActiveScopesPerUser = input.maxActiveScopesPerUser;
     }
     if (input.subScopeKinds !== undefined) {
         role.subScopeKinds = input.subScopeKinds;

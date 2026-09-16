@@ -6,12 +6,10 @@ import {
     Household,
     HouseOwnership,
     HouseRecord,
-    Neighborhood,
     PcccCheck,
     Request as RequestModel,
     RequestRecipient,
     RequestTypeDefinition,
-    ScopeAssignment,
     SecurityRecord,
     User,
     type IRequest,
@@ -23,11 +21,11 @@ import { HttpError } from "@/lib/response";
 import {
     areaScopeFilter,
     getRoleKeysWithPermission,
-    getUserAllowedRequestTypes,
     userHasPermission,
 } from "@/lib/rbac";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
+import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import { writeAuditLog } from "@/services/auditService";
 import {
     findRequestTypeForActor,
@@ -384,24 +382,9 @@ async function resolveHouseRoleRecipientIds(
 async function resolveHouseLeaderRecipientIds(
     houseId: string,
 ): Promise<Set<string>> {
-    const ids = new Set<string>();
     const house = await HouseRecord.findById(houseId).select("neighborhoodId");
-    if (!house?.neighborhoodId) return ids;
-
-    const neighborhood = await Neighborhood.findById(
-        house.neighborhoodId,
-    ).select("leaderUserId");
-    if (neighborhood?.leaderUserId) ids.add(String(neighborhood.leaderUserId));
-
-    const coleaderAssignments = await ScopeAssignment.find({
-        roleKey: "neighborhood_coleader",
-        scopeType: "NEIGHBORHOOD",
-        scopeId: house.neighborhoodId,
-        unassignedAt: { $exists: false },
-    }).select("userId");
-    coleaderAssignments.forEach(a => ids.add(String(a.userId)));
-
-    return ids;
+    if (!house?.neighborhoodId) return new Set();
+    return getNeighborhoodLeadershipUserIds(house.neighborhoodId);
 }
 
 export async function createRequest(
@@ -411,17 +394,17 @@ export async function createRequest(
     const definition = await findRequestTypeForActor(actorUser, input.type);
     if (
         definition &&
+        // Loai isBuiltIn bo qua allowedSenderRoles, giong getAvailableRequestTypes
+        // (requestTypeDefinitionService.ts) - route da tu requirePermission
+        // "requests.create" truoc khi goi ham nay nen day la dieu kien gui du.
+        // Khong bo qua o day trong khi meta/danh sach cho phep thay se tao
+        // nghich ly "thay trong dropdown nhung gui bi 403". Loai tu tao van
+        // CHI tuan theo allowedSenderRoles nguoi quan tri cau hinh rieng.
+        !definition.isBuiltIn &&
         !actorUser.roles.includes("admin") &&
         !definition.allowedSenderRoles.some(role => actorUser.roles.includes(role))
     ) {
         throw new HttpError("Vai trò của bạn không được gửi loại nhiệm vụ này", 403);
-    }
-    const allowedTypes = await getUserAllowedRequestTypes(actorUser);
-    if (allowedTypes !== null && !allowedTypes.includes(input.type)) {
-        throw new HttpError(
-            `Bạn không được phép gửi yêu cầu loại "${requestTypeLabel(input.type, definition)}"`,
-            403,
-        );
     }
 
     const recipientIds = await resolveRecipientIds(
@@ -1462,11 +1445,8 @@ export async function updateRequestFormData(
 }
 
 export async function getRequestMeta(actorUser: IUser) {
-    const allowedTypes = await getUserAllowedRequestTypes(actorUser);
     const availableDefinitions = await getAvailableRequestTypes(actorUser);
-    const types = availableDefinitions
-        .map(type => type.key)
-        .filter(type => allowedTypes === null || allowedTypes.includes(type));
+    const types = availableDefinitions.map(type => type.key);
 
     // Moi type gio deu la mot RequestTypeDefinition that (ke ca 4 loai "he
     // thong" cu - xem RequestTypeDefinition.isBuiltIn), nen allowedReceiverRoles

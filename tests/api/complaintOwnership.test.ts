@@ -87,11 +87,14 @@ describe("Quyen so huu phan anh (complaint ownership)", () => {
     });
 
     it("can bo (staff) khong co quyen complaints.create khong the gui phan anh", async () => {
-        const leader = await createTestUser({ roles: ["neighborhood_leader"] });
+        // secretary (Bi thu) khong co complaints.create - khac
+        // neighborhood_leader/neighborhood_coleader, gio da duoc cap quyen
+        // nay de gui de xuat/phan anh len Phuong (xem systemRoles.ts).
+        const secretary = await createTestUser({ roles: ["secretary"] });
         const res = await createComplaintRoute(
             makeRequest("/api/complaints", {
                 method: "POST",
-                headers: await authHeaders(leader),
+                headers: await authHeaders(secretary),
                 body: {
                     category: "ve_sinh_moi_truong",
                     title: "Rác thải tồn đọng ở ngõ 12",

@@ -42,6 +42,7 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
+        const view = searchParams.get("view");
         const result = await listComplaints({
             page,
             limit,
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
             allowedCategories,
             actorUser,
             canReadEscalated,
+            view: view === "sent" ? "sent" : undefined,
         });
         return apiSuccess(result);
     } catch (err) {

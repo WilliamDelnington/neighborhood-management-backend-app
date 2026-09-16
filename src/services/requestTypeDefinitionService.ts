@@ -35,6 +35,12 @@ function definitionScope(actorUser: IUser): Record<string, unknown> {
     return { $or: [{ isBuiltIn: true }, { wardCode: actorUser.wardCode }] };
 }
 
+// Dung cho CA HAI muc dich khac nhau: (1) quan ly (sua/khoa dinh nghia - luon
+// yeu cau wardCode khop, KE CA voi vai tro nam trong allowedSenderRoles cua no
+// - mot nguoi duoc PHEP GUI mot loai khong dong nghia duoc phep SUA dinh nghia
+// do), va (2) fallback pham vi cho nguoi gui KHONG duoc CHOT RO rieng trong
+// allowedSenderRoles (xem findRequestTypeForActor - noi da tu bo qua ham nay
+// khi allowedSenderRoles da chot ro, TRUOC KHI goi ham nay).
 function assertDefinitionInScope(actorUser: IUser, definition: IRequestTypeDefinition) {
     if (actorUser.roles.includes("admin")) return;
     if (!actorUser.wardCode || definition.wardCode !== actorUser.wardCode) {
@@ -181,21 +187,51 @@ export async function findRequestTypeForActor(actorUser: IUser, key: string) {
     // assertDefinitionInScope se 403 sai neu ap dung cho built-in, vi
     // definition.wardCode luon la undefined, khong khop wardCode cua bat ky
     // actor khong phai admin nao.
-    if (!definition.isBuiltIn) assertDefinitionInScope(actorUser, definition);
+    //
+    // Tuong tu, mot vai tro da duoc admin CHOT RO trong allowedSenderRoles cua
+    // CHINH dinh nghia nay la DU dieu kien gui, bat ke wardCode - wardCode chi
+    // la pham vi cua secretary/people_committee_official (xem User.ts),
+    // neighborhood_leader/neighborhood_coleader (pham vi TDP qua neighborhoodId)
+    // KHONG BAO GIO co wardCode nen se bi assertDefinitionInScope 403 SAI o day
+    // du da duoc chot ro - loi thuc te phat hien 2026-09-15 (Tổ trưởng khong
+    // gui duoc "Kiểm tra tình hình" du da duoc them vao allowedSenderRoles).
+    const explicitlyAuthorizedSender = definition.allowedSenderRoles.some(role =>
+        actorUser.roles.includes(role),
+    );
+    if (!definition.isBuiltIn && !explicitlyAuthorizedSender) {
+        assertDefinitionInScope(actorUser, definition);
+    }
     return definition;
 }
 
 export async function getAvailableRequestTypes(actorUser: IUser) {
     const isAdmin = actorUser.roles.includes("admin");
-    const items = await RequestTypeDefinition.find({
-        ...definitionScope(actorUser),
-        active: true,
-        // Admin bo qua dieu kien nguoi gui (giong cach admin da bo qua moi
-        // scope check khac trong he thong nay) - khong co ngoai le nay thi
-        // admin cung khong gui duoc loai nhiem vu nao neu "admin" khong nam
-        // trong allowedSenderRoles cua loai do.
-        ...(isAdmin ? {} : { allowedSenderRoles: { $in: actorUser.roles } }),
-    }).sort({ name: 1 });
+    // Ket hop bang $and (khong gan truc tiep vao filter.$or) - tranh 2 khoa
+    // filter.$or de ghi de len nhau, giong luu y trong listRequestTypeDefinitions.
+    const conditions: Record<string, unknown>[] = [{ active: true }];
+    if (!isAdmin) {
+        // definitionScope (isBuiltIn/wardCode) la dieu kien "duyet chung" theo
+        // pham vi dia ly - NHUNG mot vai tro da duoc admin CHOT RO trong
+        // allowedSenderRoles cua chinh dinh nghia la DU dieu kien gui roi, nen
+        // phai la MOT NHANH THAY THE (OR) dung lap voi definitionScope, khong
+        // phai dieu kien BAT BUOC THEM (AND). Neu bat buoc ca hai, loai tu tao
+        // co wardCode se KHONG BAO GIO hien voi neighborhood_leader/
+        // neighborhood_coleader du da duoc chot ro, vi 2 vai tro nay dung
+        // neighborhoodId lam pham vi (khong bao gio co wardCode - xem User.ts,
+        // wardCode CHI la pham vi cua secretary/people_committee_official) -
+        // loi thuc te phat hien 2026-09-15 (Tổ trưởng khong thay "Kiểm tra
+        // tình hình" du da duoc them vao allowedSenderRoles). isBuiltIn van
+        // luon hien vi no la mot nhanh cua chinh definitionScope.
+        conditions.push({
+            $or: [
+                definitionScope(actorUser),
+                { allowedSenderRoles: { $in: actorUser.roles } },
+            ],
+        });
+    }
+    const items = await RequestTypeDefinition.find({ $and: conditions }).sort({
+        name: 1,
+    });
 
     return items.map(item => ({
         _id: item._id,
