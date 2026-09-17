@@ -1,4 +1,14 @@
-import { Street, type IStreet } from "@/models";
+import {
+    Street,
+    type IStreet,
+    HouseRecord,
+    Household,
+    Business,
+    Company,
+    Neighborhood,
+    ScopeAssignment,
+    NeighborhoodCollaboratorAssignment,
+} from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import type { CreateStreetInput, UpdateStreetInput } from "@/validators/street";
@@ -94,4 +104,53 @@ export async function updateStreet(
     });
 
     return street;
+}
+
+export async function deleteStreet(actorId: string, id: string): Promise<void> {
+    const street = await Street.findById(id);
+    if (!street) throw new HttpError("Không tìm thấy đường/phố", 404);
+
+    const [
+        houseRecordCount,
+        householdCount,
+        businessCount,
+        companyCount,
+        neighborhoodCount,
+        scopeAssignmentCount,
+        collaboratorAssignmentCount,
+    ] = await Promise.all([
+        HouseRecord.countDocuments({ streetId: id }),
+        Household.countDocuments({ streetId: id }),
+        Business.countDocuments({ streetId: id }),
+        Company.countDocuments({ streetId: id }),
+        Neighborhood.countDocuments({ streetIds: id }),
+        ScopeAssignment.countDocuments({ "subScope.streetId": id }),
+        NeighborhoodCollaboratorAssignment.countDocuments({ streetId: id }),
+    ]);
+
+    const totalReferences =
+        houseRecordCount +
+        householdCount +
+        businessCount +
+        companyCount +
+        neighborhoodCount +
+        scopeAssignmentCount +
+        collaboratorAssignmentCount;
+
+    if (totalReferences > 0) {
+        throw new HttpError(
+            "Không thể xóa đường/phố đang được sử dụng bởi nhà, hộ khẩu, doanh nghiệp, tổ dân phố hoặc phân quyền khác",
+            409,
+        );
+    }
+
+    await street.deleteOne();
+
+    await writeAuditLog({
+        actorId,
+        action: "street.delete",
+        targetModel: "Street",
+        targetId: id,
+        metadata: { code: street.code, name: street.name },
+    });
 }
