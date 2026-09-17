@@ -28,6 +28,11 @@ export function getGoongServerApiKey(): string {
 export interface PlaceAutocompletePrediction {
     placeId: string;
     text: string;
+    // Tach rieng ten dia diem (in dam) va dia chi day du (mau xam) de UI hien
+    // thi giong Goong Maps/Google Maps that - fallback ve description neu
+    // Goong khong tra ve structured_formatting cho ket qua nao do.
+    mainText: string;
+    secondaryText: string;
 }
 
 /**
@@ -51,12 +56,29 @@ export async function autocompletePlaces(
         throw new HttpError("Khong the tra cuu dia chi luc nay", 502);
     }
     const data = (await res.json()) as {
-        predictions?: Array<{ place_id: string; description?: string }>;
+        predictions?: Array<{
+            place_id: string;
+            description?: string;
+            structured_formatting?: {
+                main_text?: string;
+                secondary_text?: string;
+            };
+        }>;
     };
-    return (data.predictions || []).map(p => ({
-        placeId: p.place_id,
-        text: p.description || "",
-    }));
+    return (data.predictions || []).map(p => {
+        const description = p.description || "";
+        const commaIndex = description.indexOf(",");
+        return {
+            placeId: p.place_id,
+            text: description,
+            mainText:
+                p.structured_formatting?.main_text ||
+                (commaIndex >= 0 ? description.slice(0, commaIndex) : description),
+            secondaryText:
+                p.structured_formatting?.secondary_text ||
+                (commaIndex >= 0 ? description.slice(commaIndex + 1).trim() : ""),
+        };
+    });
 }
 
 export interface PlaceDetailsResult {
