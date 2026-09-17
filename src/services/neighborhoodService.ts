@@ -20,7 +20,7 @@ import type {
 } from "@/validators/neighborhood";
 import type { NeighborhoodStatus } from "@/models/Neighborhood";
 
-const LEADER_POPULATE = "displayName phone status";
+const LEADER_POPULATE = "displayName phone status avatarUrl";
 
 /**
  * Ket thuc cac phan cong CONG TAC VIEN da qua han (endAt rieng cua tung phan
@@ -404,8 +404,12 @@ export async function assignNeighborhoodLeader(
     // Chinh sach mac dinh (1 to truong = 1 to dan pho) nen chi can go lien ket
     // to dan pho nay khoi ca neighborhoodId (chinh) lan assignedNeighborhoodIds
     // (phu) cua nguoi dung do, khong can phan biet chinh/phu.
+    // Giu lai assignedAt cua phan cong sap dong de ghi vao NeighborhoodHistory
+    // ben duoi (metadata.assignedAt) - cho phep hien thi khoang thoi gian day
+    // du "tu ngay -> den ngay" thay vi chi mot moc thoi gian ket thuc.
+    let closedLeaderAssignedAt: Date | undefined;
     if (currentLeaderId) {
-        await ScopeAssignment.updateOne(
+        const closedLeaderAssignment = await ScopeAssignment.findOneAndUpdate(
             {
                 roleKey: "neighborhood_leader",
                 scopeType: "NEIGHBORHOOD",
@@ -413,7 +417,8 @@ export async function assignNeighborhoodLeader(
                 unassignedAt: { $exists: false },
             },
             { unassignedAt: now, unassignedBy: actorId },
-        );
+        ).select("assignedAt");
+        closedLeaderAssignedAt = closedLeaderAssignment?.assignedAt;
         await User.updateOne(
             { _id: currentLeaderId, neighborhoodId: neighborhood._id },
             { $unset: { neighborhoodId: "" } },
@@ -439,7 +444,11 @@ export async function assignNeighborhoodLeader(
             neighborhoodId: neighborhood._id,
             actorId,
             action: "LEADER_UNASSIGNED",
-            metadata: { leaderUserId: currentLeaderId },
+            metadata: {
+                leaderUserId: currentLeaderId,
+                assignedAt: closedLeaderAssignedAt,
+                unassignedAt: now,
+            },
         });
 
         return neighborhood;
@@ -568,6 +577,53 @@ export async function getNeighborhoodLeadershipUserIds(
     coleaderAssignments.forEach(a => ids.add(String(a.userId)));
 
     return ids;
+}
+
+const MANAGEMENT_ROLE_KEYS = [
+    "neighborhood_leader",
+    "neighborhood_coleader",
+    "neighborhood_collaborator",
+];
+
+/**
+ * Toan bo lich su dam nhiem To truong/To pho/Cong tac vien cua MOT nguoi dung,
+ * xuyen suot moi to dan pho (khong chi mot to) - dung cho phan "Lịch sử quản
+ * lý Tổ dân phố" tren ho so Nguoi dung (UserDetailPage.tsx), doi xung voi
+ * getLeaderHistory/getColeaderHistory/getCollaboratorHistory (xem theo mot to
+ * dan pho cu the). Tra kem ten to dan pho vi mot nguoi co the tung phu trach
+ * nhieu to khac nhau qua thoi gian.
+ */
+export async function getUserNeighborhoodManagementHistory(userId: string) {
+    const rows = await ScopeAssignment.find({
+        userId,
+        scopeType: "NEIGHBORHOOD",
+        roleKey: { $in: MANAGEMENT_ROLE_KEYS },
+    })
+        .sort({ assignedAt: -1 })
+        .populate("assignedBy", "displayName")
+        .populate("unassignedBy", "displayName");
+
+    const neighborhoodIds = [
+        ...new Set(rows.map(r => String(r.scopeId))),
+    ];
+    const neighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("name code");
+    const neighborhoodById = new Map(
+        neighborhoods.map(n => [String(n._id), n]),
+    );
+
+    return rows.map(r => ({
+        _id: String(r._id),
+        roleKey: r.roleKey,
+        neighborhood: neighborhoodById.get(String(r.scopeId)) || null,
+        assignedAt: r.assignedAt,
+        assignedBy: r.assignedBy,
+        unassignedAt: r.unassignedAt,
+        unassignedBy: r.unassignedBy,
+        endAt: r.endAt,
+        note: r.note,
+    }));
 }
 
 /**
@@ -718,6 +774,29 @@ export async function listNeighborhoodHistory(neighborhoodId: string) {
         .sort({ createdAt: -1 })
         .limit(200)
         .populate("actorId", "displayName");
+}
+
+/**
+ * Toan bo lich su Cong tac vien cua mot to dan pho (ca da ket thuc), khac
+ * listNeighborhoodCollaborators (chi active) - dung cho man xem lich su, hien
+ * thi khoang thoi gian dam nhiem (assignedAt -> unassignedAt/endAt).
+ */
+export async function getCollaboratorHistory(neighborhoodId: string) {
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
+
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+    })
+        .sort({ assignedAt: -1 })
+        .populate("userId", LEADER_POPULATE)
+        .populate("subScope.streetId", "name code")
+        .populate("subScope.houseIds", "code address")
+        .populate("subScope.campaignId", "name status dueAt")
+        .populate("assignedBy", "displayName")
+        .populate("unassignedBy", "displayName");
 }
 
 export async function listNeighborhoodCollaborators(neighborhoodId: string) {
