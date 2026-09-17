@@ -47,6 +47,19 @@
  * Company/PCCC/An ninh/Request) van giu nguyen quy uoc tao-neu-chua-co, vi
  * chua co truong nao moi can dong bo lai o cac loai do.
  *
+ * DOT 2 (bo sung da dang hoa them - THEM MOI, khong thay the dot 1 o tren):
+ *   - 2 tai khoan Cong an phu trach dia ban (regional_police) cho phuong.
+ *   - Household: them ownershipType (~2/10 ho moi to la "cho_thue" thay vi
+ *     mac dinh "chinh_chu").
+ *   - Nhan khau phu: them birthDate + 1 "dien chinh sach/nhan khau hoc" khac
+ *     nhau moi ho (isElderly/isChild/isDisabledChild/isDisabledOrSupportNeeded/
+ *     isVeteran/isPartyMember/isUnionMember/isMartyr/isMartyrFamily/
+ *     isOtherSpecial - xem RESIDENT_PERSONAS).
+ *   - THEM 10 ban ghi PCCC + 10 ban ghi An ninh (dedup rieng, khong ghi de
+ *     dot 1), PCCC dot 2 co remediationNeeded va inspectorId la Cong an dia ban.
+ *   - THEM 12 Request loai "pccc"/"security" (dot 1 chi dung "task"/"other")
+ *     tu admin gui toi Cong an dia ban, da dang hoa priority/dueDate.
+ *
  * Chay: npm run seed:duong-noi-demo   (hoac: tsx scripts/seed-duong-noi-demo.ts)
  *
  * LUU Y DNS/IMPORT: xem giai thich chi tiet trong scripts/create-proposal-accounts.ts
@@ -74,6 +87,15 @@ const ORG_OWNED_HOUSES_PER_NEIGHBORHOOD = 2; // trong tong 8 nha, 6 ca nhan + 2 
 const TOTAL_PCCC = 15;
 const TOTAL_SECURITY = 15;
 const TOTAL_REQUESTS = 25;
+// DOT 2 (bo sung da dang hoa du lieu, khong thay the dot 1 o tren - luon THEM
+// MOI qua khoa dedup rieng "... dot 2 #i"): khai thac cac truong/loai truoc
+// day CHUA duoc dung trong script - PcccCheck.remediationNeeded + inspectorId
+// thuc su (gan cho tai khoan Cong an dia ban moi tao), va Request.type
+// "pccc"/"security" (truoc day chi dung "task"/"other") gui toi
+// regional_police, kem priority/dueDate da dang (xem muc 5b/6b/7b ben duoi).
+const TOTAL_PCCC_WAVE2 = 10;
+const TOTAL_SECURITY_WAVE2 = 10;
+const TOTAL_REQUESTS_WAVE2 = 12;
 
 // So dien thoai duoc sinh TU NOI DUNG (to dan pho + vai tro + so thu tu),
 // KHONG phai tu mot bo dem vi tri tang dan - bai hoc rut ra tu lan chay dau:
@@ -116,6 +138,10 @@ const PHONE_KIND = {
     orgRepresentative: 5,
     coleader: 6,
     collaborator: 7,
+    // Cong an phu trach dia ban - cap phuong, giong "ward" (PCO), them o DOT 2
+    // (xem RESIDENT_PERSONAS/TOTAL_*_WAVE2 ben duoi) de lam nguoi nhan Request
+    // loai "pccc"/"security" va inspectorId cho PCCC dot 2.
+    regionalPolice: 8,
 } as const;
 function phoneFor(slot: number, kind: number, seq: number): string {
     return `08${slot}${kind}${String(seq).padStart(6, "0")}`;
@@ -287,6 +313,26 @@ async function main() {
     }
 
     // -------------------------------------------------------------------
+    // 2b) DOT 2: 2 tai khoan Cong an phu trach dia ban (regional_police) cho
+    //     phuong - truoc day script khong co vai tro nay, nen Request loai
+    //     "pccc"/"security" (chi regional_police co quyen "{type}.assign")
+    //     khong the tao duoc; dung lam nguoi nhan cac Request do va lam
+    //     inspectorId cho PCCC dot 2 ben duoi.
+    // -------------------------------------------------------------------
+    console.log("\n== Cong an phu trach dia ban (regional_police) ==");
+    const regionalPoliceUsers: IUserDoc[] = [];
+    for (let i = 1; i <= 2; i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        const officer = await findOrCreateUser({
+            displayName: `Công an phụ trách địa bàn Dương Nội số ${i}`,
+            phone: phoneFor(0, PHONE_KIND.regionalPolice, i),
+            roles: ["regional_police"],
+            address: "Công an phường Dương Nội",
+        });
+        regionalPoliceUsers.push(officer);
+    }
+
+    // -------------------------------------------------------------------
     // 3) Voi moi to dan pho: 8 nha so + 10 ho dan + 6 ho kinh doanh + 2 cong ty.
     // -------------------------------------------------------------------
     type NeighborhoodDemoData = {
@@ -320,6 +366,38 @@ async function main() {
         "Nhân viên y tế",
         "Lái xe",
         "Thợ xây",
+    ];
+    // DOT 2: moi nhan khau phu (i=0..9) duoc gan THEM dung 1 "dien chinh sach/
+    // nhan khau hoc" khac nhau, phu day du cac co Citizen truoc day script
+    // CHUA dung toi (isElderly/isChild/isDisabledChild/isDisabledOrSupportNeeded/
+    // isVeteran/isPartyMember/isUnionMember/isMartyr/isMartyrFamily/
+    // isOtherSpecial) - moi ho chi 1 dien (rieng ho so 2 co 2 co lien quan vi
+    // cung mo ta mot tre khuyet tat can ho tro) de giu du lieu thuc te, khong
+    // chong dien nhau. birthYearsAgo dung de tinh Citizen.birthDate (truoc day
+    // script khong dat truong nay).
+    const RESIDENT_PERSONAS: Array<{
+        birthYearsAgo: number;
+        flags: Record<string, boolean | string>;
+    }> = [
+        { birthYearsAgo: 68, flags: { isElderly: true } },
+        { birthYearsAgo: 9, flags: { isChild: true } },
+        {
+            birthYearsAgo: 12,
+            flags: { isDisabledChild: true, isDisabledOrSupportNeeded: true },
+        },
+        { birthYearsAgo: 75, flags: { isVeteran: true } },
+        { birthYearsAgo: 50, flags: { isPartyMember: true } },
+        { birthYearsAgo: 35, flags: { isUnionMember: true } },
+        { birthYearsAgo: 80, flags: { isMartyr: true } },
+        { birthYearsAgo: 55, flags: { isDisabledOrSupportNeeded: true } },
+        {
+            birthYearsAgo: 60,
+            flags: {
+                isOtherSpecial: true,
+                otherSpecialLabel: "Nạn nhân chất độc da cam",
+            },
+        },
+        { birthYearsAgo: 45, flags: { isMartyrFamily: true } },
     ];
 
     for (const neighborhood of neighborhoods) {
@@ -481,6 +559,10 @@ async function main() {
                 // khong co khai niem nguoi lien he rieng nen chu ho luon la
                 // nguoi lien he.
                 contactIsHead: true,
+                // DOT 2: truoc day moi ho dan deu mac dinh "chinh_chu" (khong
+                // truyen ownershipType) - danh dau ~2/10 ho moi to dan pho la
+                // "cho_thue" de co du lieu mau cho bo loc/hien thi loai so huu.
+                ownershipType: i % 4 === 2 ? "cho_thue" : "chinh_chu",
                 needsSupport: i % 5 === 0,
                 // Chi danh dau 4 ho dan CU THE (TDP-01, ho so 1-4) la
                 // ngheo/can ngheo - dung dieu kien theo NOI DUNG (ma to dan
@@ -517,6 +599,12 @@ async function main() {
             // nghe nghiep, dung quy uoc "an truong nghe nghiep khi that nghiep"
             // cua CitizenForm o cac frontend.
             const isUnemployed = i % 4 === 1;
+            // DOT 2: gan them ngay sinh + dung 1 dien chinh sach/nhan khau hoc
+            // rieng cho nhan khau phu nay (xem RESIDENT_PERSONAS).
+            const persona = RESIDENT_PERSONAS[i % RESIDENT_PERSONAS.length];
+            const birthDate = new Date(
+                Date.UTC(2026 - persona.birthYearsAgo, 0, 1 + i),
+            );
             const residentPatch = {
                 fullName: residentName,
                 gender: i % 2 === 0 ? "nam" : "nu",
@@ -525,6 +613,8 @@ async function main() {
                     ? undefined
                     : RESIDENT_OCCUPATIONS[i % RESIDENT_OCCUPATIONS.length],
                 isUnemployed,
+                birthDate: birthDate.toISOString(),
+                ...persona.flags,
                 householdId: String(household._id),
                 residenceType: isTamTru ? "tam_tru" : "thuong_tru",
                 temporaryResidenceStartsAt: isTamTru
@@ -715,6 +805,46 @@ async function main() {
     console.log(`  Da tao/kiem tra ${TOTAL_PCCC} ban ghi PCCC`);
 
     // -------------------------------------------------------------------
+    // 5b) DOT 2: THEM 10 ban ghi PCCC da dang hoa - khai thac remediationNeeded
+    //     (mo ta bien phap khac phuc, truoc day khong dung) va inspectorId
+    //     thuc su (gan cho Cong an dia ban thay vi mac dinh la actor admin).
+    //     Dedup rieng theo `note` (khac dot 1) nen luon THEM MOI, khong dung
+    //     lai/ghi de 15 ban ghi dot 1 o tren.
+    // -------------------------------------------------------------------
+    console.log("\n== PCCC (dot 2 - da dang hoa) ==");
+    for (let i = 0; i < TOTAL_PCCC_WAVE2; i += 1) {
+        const houseId = allHouseIds[(i + 3) % allHouseIds.length];
+        const riskLevel = RISK_LEVELS[(i + 1) % RISK_LEVELS.length];
+        const followUpStatus =
+            PCCC_FOLLOWUP[(i + 2) % PCCC_FOLLOWUP.length];
+        const note = `Kiem tra PCCC demo dot 2 #${i + 1}`;
+        // eslint-disable-next-line no-await-in-loop
+        const existingPccc = await PcccCheck.findOne({ note });
+        if (existingPccc) continue;
+        // eslint-disable-next-line no-await-in-loop
+        await createPcccCheck(adminUser, {
+            houseId,
+            hasFireExtinguisher: i % 3 !== 0,
+            hasEmergencyExit: i % 2 === 0,
+            hasIndoorEvCharging: i % 5 === 0,
+            hasGasStoveOrStorageOrBusiness: i % 3 === 0,
+            isCrowdedRental: i % 4 === 0,
+            riskLevel,
+            remediationNeeded:
+                riskLevel === "xanh"
+                    ? undefined
+                    : "Yêu cầu bổ sung bình chữa cháy và lối thoát hiểm phụ.",
+            note,
+            inspectionDate: new Date(Date.UTC(2026, 1, 1 + i)).toISOString(),
+            followUpStatus,
+            inspectorId: String(
+                regionalPoliceUsers[i % regionalPoliceUsers.length]._id,
+            ),
+        } as any);
+    }
+    console.log(`  Da tao them ${TOTAL_PCCC_WAVE2} ban ghi PCCC dot 2`);
+
+    // -------------------------------------------------------------------
     // 6) 15 ban ghi An ninh - muc do va tinh trang theo doi khac nhau.
     // -------------------------------------------------------------------
     console.log("\n== An ninh ==");
@@ -747,6 +877,35 @@ async function main() {
         } as any);
     }
     console.log(`  Da tao ${TOTAL_SECURITY} ban ghi An ninh`);
+
+    // -------------------------------------------------------------------
+    // 6b) DOT 2: THEM 10 ban ghi An ninh, xen ke hasCamera/hasSecurityComplaint
+    //     khac nhip voi dot 1 de da dang to hop hon. Dedup rieng theo `note`
+    //     (khac dot 1) nen luon THEM MOI.
+    // -------------------------------------------------------------------
+    console.log("\n== An ninh (dot 2 - da dang hoa) ==");
+    for (let i = 0; i < TOTAL_SECURITY_WAVE2; i += 1) {
+        const houseId = allHouseIds[(i + TOTAL_PCCC + 5) % allHouseIds.length];
+        const level = SECURITY_LEVELS[(i + 1) % SECURITY_LEVELS.length];
+        const monitoringStatus =
+            SECURITY_MONITORING[(i + 2) % SECURITY_MONITORING.length];
+        const note = `Kiem tra an ninh demo dot 2 #${i + 1}`;
+        // eslint-disable-next-line no-await-in-loop
+        const existingSecurity = await SecurityRecord.findOne({ note });
+        if (existingSecurity) continue;
+        // eslint-disable-next-line no-await-in-loop
+        await createSecurityRecord(adminUser, {
+            houseId,
+            hasCamera: i % 3 === 0,
+            hasSecurityComplaint: i % 2 === 0,
+            level,
+            reportedToPolice: monitoringStatus === "da_bao_cong_an",
+            monitoringStatus,
+            note,
+            inspectionDate: new Date(Date.UTC(2026, 1, 1 + i)).toISOString(),
+        } as any);
+    }
+    console.log(`  Da tao them ${TOTAL_SECURITY_WAVE2} ban ghi An ninh dot 2`);
 
     // -------------------------------------------------------------------
     // 7) 25 Request - nguoi gui/nguoi nhan khac nhau, trai deu 6 trang thai
@@ -889,6 +1048,120 @@ async function main() {
     }
     console.log(
         `  Da tao ${TOTAL_REQUESTS} Request - pending:${pendingCount} acknowledged:${acknowledgedCount} in_progress:${inProgressCount} needs_info:${needsInfoCount} awaiting_confirmation:${awaitingCount} resolved:${resolvedCount}`,
+    );
+
+    // -------------------------------------------------------------------
+    // 7b) DOT 2: THEM 12 Request loai "pccc"/"security" (truoc day script chi
+    //     dung "task"/"other") gui tu admin toi Cong an dia ban
+    //     (regional_police - vai tro DUY NHAT giu quyen "pccc.assign"/
+    //     "security.assign", xem eligiblePermissionForType trong
+    //     requestService.ts) qua targetUserIds. Cung da dang hoa priority
+    //     (normal/high/urgent) va dueDate (mot vai ban ghi co dueDate O QUA
+    //     KHU de co du lieu mau cho "qua han"/isOverdue) - hai truong nay dot 1
+    //     luon co dinh "normal"/khong co dueDate. Dedup rieng theo `title`
+    //     (khac dot 1) nen luon THEM MOI, van trai deu 6 trang thai qua dung
+    //     luong chuyen trang thai cua requestService nhu dot 1.
+    // -------------------------------------------------------------------
+    console.log("\n== Request (dot 2 - PCCC/An ninh toi Cong an dia ban) ==");
+    const REQUEST_WAVE2_TYPES: Array<"pccc" | "security"> = [
+        "pccc",
+        "security",
+    ];
+    const REQUEST_WAVE2_PRIORITIES = ["normal", "high", "urgent"] as const;
+    let wave2PendingCount = 0;
+    let wave2AcknowledgedCount = 0;
+    let wave2InProgressCount = 0;
+    let wave2NeedsInfoCount = 0;
+    let wave2AwaitingCount = 0;
+    let wave2ResolvedCount = 0;
+    for (let i = 0; i < TOTAL_REQUESTS_WAVE2; i += 1) {
+        const type = REQUEST_WAVE2_TYPES[i % REQUEST_WAVE2_TYPES.length];
+        const title = `Yêu cầu demo ${type === "pccc" ? "PCCC" : "an ninh"} tới Công an #${i + 1} (đợt 2)`;
+
+        // eslint-disable-next-line no-await-in-loop
+        const existingRequest = await RequestModel.findOne({ title });
+        if (existingRequest) {
+            const slot = i % 6;
+            if (slot === 0) wave2PendingCount += 1;
+            else if (slot === 1) wave2AcknowledgedCount += 1;
+            else if (slot === 2) wave2InProgressCount += 1;
+            else if (slot === 3) wave2NeedsInfoCount += 1;
+            else if (slot === 4) wave2AwaitingCount += 1;
+            else wave2ResolvedCount += 1;
+            continue;
+        }
+
+        const neighborhoodIdx = i % neighborhoods.length;
+        const recipient = regionalPoliceUsers[i % regionalPoliceUsers.length];
+        const recipientId = String(recipient._id);
+        const priority =
+            REQUEST_WAVE2_PRIORITIES[i % REQUEST_WAVE2_PRIORITIES.length];
+        // 2/12 yeu cau co dueDate da qua han (thang 1/2026) - con lai con han
+        // (cuoi nam 2026).
+        const dueDate =
+            i % 6 === 5
+                ? new Date(Date.UTC(2026, 0, 1)).toISOString()
+                : new Date(Date.UTC(2026, 11, 31)).toISOString();
+
+        // eslint-disable-next-line no-await-in-loop
+        const request = await createRequest(adminUser, {
+            type,
+            title,
+            description: `Yeu cau seed demo dot 2 so ${i + 1} - gui toi cong an phu trach dia ban`,
+            priority,
+            targetUserIds: [recipientId],
+            targetRoles: [],
+            houseId: perNeighborhoodData[neighborhoodIdx].houseIds[0],
+            dueDate,
+        } as any);
+        const requestId = String((request as any)._id);
+
+        const statusSlot = i % 6;
+        if (statusSlot === 0) {
+            wave2PendingCount += 1; // giu nguyen "pending"
+        } else if (statusSlot === 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await updateMyRequestStatus(recipientId, requestId, {
+                status: "acknowledged",
+            } as any);
+            wave2AcknowledgedCount += 1;
+        } else if (statusSlot === 2) {
+            // eslint-disable-next-line no-await-in-loop
+            await updateMyRequestStatus(recipientId, requestId, {
+                status: "in_progress",
+            } as any);
+            wave2InProgressCount += 1;
+        } else if (statusSlot === 3) {
+            // eslint-disable-next-line no-await-in-loop
+            await updateMyRequestStatus(recipientId, requestId, {
+                status: "needs_info",
+                note: "Cần bổ sung thông tin xác minh trước khi xử lý tiếp.",
+            } as any);
+            wave2NeedsInfoCount += 1;
+        } else if (statusSlot === 4) {
+            // eslint-disable-next-line no-await-in-loop
+            await updateMyRequestStatus(recipientId, requestId, {
+                status: "awaiting_confirmation",
+            } as any);
+            wave2AwaitingCount += 1;
+        } else {
+            // eslint-disable-next-line no-await-in-loop
+            await updateMyRequestStatus(recipientId, requestId, {
+                status: "awaiting_confirmation",
+            } as any);
+            // eslint-disable-next-line no-await-in-loop
+            await confirmRequestRecipient(
+                adminUser,
+                requestId,
+                recipientId,
+                "resolved",
+                "Đã xác nhận hoàn thành (demo đợt 2).",
+            );
+            wave2ResolvedCount += 1;
+        }
+    }
+    console.log(
+        `  Da tao them ${TOTAL_REQUESTS_WAVE2} Request PCCC/An ninh - pending:${wave2PendingCount} acknowledged:${wave2AcknowledgedCount} in_progress:${wave2InProgressCount} needs_info:${wave2NeedsInfoCount} awaiting_confirmation:${wave2AwaitingCount} resolved:${wave2ResolvedCount}`,
     );
 
     console.log("\n==============================================");
