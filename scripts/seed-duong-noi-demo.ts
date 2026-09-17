@@ -204,7 +204,9 @@ async function main() {
         PcccCheck,
         SecurityRecord,
         Request: RequestModel,
+        RequestTypeDefinition,
     } = await import("@/models");
+    const { getRoleKeysWithPermission } = await import("@/lib/rbac");
     const { createHouseRecord } = await import("@/services/houseRecordService");
     const { createHousehold, updateHousehold, transitionHouseholdStatus } =
         await import("@/services/householdService");
@@ -266,6 +268,65 @@ async function main() {
         });
         console.log(`  [TAO MOI] ${opts.displayName} (${opts.roles.join(",")}) -> ${opts.phone}`);
         return created;
+    }
+
+    // -------------------------------------------------------------------
+    // 0) Dam bao RequestTypeDefinition cho ca 4 loai REQUEST_TYPES (pccc/
+    //    security/other/task) da ton tai VA active - createRequest (qua
+    //    requestTypeDefinitionService.findRequestTypeForActor) NEM LOI 422
+    //    "Loại nhiệm vụ không tồn tại/đã khóa" neu thieu, BAT KE type co phai
+    //    "he thong" hay khong. Phat hien khi chay script tren mot DB dev CHUA
+    //    TUNG chay `npm run seed:request-types`: "task"/"other" da co san (vd
+    //    tao qua man quan ly RequestTypeListPage) nhung "pccc"/"security"
+    //    (dung o Request dot 2 ben duoi) thi chua, gay loi giua chung khi tao
+    //    Request dot 2. Logic idempotent giong het scripts/seed-request-types.ts
+    //    (khong dong toi ban ghi da co, chi dam bao isBuiltIn/active=true) -
+    //    nhung lap lai o day de script nay TU DAY DU, khong bat buoc phai chay
+    //    script kia truoc.
+    // -------------------------------------------------------------------
+    console.log("\n== RequestTypeDefinition (pccc/security/other/task) ==");
+    const REQUEST_TYPE_KEYS = ["pccc", "security", "other", "task"] as const;
+    const REQUEST_TYPE_NAME: Record<(typeof REQUEST_TYPE_KEYS)[number], string> = {
+        pccc: "PCCC",
+        security: "An ninh",
+        other: "Khác",
+        task: "Nhiệm vụ",
+    };
+    const requestTypeSenderRoles = await getRoleKeysWithPermission(
+        "requests.create",
+    );
+    for (const key of REQUEST_TYPE_KEYS) {
+        // eslint-disable-next-line no-await-in-loop
+        const existingDefinition = await RequestTypeDefinition.findOne({ key });
+        if (existingDefinition) {
+            if (!existingDefinition.isBuiltIn || !existingDefinition.active) {
+                // eslint-disable-next-line no-await-in-loop
+                await RequestTypeDefinition.updateOne(
+                    { _id: existingDefinition._id },
+                    { $set: { isBuiltIn: true, active: true } },
+                );
+            }
+            continue;
+        }
+        const allowedReceiverRoles =
+            key === "task"
+                ? ["neighborhood_leader", "neighborhood_coleader"]
+                : // eslint-disable-next-line no-await-in-loop
+                  await getRoleKeysWithPermission(`${key}.assign`);
+        // eslint-disable-next-line no-await-in-loop
+        await RequestTypeDefinition.create({
+            key,
+            name: REQUEST_TYPE_NAME[key],
+            fields: [],
+            allowedSenderRoles: requestTypeSenderRoles,
+            allowedReceiverRoles,
+            dataEntryMode: "sender",
+            isBuiltIn: true,
+            active: true,
+            createdBy: adminUser._id,
+            updatedBy: adminUser._id,
+        });
+        console.log(`  [TAO MOI] RequestTypeDefinition "${key}"`);
     }
 
     // -------------------------------------------------------------------
