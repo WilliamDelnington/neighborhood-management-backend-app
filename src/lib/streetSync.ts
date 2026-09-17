@@ -9,10 +9,33 @@ import { HttpError } from "@/lib/response";
  * suy ra `cluster` tu ten Street de cac man hinh/permission cu dua tren chuoi
  * `cluster` khong bi vo hieu.
  */
+// Nhan dien ten trung voi dong "tong cong"/"total" o cuoi bang tinh - phong
+// truong hop dong nay khong bi gop o (merged cell) nen lot qua bo loc banner/
+// footer dua tren merge trong importService.readWorksheetRows, va bi luu nham
+// thanh Street/cluster thuc su (vd Street "Tổng cộng" - xem su co thuc te).
+const SUMMARY_ROW_LABELS = new Set(["tong cong", "cong", "total", "sum"]);
+
+export function isSummaryRowLabel(name: string): boolean {
+    const normalized = name
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/đ/gi, "d")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    return SUMMARY_ROW_LABELS.has(normalized);
+}
+
 export async function resolveStreetForCluster(
     cluster: string,
 ): Promise<{ streetId: string; cluster: string }> {
     const name = cluster.trim();
+    if (isSummaryRowLabel(name)) {
+        throw new HttpError(
+            `"${cluster}" trông giống dòng tổng cộng/tổng số, không phải tên cụm dân cư hợp lệ`,
+            422,
+        );
+    }
     let street = await Street.findOne({ name });
     if (!street) {
         const code = await generateStreetCode(name);

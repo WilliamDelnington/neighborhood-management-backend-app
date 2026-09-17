@@ -14,7 +14,7 @@ import {
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
-import { generateStreetCode } from "@/lib/streetSync";
+import { generateStreetCode, isSummaryRowLabel } from "@/lib/streetSync";
 import { isValidVnPhone } from "@/lib/phone";
 import { hashForLookup, normalizeCccd } from "@/lib/encryption";
 import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
@@ -2505,6 +2505,18 @@ export async function applyStreetImportMapping(
 
         if (!name) {
             errors.push({ row: row.rowNumber, message: "Thiếu 'Tên đường/phố'" });
+            continue;
+        }
+
+        // Phong truong hop dong "TỔNG CỘNG" o cuoi file khong bi gop o (merged
+        // cell) nen lot qua bo loc banner/footer dua tren merge o
+        // readWorksheetRows - chan them theo NOI DUNG ten de khong tao nham
+        // Street "Tổng cộng" (xem su co thuc te da xay ra).
+        if (isSummaryRowLabel(name)) {
+            errors.push({
+                row: row.rowNumber,
+                message: `"${name}" trông giống dòng tổng cộng/tổng số, không phải tên đường/phố hợp lệ`,
+            });
             continue;
         }
 
