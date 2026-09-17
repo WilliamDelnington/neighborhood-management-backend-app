@@ -33,22 +33,31 @@ export async function createPasswordResetRequest(
         status: "moi",
     });
 
-    // Uu tien bao dich danh cho DUNG to truong/to pho phu trach so dien thoai
-    // nay (xem resolveResponsibleLeaderIds - theo Nha ho dang dung chu); neu
-    // khong xac dinh duoc (chua co tai khoan/chua gan Nha/chua co to truong)
-    // thi fallback ve bao rong cho admin + toan bo to truong/to pho nhu truoc,
-    // de yeu cau khong bi "mat tich" khong ai xu ly. Luu y: targetUserIds va
-    // targetRoles KHONG cong don trong createNotification - chi dung mot
-    // trong hai (targetRoles bi bo qua neu targetUserIds khong rong).
-    const leaderIds = await resolveResponsibleLeaderIds(phone);
+    // Bao dich danh cho DUNG to truong/to pho phu trach so dien thoai nay (xem
+    // resolveResponsibleLeaderIds - theo Nha ho dang dung chu) - NHUNG luon
+    // kem theo toan bo admin, khong chi khi khong xac dinh duoc to truong.
+    // Ly do: to truong co the ban/vang/khong biet xu ly, admin (quan ly toan
+    // bo du lieu, khong gioi han pham vi) can duoc bao ngay de xu ly thay thay
+    // vi phai tu vao danh sach kiem tra. Neu khong xac dinh duoc to truong VA
+    // khong co admin nao (khong nen xay ra) thi fallback ve bao rong theo
+    // targetRoles. Luu y: targetUserIds va targetRoles KHONG cong don trong
+    // createNotification - chi dung mot trong hai (targetRoles bi bo qua neu
+    // targetUserIds khong rong), nen phai tu gop danh sach id o day.
+    const [leaderIds, admins] = await Promise.all([
+        resolveResponsibleLeaderIds(phone),
+        User.find({ roles: "admin" }).select("_id"),
+    ]);
+    const targetUserIds = [
+        ...new Set([...leaderIds, ...admins.map(a => String(a._id))]),
+    ];
 
     await createNotification({
         title: "Yêu cầu đặt lại mật khẩu mới",
         body: `Số điện thoại ${phone} yêu cầu hỗ trợ đặt lại mật khẩu`,
         type: "password_reset_request.created",
-        targetUserIds: leaderIds.length > 0 ? leaderIds : undefined,
+        targetUserIds: targetUserIds.length > 0 ? targetUserIds : undefined,
         targetRoles:
-            leaderIds.length > 0
+            targetUserIds.length > 0
                 ? []
                 : ["admin", "neighborhood_leader", "neighborhood_coleader"],
         relatedModel: "PasswordResetRequest",
