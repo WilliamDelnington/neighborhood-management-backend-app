@@ -327,6 +327,17 @@ export async function updateNeighborhood(
             (neighborhood as unknown as Record<string, unknown>)[key] = value;
         }
     }
+    // Nguoi dung bam "Xóa" ranh giới GeoJSON tren form Sua To dan pho gui
+    // boundaryType KHAC GEOJSON kem geometry:undefined - vong lap tren BO QUA
+    // gan lai geometry vi gia tri la undefined (quy uoc chung: undefined =
+    // "khong dong den truong nay"), khien du lieu GIS cu "dinh" lai sau khi
+    // luu. Phai xoa geometry rieng moi khi boundaryType chuyen sang khac
+    // GEOJSON - day la tin hieu DUY NHAT phan biet duoc voi "khong dong den
+    // truong nay" qua PATCH thong thuong (xem GeoJsonBoundaryInput.tsx/
+    // toUpdateNeighborhoodInput o frontend).
+    if (patch.boundaryType !== undefined && patch.boundaryType !== "GEOJSON") {
+        neighborhood.geometry = undefined;
+    }
     if (patch.status !== undefined) neighborhood.active = patch.status === "ACTIVE";
     else if (patch.active !== undefined) {
         neighborhood.status = patch.active ? "ACTIVE" : "INACTIVE";
