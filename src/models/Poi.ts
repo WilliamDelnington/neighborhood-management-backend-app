@@ -24,6 +24,10 @@ export const POI_CATEGORIES = [
     "cafe",
     "bus",
     "apartment",
+    // "Hộ dân" - diem tien ich GAN VOI 1 Household cu the (xem householdId ben
+    // duoi), tao thu cong tu cong cu "Gắn hộ dân lên bản đồ" o /map-boundary -
+    // KHONG tham gia POST /api/pois/scan (xem POI_CATEGORY_META, keywords rong).
+    "household",
 ] as const;
 export type PoiCategory = (typeof POI_CATEGORIES)[number];
 
@@ -38,6 +42,9 @@ export interface IPoi extends Document {
     address?: string;
     verified: boolean;
     source: PoiSource;
+    // Chi co gia tri khi category = "household" - id Household duoc gan toa do
+    // nay, dung de hien thi thong tin ho dan khi bam vao marker tren ban do.
+    householdId?: mongoose.Types.ObjectId;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -53,6 +60,7 @@ const PoiSchema = new Schema<IPoi>(
         address: { type: String, trim: true },
         verified: { type: Boolean, default: false, index: true },
         source: { type: String, enum: POI_SOURCES, default: "manual" },
+        householdId: { type: Schema.Types.ObjectId, ref: "Household", index: true },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },
