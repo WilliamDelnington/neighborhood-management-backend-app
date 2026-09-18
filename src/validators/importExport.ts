@@ -173,3 +173,23 @@ export const citizenImportMappingSchema = z
 export type CitizenImportMappingInput = z.infer<
     typeof citizenImportMappingSchema
 >;
+
+/**
+ * Mapping cot Excel -> truong du lieu "thanh vien To dan pho" (gan vai tro
+ * NEIGHBORHOOD-scope cho tai khoan da co san - xem
+ * uploadNeighborhoodMemberImportFile/applyNeighborhoodMemberImportMapping
+ * trong importService.ts). Chi 2 cot: so dien thoai (phai khop 1 tai khoan
+ * active co san - import KHONG tao tai khoan moi, giong quy uoc Company doi
+ * voi Nha so) va ten vai tro (phai khop 1 Role dang active co scopeType=
+ * NEIGHBORHOOD). Khong ho tro chon pham vi con (street/house-group/campaign)
+ * qua Excel - dong vai tro Cong tac vien luon mac dinh WHOLE_NEIGHBORHOOD,
+ * ai can pham vi hep hon dung UI (NeighborhoodMembersPanel.tsx).
+ */
+export const neighborhoodMemberImportMappingSchema = z.object({
+    phone: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Số điện thoại'"),
+    roleName: z.string().min(1, "Vui lòng chọn cột dữ liệu cho 'Vai trò'"),
+    note: z.string().optional(),
+});
+export type NeighborhoodMemberImportMappingInput = z.infer<
+    typeof neighborhoodMemberImportMappingSchema
+>;

@@ -1,7 +1,9 @@
+import ExcelJS from "exceljs";
 import {
     HouseRecord,
     Neighborhood,
     NeighborhoodHistory,
+    Role,
     ScopeAssignment,
     FileAsset,
     InspectionCampaign,
@@ -13,6 +15,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { isCollaboratorOrLegacyCooperator } from "@/lib/systemRoles";
+import { addTableSheet } from "@/lib/excelResponse";
 import type {
     CreateNeighborhoodInput,
     AssignNeighborhoodCollaboratorInput,
@@ -964,4 +967,77 @@ export async function unassignNeighborhoodCollaborator(
             metadata: { collaboratorUserId: assignment.userId },
         }),
     ]);
+}
+
+/**
+ * Xuat toan bo thanh vien (Tổ trưởng/Tổ phó/Cộng tác viên/vai tro NEIGHBORHOOD
+ * khac) cua TAT CA To dan pho ra 1 file Excel - dung cho man
+ * NeighborhoodListPage.tsx ("Xuất Excel"), khac han cac ham tren (luon gioi
+ * han theo MOT To). scopeId/roleKey la Mixed/string tren ScopeAssignment nen
+ * KHONG the .populate() truc tiep - phai batch-resolve rieng ten To/vai tro
+ * bang 2 truy van gop (giong ky thuat da dung o
+ * userService.getUserManagementScope), tranh N+1 truy van cho tung dong.
+ */
+export async function exportAllNeighborhoodMembers(): Promise<ExcelJS.Workbook> {
+    const assignments = await ScopeAssignment.find({
+        scopeType: "NEIGHBORHOOD",
+        unassignedAt: { $exists: false },
+    })
+        .sort({ scopeId: 1, roleKey: 1 })
+        .populate("userId", "displayName phone")
+        .lean();
+
+    const neighborhoodIds = Array.from(
+        new Set(assignments.map(a => String(a.scopeId))),
+    );
+    const neighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("name code wardName");
+    const neighborhoodById = new Map(
+        neighborhoods.map(n => [String(n._id), n]),
+    );
+
+    const roleKeys = Array.from(new Set(assignments.map(a => a.roleKey)));
+    const roles = await Role.find({ key: { $in: roleKeys } }).select(
+        "key name",
+    );
+    const roleNameByKey = new Map(roles.map(r => [r.key, r.name]));
+
+    const rows = assignments
+        .filter(a => a.userId)
+        .map(a => {
+            const user = a.userId as unknown as {
+                displayName: string;
+                phone?: string;
+            };
+            const neighborhood = neighborhoodById.get(String(a.scopeId));
+            return {
+                displayName: user.displayName,
+                phone: user.phone || "",
+                roleName: roleNameByKey.get(a.roleKey) || a.roleKey,
+                neighborhoodName: neighborhood
+                    ? `${neighborhood.code} - ${neighborhood.name}`
+                    : String(a.scopeId),
+                wardName: neighborhood?.wardName || "",
+                assignedAt: a.assignedAt
+                    ? new Date(a.assignedAt).toLocaleDateString("vi-VN")
+                    : "",
+            };
+        });
+
+    const workbook = new ExcelJS.Workbook();
+    addTableSheet(
+        workbook,
+        "Thành viên Tổ dân phố",
+        [
+            { header: "Họ tên", key: "displayName", width: 26 },
+            { header: "Số điện thoại", key: "phone", width: 16 },
+            { header: "Vai trò", key: "roleName", width: 24 },
+            { header: "Tổ dân phố", key: "neighborhoodName", width: 30 },
+            { header: "Phường/Xã", key: "wardName", width: 24 },
+            { header: "Ngày được gán", key: "assignedAt", width: 18 },
+        ],
+        rows,
+    );
+    return workbook;
 }
