@@ -63,6 +63,13 @@ export interface IImportJob extends Document {
     createdCount: number;
     skippedCount: number;
     createdBy: mongoose.Types.ObjectId;
+    // Lien ket polymorphic toi doi tuong "pham vi" ma job import nay nham vao -
+    // cung quy uoc voi FileAsset.relatedModel/relatedId. Hien chi loai
+    // "neighborhood_member" dung (relatedModel="Neighborhood") de nho job nay
+    // import thanh vien cho To dan pho nao (khong phai mot cot trong file, ma
+    // duoc chon truoc luc upload).
+    relatedModel?: string;
+    relatedId?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -99,6 +106,8 @@ const ImportJobSchema = new Schema<IImportJob>(
         createdCount: { type: Number, default: 0 },
         skippedCount: { type: Number, default: 0 },
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        relatedModel: { type: String },
+        relatedId: { type: Schema.Types.ObjectId },
     },
     // minimize:false - mac dinh Mongoose se xoa hang cac truong Mixed dang
     // object rong ({}) khi luu/serialize (vd suggestedMapping/columnMapping

@@ -6,13 +6,18 @@ import { unassignScopeSchema } from "@/validators/scopeAssignment";
 
 export const dynamic = "force-dynamic";
 
-// Xem ghi chu o route.ts cung thu muc - hien chi duoc goi cho WARD.
+// Quyen kiem tra theo scopeType - xem ghi chu o route.ts cung thu muc.
 export async function POST(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "wards.manage");
         const body = unassignScopeSchema.parse(await req.json());
+        await requirePermission(
+            user,
+            body.scopeType === "NEIGHBORHOOD"
+                ? "neighborhoods.manage"
+                : "wards.manage",
+        );
         await unassignScopeByTarget(String(user._id), body, body.note);
         return apiSuccess(null, "Đã gỡ phân công phạm vi");
     } catch (err) {

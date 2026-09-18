@@ -2,15 +2,17 @@ import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { Role, ScopeAssignment, User, Neighborhood } from "@/models";
 import type { IScopeAssignment } from "@/models/ScopeAssignment";
+import { NEIGHBORHOOD_COLLABORATOR_SCOPES } from "@/models/NeighborhoodCollaboratorAssignment";
 
 // Dich vu gan/huy pham vi "dia ly" (WARD/NEIGHBORHOOD, scopeMechanism=ASSIGNED
-// - xem models/Role.ts) cho mot User - thay the 3 ham rieng le truoc day
-// (assignNeighborhoodLeader/assignNeighborhoodColeader/assignNeighborhoodCollaborator
-// trong neighborhoodService.ts) va viec gan wardCode truc tiep len User
-// (WardManagementPage.tsx) bang MOT co che chung, doc cau hinh tu Role thay vi
-// hardcode theo ten vai tro. CHUA duoc goi tu rbac.ts/UI o giai doan nay (xem
-// ke hoach "Config-Driven Account Scope System") - file nay la nen tang, se
-// duoc noi day trong buoc cutover ke tiep.
+// - xem models/Role.ts) cho mot User bang MOT co che chung, doc cau hinh tu
+// Role thay vi hardcode theo ten vai tro. Dung boi WardManagementPage.tsx
+// (WARD) va NeighborhoodMembersPanel.tsx (NEIGHBORHOOD, CHI cho vai tro KHONG
+// phai 1 trong 3 vai tro co san neighborhood_leader/coleader/collaborator -
+// 3 vai tro do van di qua assignNeighborhoodLeader/Coleader/Collaborator rieng
+// trong neighborhoodService.ts, vi moi ham do co quy tac nghiep vu rieng
+// (denormalize Neighborhood.leaderUserId, gioi han 1 to/nguoi...) ma ham
+// chung nay KHONG co.
 //
 // KHONG dung Mongo transaction (dong bo voi phan con lai cua codebase, vd
 // assignNeighborhoodLeader/assignNeighborhoodColeader cung khong dung) - kiem
@@ -22,7 +24,15 @@ export type AssignScopeInput = {
     roleKey: string;
     scopeType: "WARD" | "NEIGHBORHOOD";
     scopeId: string | number;
-    subScope?: IScopeAssignment["subScope"];
+    // string thay vi ObjectId - day la du lieu tho tu validator (Zod chi
+    // kiem hinh dang string), Mongoose tu ep kieu sang ObjectId luc luu (cung
+    // quy uoc voi assignNeighborhoodCollaborator o neighborhoodService.ts).
+    subScope?: {
+        kind: (typeof NEIGHBORHOOD_COLLABORATOR_SCOPES)[number];
+        streetId?: string;
+        houseIds?: string[];
+        campaignId?: string;
+    };
     note?: string;
 };
 

@@ -6,24 +6,25 @@ import { assignScopeSchema } from "@/validators/scopeAssignment";
 
 export const dynamic = "force-dynamic";
 
-// Endpoint dung chung cho ca WARD lan NEIGHBORHOOD (xem models/ScopeAssignment.ts),
-// nhung hien tai CHI duoc UI goi cho WARD (WardManagementPage.tsx - xem ke
-// hoach "Config-Driven Account Scope System"). Neighborhood van dung 3 bang
-// rieng (NeighborhoodLeaderAssignment/Coleader/Collaborator) qua
-// neighborhoodService.ts nhu truoc - CHUA di qua endpoint nay. Vi vay tam thoi
-// chi kiem tra "wards.manage"; khi noi UI To dan pho vao day, can doi lai
-// permission theo scopeType (vd "neighborhoods.manage" cho NEIGHBORHOOD).
+// Endpoint dung chung cho ca WARD lan NEIGHBORHOOD (xem models/ScopeAssignment.ts).
+// Quyen kiem tra THEO scopeType - "wards.manage" cho WARD (WardManagementPage.tsx),
+// "neighborhoods.manage" cho NEIGHBORHOOD (dung boi NeighborhoodMembersPanel.tsx -
+// cung quyen voi 3 route rieng le truoc day cua leader/coleader/collaborator).
+function permissionForScopeType(scopeType: "WARD" | "NEIGHBORHOOD" | undefined) {
+    return scopeType === "NEIGHBORHOOD" ? "neighborhoods.manage" : "wards.manage";
+}
+
 export async function GET(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "wards.manage");
         const { searchParams } = new URL(req.url);
         const roleKey = searchParams.get("roleKey") || undefined;
         const scopeType = searchParams.get("scopeType") as
             | "WARD"
             | "NEIGHBORHOOD"
             | undefined;
+        await requirePermission(user, permissionForScopeType(scopeType));
         const scopeIdParam = searchParams.get("scopeId");
         const scopeId = scopeIdParam
             ? scopeType === "WARD"
@@ -41,8 +42,8 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const user = await requireUser(req);
-        await requirePermission(user, "wards.manage");
         const body = assignScopeSchema.parse(await req.json());
+        await requirePermission(user, permissionForScopeType(body.scopeType));
         const assignment = await assignScope(String(user._id), body);
         return apiSuccess(assignment, "Đã phân công phạm vi", 201);
     } catch (err) {
