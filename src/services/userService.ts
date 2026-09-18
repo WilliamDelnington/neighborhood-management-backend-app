@@ -5,6 +5,7 @@ import {
     Household,
     HouseRecord,
     Neighborhood,
+    NeighborhoodColeaderAssignment,
     Role as RoleModel,
     RoleAssignment,
     ScopeAssignment,
@@ -13,7 +14,7 @@ import {
 } from "@/models";
 import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
-import { hashPassword } from "@/lib/auth";
+import { generateRandomPassword, hashPassword } from "@/lib/auth";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { writeAuditLog } from "@/services/auditService";
 import { sanitizeUser } from "@/services/authService";
@@ -657,6 +658,87 @@ export async function resetUserPasswordByAdmin(
     });
 
     return await sanitizeUser(target);
+}
+
+/**
+ * Giong resetUserPasswordByAdmin nhung TU SINH mat khau ngau nhien thay vi
+ * nhan tu input - dung cho luong "Quen mat khau" tu phia cong dan
+ * (passwordResetRequestService.resetPasswordForRequest): to truong/nhan vien
+ * chi bam mot nut, khong go tay mat khau ho. Tra ve ca mat khau dang van ban
+ * de goi noi (PasswordResetRequest.generatedPassword) - day la KENH duy nhat
+ * de nguoi dung lay lai mat khau, chua co SMS/Zalo OA that.
+ */
+export async function resetUserPasswordAuto(
+    actorUser: IUser,
+    targetId: string,
+): Promise<{ user: Awaited<ReturnType<typeof sanitizeUser>>; plainPassword: string }> {
+    const target = await User.findById(targetId);
+    if (!target) throw new HttpError("Không tìm thấy người dùng", 404);
+
+    if (!actorUser.roles.includes("admin")) {
+        await assertUserInLeaderScope(actorUser, target);
+    }
+
+    const plainPassword = generateRandomPassword();
+    target.passwordHash = await hashPassword(plainPassword);
+    target.mustChangePassword = target.roles.includes("house_owner");
+    target.sessionVersion += 1;
+    target.updatedBy = actorUser._id as any;
+    await target.save();
+
+    await writeAuditLog({
+        actorId: String(actorUser._id),
+        action: "user.reset_password",
+        targetModel: "User",
+        targetId: target._id,
+    });
+
+    return { user: await sanitizeUser(target), plainPassword };
+}
+
+/**
+ * Xac dinh nhung to truong/to pho phu trach mot so dien thoai (theo Nha ho
+ * dang dung chu - xem getHouseIdsForActingOwner) de gui THONG BAO CO DICH
+ * DANH khi co yeu cau "Quen mat khau" tu so nay, thay vi bao rong cho toan bo
+ * to truong/to pho he thong nhu truoc (xem passwordResetRequestService).
+ * Tra ve mang rong neu khong tim thay tai khoan/nha/to truong nao khop -
+ * caller se fallback ve thong bao rong theo targetRoles.
+ */
+export async function resolveResponsibleLeaderIds(
+    phone: string,
+): Promise<string[]> {
+    const user = await User.findOne({ phone }).select("_id");
+    if (!user) return [];
+
+    const houseIds = await getHouseIdsForActingOwner(user._id);
+    if (houseIds.length === 0) return [];
+
+    const houses = await HouseRecord.find({
+        _id: { $in: houseIds },
+    }).select("neighborhoodId");
+    const neighborhoodIds = [
+        ...new Set(
+            houses
+                .map(h => h.neighborhoodId && String(h.neighborhoodId))
+                .filter((id): id is string => !!id),
+        ),
+    ];
+    if (neighborhoodIds.length === 0) return [];
+
+    const neighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("leaderUserId");
+    const leaderIds = neighborhoods
+        .map(n => n.leaderUserId && String(n.leaderUserId))
+        .filter((id): id is string => !!id);
+
+    const coleaderRows = await NeighborhoodColeaderAssignment.find({
+        neighborhoodId: { $in: neighborhoodIds },
+        unassignedAt: { $exists: false },
+    }).select("coleaderUserId");
+    const coleaderIds = coleaderRows.map(row => String(row.coleaderUserId));
+
+    return [...new Set([...leaderIds, ...coleaderIds])];
 }
 
 export async function updateUserByAdmin(

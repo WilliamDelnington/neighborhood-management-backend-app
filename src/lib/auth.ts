@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import type { SessionTokenPayload, UploadTokenPayload } from "@/types";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -68,4 +69,20 @@ export async function comparePassword(
     hash: string,
 ): Promise<boolean> {
     return bcrypt.compare(password, hash);
+}
+
+// Bo ky tu de nham lan khi doc qua dien thoai (0/O, 1/l/I) - dung cho mat khau
+// tam sinh tu dong khi to truong/nhan vien bam "Dat lai mat khau" (xem
+// passwordResetRequestService.resetPasswordForRequest). Nguoi dung bi bat doi
+// mat khau ngay lan dang nhap ke tiep (User.mustChangePassword) nen day chi
+// can du an toan de dung tam thoi, khong can nguoi dung tu nho lau dai.
+const RANDOM_PASSWORD_CHARS =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+export function generateRandomPassword(length = 8): string {
+    let result = "";
+    for (let i = 0; i < length; i++) {
+        result += RANDOM_PASSWORD_CHARS[randomInt(RANDOM_PASSWORD_CHARS.length)];
+    }
+    return result;
 }

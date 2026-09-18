@@ -6,7 +6,7 @@ import {
 import { NEIGHBORHOOD_COLLABORATOR_SCOPES } from "@/models/NeighborhoodCollaboratorAssignment";
 
 const optionalDate = z.coerce.date().optional();
-const geometrySchema = z.object({
+export const geometrySchema = z.object({
     type: z.enum(["Polygon", "MultiPolygon"]),
     coordinates: z.array(z.unknown()),
 });
@@ -71,6 +71,26 @@ export const updateNeighborhoodSchema = neighborhoodFields
     .omit({ code: true, sequence: true })
     .partial();
 export type UpdateNeighborhoodInput = z.infer<typeof updateNeighborhoodSchema>;
+
+// Endpoint hep PATCH /api/neighborhoods/:id/geometry (quyen neighborhoods.update_gis
+// rieng, KHONG can neighborhoods.manage) - chi cho sua geometry/boundaryType,
+// khong dung de sua bat ky truong nao khac cua to dan pho. Giong quy uoc cua
+// PATCH /api/houses/:id/gis (houses.update_gis) o houseRecord.ts.
+export const updateNeighborhoodGeometrySchema = z.object({
+    boundaryType: z.enum(NEIGHBORHOOD_BOUNDARY_TYPES),
+    geometry: geometrySchema.optional(),
+}).superRefine((value, ctx) => {
+    if (value.boundaryType === "GEOJSON" && !value.geometry) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["geometry"],
+            message: "Cần có dữ liệu geometry khi chọn GEOJSON",
+        });
+    }
+});
+export type UpdateNeighborhoodGeometryInput = z.infer<
+    typeof updateNeighborhoodGeometrySchema
+>;
 
 // leaderUserId: null = huy gan (chi go lien ket). leaderUserId co gia tri =
 // gan moi, thay the ngay lap tuc (khong con khai niem nhiem ky/khoang thoi
