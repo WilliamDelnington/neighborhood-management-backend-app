@@ -191,6 +191,14 @@ export {
     type IInfrastructureAsset,
 } from "./InfrastructureAsset";
 export {
+    default as Poi,
+    type IPoi,
+    POI_CATEGORIES,
+    POI_SOURCES,
+    type PoiCategory,
+    type PoiSource,
+} from "./Poi";
+export {
     default as PeriodicReport,
     type IPeriodicReport,
     type IPeriodicReportAutoSummary,

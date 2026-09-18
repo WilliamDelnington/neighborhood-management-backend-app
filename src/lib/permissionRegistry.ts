@@ -536,6 +536,15 @@ export const MODULE_PERMISSION_REGISTRY: ModulePermissionGroup[] = [
         permissions: [
             { key: "settings.read", label: "Xem cài đặt" },
             { key: "settings.update", label: "Cập nhật cài đặt" },
+            {
+                key: "neighborhoods.update_gis",
+                label: "Vẽ / sửa ranh giới bản đồ (GeoJSON) Tổ dân phố",
+            },
+            { key: "pois.read", label: "Xem điểm tiện ích trên bản đồ" },
+            {
+                key: "pois.manage",
+                label: "Quản trị điểm tiện ích (thêm/sửa/xoá, quét)",
+            },
         ],
     },
     {

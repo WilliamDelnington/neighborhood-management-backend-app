@@ -239,6 +239,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         // AnnouncementFormPage.tsx).
         "neighborhoods.read",
         "neighborhoods.manage",
+        "neighborhoods.update_gis",
         "streets.read",
         "houses.read",
         "houses.update_gis",
@@ -381,6 +382,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "ai_chat.use",
         "neighborhoods.read",
         "neighborhoods.manage",
+        "neighborhoods.update_gis",
         "streets.read",
         "houses.read",
         "houses.update_gis",
