@@ -1,9 +1,19 @@
-import { Poi, type PoiCategory } from "@/models";
+import { Household, Poi, type PoiCategory } from "@/models";
 import { HttpError } from "@/lib/response";
 import { searchPlacesByCategory } from "@/lib/integrations/goong";
 import { isPointInWardBoundary } from "@/lib/wardBoundary";
 import { POI_CATEGORY_META } from "@/lib/poiCategories";
 import type { CreatePoiInput, UpdatePoiInput } from "@/validators/poi";
+
+// Chi lay vua du truong de hien popup "Hộ dân" tren ban do (xem
+// buildHouseholdPoiPopupHTML o NeighborhoodZonesMap.tsx) - khong tra ve ca ho
+// so, tranh lo du lieu khong can thiet.
+const HOUSEHOLD_POPUP_FIELDS = "code headOfHousehold phone address status";
+
+async function assertHouseholdExists(householdId: string) {
+    const exists = await Household.exists({ _id: householdId });
+    if (!exists) throw new HttpError("Không tìm thấy hộ dân", 404);
+}
 
 export async function listPois(params: {
     category?: PoiCategory;
@@ -12,22 +22,26 @@ export async function listPois(params: {
     const filter: Record<string, unknown> = {};
     if (params.category) filter.category = params.category;
     if (params.verified !== undefined) filter.verified = params.verified;
-    return Poi.find(filter).sort({ category: 1, name: 1 });
+    return Poi.find(filter)
+        .sort({ category: 1, name: 1 })
+        .populate("householdId", HOUSEHOLD_POPUP_FIELDS);
 }
 
 export async function getPoiById(id: string) {
-    const poi = await Poi.findById(id);
+    const poi = await Poi.findById(id).populate("householdId", HOUSEHOLD_POPUP_FIELDS);
     if (!poi) throw new HttpError("Không tìm thấy điểm tiện ích", 404);
     return poi;
 }
 
 export async function createPoi(actorId: string, input: CreatePoiInput) {
-    return Poi.create({
+    if (input.householdId) await assertHouseholdExists(input.householdId);
+    const poi = await Poi.create({
         ...input,
         source: "manual",
         createdBy: actorId,
         updatedBy: actorId,
     });
+    return poi.populate("householdId", HOUSEHOLD_POPUP_FIELDS);
 }
 
 export async function updatePoi(
@@ -35,6 +49,7 @@ export async function updatePoi(
     id: string,
     input: UpdatePoiInput,
 ) {
+    if (input.householdId) await assertHouseholdExists(input.householdId);
     const poi = await getPoiById(id);
     Object.assign(poi, input);
     poi.updatedBy = actorId as never;

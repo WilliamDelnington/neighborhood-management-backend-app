@@ -34,6 +34,9 @@ export const POI_CATEGORY_META: Record<
     cafe: { label: "Quán cafe", keywords: ["quán cà phê", "quán trà sữa"] },
     bus: { label: "Trạm xe buýt", keywords: ["trạm xe buýt", "điểm dừng xe buýt"] },
     apartment: { label: "Căn hộ / Chung cư", keywords: ["chung cư", "khu đô thị"] },
+    // keywords rong: khong the "quet" tu Goong Autocomplete, chi tao thu cong
+    // qua cong cu "Gắn hộ dân lên bản đồ" (xem poiService.createPoi).
+    household: { label: "Hộ dân", keywords: [] },
 };
 
 // Sanity check luc build/khoi dong - dam bao khong quen khai bao danh muc nao
