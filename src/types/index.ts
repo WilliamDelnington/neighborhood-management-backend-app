@@ -884,6 +884,7 @@ export const IMPORT_JOB_TYPE = [
     "business",
     "company",
     "neighborhood_member",
+    "poi",
 ] as const;
 export type ImportJobType = typeof IMPORT_JOB_TYPE[number];
 

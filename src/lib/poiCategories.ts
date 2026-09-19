@@ -35,8 +35,10 @@ export const POI_CATEGORY_META: Record<
     bus: { label: "Trạm xe buýt", keywords: ["trạm xe buýt", "điểm dừng xe buýt"] },
     apartment: { label: "Căn hộ / Chung cư", keywords: ["chung cư", "khu đô thị"] },
     // keywords rong: khong the "quet" tu Goong Autocomplete, chi tao thu cong
-    // qua cong cu "Gắn hộ dân lên bản đồ" (xem poiService.createPoi).
-    household: { label: "Hộ dân", keywords: [] },
+    // qua cong cu "Gắn hộ dân lên bản đồ" (xem poiService.createPoi). Nhan
+    // dung chung "Căn hộ / Chung cư" voi "apartment" theo yeu cau - PHAI khop
+    // voi POI_CATEGORY_LIST o frontend (constants/poi.ts).
+    household: { label: "Căn hộ / Chung cư", keywords: [] },
 };
 
 // Sanity check luc build/khoi dong - dam bao khong quen khai bao danh muc nao
