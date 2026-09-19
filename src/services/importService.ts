@@ -10,17 +10,20 @@ import {
     CompanyType,
     ImportJob,
     Neighborhood,
+    Poi,
     Role,
     ScopeAssignment,
     User,
     type IImportJob,
     type IUser,
+    type PoiCategory,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { generateStreetCode } from "@/lib/streetSync";
 import { isValidVnPhone } from "@/lib/phone";
 import { hashForLookup, normalizeCccd } from "@/lib/encryption";
+import { POI_CATEGORY_META } from "@/lib/poiCategories";
 import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdFlags } from "@/services/citizenService";
@@ -1424,6 +1427,302 @@ async function processHouseholdImportRows(
         targetModel: "ImportJob",
         targetId: jobId,
         metadata: { type: "household", count: committedCount, createdCount, skippedCount },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Import diem tien ich (POI)
+//
+// Giong Import ho dan - CHUA co buoc "chon cot", ten cot trong file phai khop
+// CHINH XAC voi POI_COLUMNS (khong phan biet hoa/thuong/dau). Danh muc
+// "Hộ dân" KHONG duoc ho tro qua luong nay - loai POI nay bat buoc gan voi 1
+// Household cu the (householdId), chi tao duoc qua cong cu "Gắn hộ dân lên
+// bản đồ" o /map-boundary (xem POI_CATEGORY_META, poiService.createPoi).
+// ---------------------------------------------------------------------------
+
+const POI_COLUMNS = {
+    name: "Tên",
+    category: "Danh mục",
+    lat: "Vĩ độ",
+    lng: "Kinh độ",
+    address: "Địa chỉ",
+    verified: "Đã duyệt",
+} as const;
+
+// Nhan (khong dau, thuong) -> key danh muc - bo qua "household" (xem ghi chu
+// tren). Dung normalizeEnumInput de doi chieu khong phan biet hoa/thuong/dau,
+// giong cach doi chieu "Loại sở hữu"/"Loại hình kinh doanh" o cac import khac.
+const POI_CATEGORY_LABEL_TO_KEY = new Map(
+    Object.entries(POI_CATEGORY_META)
+        .filter(([category]) => category !== "household")
+        .map(([category, meta]) => [
+            normalizeEnumInput(meta.label),
+            category as PoiCategory,
+        ]),
+);
+
+// Bien vi tri Viet Nam gan dung - chan cac gia tri lat/lng ro rang sai (vd
+// nham lan hai cot, go nham don vi) truoc khi tao ban ghi that.
+const VN_LAT_RANGE: [number, number] = [8, 24];
+const VN_LNG_RANGE: [number, number] = [100, 110];
+
+/** Rong = coi la da duyet (giong mac dinh verified=true khi nhap tay qua form
+ * - xem createPoiSchema o backend) - chi tra ve false khi gia tri ro rang the
+ * hien "chưa duyệt"/"không", giong tinh than cua parseStreetActiveCell. */
+function parsePoiVerifiedCell(raw: unknown): boolean {
+    const str = cellToString(raw).trim();
+    if (!str) return true;
+    return parseBoolean(str);
+}
+
+export function buildPoiImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Điểm tiện ích");
+    worksheet.columns = [
+        { header: POI_COLUMNS.name, key: "name", width: 32 },
+        { header: POI_COLUMNS.category, key: "category", width: 18 },
+        { header: POI_COLUMNS.lat, key: "lat", width: 14 },
+        { header: POI_COLUMNS.lng, key: "lng", width: 14 },
+        { header: POI_COLUMNS.address, key: "address", width: 32 },
+        { header: POI_COLUMNS.verified, key: "verified", width: 12 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        name: "Trường Tiểu học Kim Đồng",
+        category: "Trường học",
+        lat: 20.9748024,
+        lng: 105.7459295,
+        address: "Dương Nội, Hà Đông",
+        verified: "Có",
+    });
+    worksheet.addRow({
+        name: "UBND Phường Dương Nội",
+        category: "UBND",
+        lat: 20.98,
+        lng: 105.745,
+        address: "",
+        verified: "",
+    });
+    return workbook;
+}
+
+export async function previewPoiImport(
+    actorId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    sheetName?: string,
+): Promise<IImportJob> {
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
+    const errors: { row: number; message: string }[] = [];
+    const skipped: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    // Doi chieu voi Poi da co trong DB de tranh tao trung (cung danh muc + toa
+    // do gan giong nhau) - cung nguong 0.0003 do voi poiService.scanPois.
+    const existing = await Poi.find({}).select("category lat lng");
+    const isNearExisting = (
+        category: PoiCategory,
+        lat: number,
+        lng: number,
+    ) =>
+        existing.some(
+            p =>
+                p.category === category &&
+                Math.abs(p.lat - lat) < 0.0003 &&
+                Math.abs(p.lng - lng) < 0.0003,
+        );
+    const seenInFile = new Set<string>();
+
+    for (const row of rows) {
+        const v = row.values;
+        const name = cellToString(v[POI_COLUMNS.name]).trim();
+        const categoryRaw = cellToString(v[POI_COLUMNS.category]).trim();
+        const latRaw = cellToString(v[POI_COLUMNS.lat]).trim();
+        const lngRaw = cellToString(v[POI_COLUMNS.lng]).trim();
+        const address = cellToString(v[POI_COLUMNS.address]).trim();
+
+        const rowErrors: string[] = [];
+        if (!name) rowErrors.push("Thiếu 'Tên'");
+
+        let category: PoiCategory | undefined;
+        if (!categoryRaw) {
+            rowErrors.push("Thiếu 'Danh mục'");
+        } else {
+            category = POI_CATEGORY_LABEL_TO_KEY.get(
+                normalizeEnumInput(categoryRaw),
+            );
+            if (!category) {
+                rowErrors.push(
+                    `Giá trị 'Danh mục' không hợp lệ: "${categoryRaw}" (không hỗ trợ nhập "Hộ dân" qua Excel - dùng công cụ "Gắn hộ dân lên bản đồ")`,
+                );
+            }
+        }
+
+        // Chap nhan ca dau phay lam dau thap phan (dinh dang so kieu Viet Nam
+        // trong Excel) truoc khi parse.
+        const lat = Number(latRaw.replace(",", "."));
+        const lng = Number(lngRaw.replace(",", "."));
+        if (!latRaw || Number.isNaN(lat)) {
+            rowErrors.push("Thiếu hoặc sai định dạng 'Vĩ độ'");
+        } else if (lat < VN_LAT_RANGE[0] || lat > VN_LAT_RANGE[1]) {
+            rowErrors.push(`'Vĩ độ' có vẻ ngoài phạm vi Việt Nam: ${latRaw}`);
+        }
+        if (!lngRaw || Number.isNaN(lng)) {
+            rowErrors.push("Thiếu hoặc sai định dạng 'Kinh độ'");
+        } else if (lng < VN_LNG_RANGE[0] || lng > VN_LNG_RANGE[1]) {
+            rowErrors.push(`'Kinh độ' có vẻ ngoài phạm vi Việt Nam: ${lngRaw}`);
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        const dedupeKey = `${category}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+        if (
+            isNearExisting(category as PoiCategory, lat, lng) ||
+            seenInFile.has(dedupeKey)
+        ) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Điểm tiện ích tại tọa độ này (${lat}, ${lng}) đã tồn tại`,
+            });
+            continue;
+        }
+        seenInFile.add(dedupeKey);
+
+        previewData.push({
+            rowNumber: row.rowNumber,
+            name,
+            category,
+            lat,
+            lng,
+            address: address || undefined,
+            verified: parsePoiVerifiedCell(v[POI_COLUMNS.verified]),
+        });
+    }
+
+    const job = await ImportJob.create({
+        type: "poi",
+        status: errors.length === 0 ? "validated" : "previewing",
+        fileName,
+        totalRows: rows.length,
+        validRows: previewData.length,
+        headers,
+        rawRows: rows,
+        availableSheetNames,
+        sourceSheetName,
+        rowErrors: errors,
+        skippedRows: skipped,
+        previewData,
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+export async function commitPoiImport(
+    actorId: string,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "poi") {
+        throw new HttpError(
+            "Import job này không phải loại điểm tiện ích",
+            400,
+        );
+    }
+    if (job.status === "committed" || job.status === "committing") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
+    }
+
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processPoiImportRows(String(job._id), actorId).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] POI job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processPoiImportRows(
+    jobId: string,
+    actorId: string,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
+    let committedCount = 0;
+    let createdCount = 0;
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
+
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await Poi.create({
+                name: row.name as string,
+                category: row.category as PoiCategory,
+                lat: row.lat as number,
+                lng: row.lng as number,
+                address: row.address as string | undefined,
+                verified: row.verified as boolean,
+                source: "manual",
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
+        committedCount += 1;
+
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne(
+                { _id: jobId },
+                {
+                    committedCount,
+                    createdCount,
+                    skippedCount,
+                    rowErrors: commitErrors,
+                },
+            );
+        }
+    }
+
+    await ImportJob.updateOne(
+        { _id: jobId },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
+    );
+
+    await writeAuditLog({
+        actorId,
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: jobId,
+        metadata: { type: "poi", count: committedCount, createdCount },
     });
 }
 
