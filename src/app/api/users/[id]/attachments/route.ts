@@ -33,8 +33,13 @@ export async function GET(
 
 /**
  * POST /api/users/:id/attachments
- * Tai len tai lieu dinh kem moi - upload truc tiep tu admin-web-app (xem ghi
- * chu o userService.uploadUserAttachment).
+ * Tai len tai lieu dinh kem moi tu admin-web-app - CHI CHINH CHU tai khoan
+ * duoc tai len ho so cua chinh minh (giay to ca nhan), BAT KE actor co
+ * users.update hay khong - xem /api/auth/me/attachments (endpoint tuong tu,
+ * danh cho cac man khong phai UserDetailPage.tsx). Xem/xoa (GET/DELETE) van
+ * qua quyen users.update/users.read nhu cu - chi rieng upload bi gioi han
+ * theo yeu cau: admin/quan ly khong duoc tai giay to thay cho nguoi khac qua
+ * man nay nua.
  */
 export async function POST(
     req: Request,
@@ -43,7 +48,12 @@ export async function POST(
     try {
         await connectDB();
         const actorUser = await requireUser(req);
-        await requirePermission(actorUser, "users.update");
+        if (String(actorUser._id) !== params.id) {
+            throw new HttpError(
+                "Chỉ chính chủ tài khoản mới được tải lên tài liệu của mình",
+                403,
+            );
+        }
 
         const formData = await req.formData();
         const file = formData.get("file");
