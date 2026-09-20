@@ -408,6 +408,8 @@ export interface HouseholdGisOverviewPoint {
     houseId: string;
     code: string;
     address: string;
+    headOfHousehold: string;
+    phone?: string;
     latitude: number;
     longitude: number;
     needsSupport: boolean;
@@ -437,7 +439,7 @@ export async function getHouseholdGisOverview(
         Household.countDocuments(filter),
         Household.find(filter)
             .select(
-                "code address needsSupport isNearPoor isMartyrFamilyHousehold isLonelyElderly houseId",
+                "code address headOfHousehold phone needsSupport isNearPoor isMartyrFamilyHousehold isLonelyElderly houseId",
             )
             .populate("houseId", "gisLatitude gisLongitude"),
     ]);
@@ -461,6 +463,8 @@ export async function getHouseholdGisOverview(
                 houseId: String(house._id),
                 code: household.code,
                 address: household.address,
+                headOfHousehold: household.headOfHousehold,
+                ...(household.phone ? { phone: household.phone } : {}),
                 latitude: house.gisLatitude,
                 longitude: house.gisLongitude,
                 needsSupport: household.needsSupport,
