@@ -49,6 +49,7 @@ export async function GET(req: Request) {
             page,
             limit,
             category: searchParams.get("category") || undefined,
+            search: searchParams.get("search") || undefined,
             publicOnly,
             viewerRoles,
         });

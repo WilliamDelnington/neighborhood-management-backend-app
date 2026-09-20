@@ -106,6 +106,7 @@ export async function listFileAssets(params: {
     page: number;
     limit: number;
     category?: string;
+    search?: string;
     publicOnly?: boolean;
     // undefined/null = khong gioi han theo doi tuong (goc nhin quan tri: thay het
     // de quan ly). Mang (ke ca rong) = chi tra ve file audienceAll=true hoac co
@@ -115,12 +116,26 @@ export async function listFileAssets(params: {
     const filter: Record<string, unknown> = {};
     if (params.publicOnly) filter.isPublic = true;
     if (params.category) filter.category = params.category;
+    // $or o day va $or cua tim kiem ben duoi phai gop qua $and (khong ghi de
+    // truc tiep len filter.$or) vi ca 2 co the cung ap dung mot luc.
+    const andConditions: Record<string, unknown>[] = [];
     if (params.viewerRoles !== undefined && params.viewerRoles !== null) {
-        filter.$or = [
-            { audienceAll: true },
-            { targetRoles: { $in: params.viewerRoles } },
-        ];
+        andConditions.push({
+            $or: [
+                { audienceAll: true },
+                { targetRoles: { $in: params.viewerRoles } },
+            ],
+        });
     }
+    if (params.search) {
+        andConditions.push({
+            $or: [
+                { name: { $regex: params.search, $options: "i" } },
+                { description: { $regex: params.search, $options: "i" } },
+            ],
+        });
+    }
+    if (andConditions.length) filter.$and = andConditions;
 
     const [items, total] = await Promise.all([
         FileAsset.find(filter)
