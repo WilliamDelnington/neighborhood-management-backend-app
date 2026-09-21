@@ -685,8 +685,15 @@ export async function listMyComplaints(
     userId: string,
     page: number,
     limit: number,
+    search?: string,
 ) {
-    const filter = { createdByUserId: userId };
+    const filter: Record<string, unknown> = { createdByUserId: userId };
+    if (search) {
+        filter.$or = [
+            { code: { $regex: search, $options: "i" } },
+            { title: { $regex: search, $options: "i" } },
+        ];
+    }
     const [items, total] = await Promise.all([
         Complaint.find(filter)
             .sort({ createdAt: -1 })
