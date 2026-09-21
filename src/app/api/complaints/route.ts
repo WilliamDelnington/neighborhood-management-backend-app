@@ -4,12 +4,7 @@ import {
     apiErrorFromException,
     paginationParams,
 } from "@/lib/response";
-import {
-    requireUser,
-    requirePermission,
-    userHasPermission,
-    getUserAllowedComplaintCategories,
-} from "@/lib/rbac";
+import { requireUser, requirePermission, userHasPermission } from "@/lib/rbac";
 import { createComplaintSchema } from "@/validators/complaint";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +28,6 @@ export async function GET(req: Request) {
         await connectDB();
         const actorUser = await requireUser(req);
         await requirePermission(actorUser, "complaints.read");
-        const allowedCategories =
-            await getUserAllowedComplaintCategories(actorUser);
         const canReadEscalated = await userHasPermission(
             actorUser,
             "complaints.read_escalated",
@@ -51,7 +44,6 @@ export async function GET(req: Request) {
             search: searchParams.get("search") || undefined,
             relatedAssetId: searchParams.get("relatedAssetId") || undefined,
             neighborhoodId: searchParams.get("neighborhoodId") || undefined,
-            allowedCategories,
             actorUser,
             canReadEscalated,
             view: view === "sent" ? "sent" : undefined,

@@ -18,6 +18,7 @@
         "seed:duong-noi-demo": "tsx scripts/seed-duong-noi-demo.ts",
         "seed:complaint-types": "tsx scripts/seed-complaint-types.ts",
         "complaint-types:backfill-sender-roles": "tsx scripts/backfill-complaint-type-sender-roles.ts",
+        "complaint-types:seed-category-routing": "tsx scripts/seed-complaint-category-routing.ts",
         "seed:request-types": "tsx scripts/seed-request-types.ts",
         "request-types:backfill-sender-roles": "tsx scripts/backfill-request-type-sender-roles.ts",
         "seed:appointment-holidays": "tsx scripts/seed-appointment-holidays.ts",

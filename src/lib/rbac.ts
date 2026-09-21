@@ -229,46 +229,11 @@ export async function getRoleKeysWithPermission(
 }
 
 /**
- * Tra ve danh sach nhom phan anh (category) ma user duoc phep xem, hoac null
- * neu khong bi gioi han (xem tat ca - hanh vi mac dinh). User bi gioi han chi
- * khi TAT CA cac role dang active cua ho deu da duoc admin "chot" danh sach
- * allowedComplaintCategories; neu bat ky role nao chua duoc cau hinh (hoac
- * khong tim thay role active nao - vd permission den tu user.permissions rieng)
- * thi coi nhu khong gioi han, giu nguyen hanh vi truoc khi co tinh nang nay.
- * Nhieu role bi gioi han thi hop (union) danh sach cua tung role lai.
- */
-export async function getUserAllowedComplaintCategories(
-    user: IUser,
-): Promise<string[] | null> {
-    if (user.roles.includes("admin")) return null;
-
-    const roleDocs = await RoleModel.find({
-        key: { $in: user.roles },
-        active: true,
-    });
-    if (roleDocs.length === 0) return null;
-
-    const hasUnrestrictedRole = roleDocs.some(
-        r => r.allowedComplaintCategories === undefined,
-    );
-    if (hasUnrestrictedRole) return null;
-
-    const allowed = new Set<string>();
-    for (const role of roleDocs) {
-        for (const category of role.allowedComplaintCategories || []) {
-            allowed.add(category);
-        }
-    }
-    return [...allowed];
-}
-
-/**
  * Tra ve danh sach DashboardMetricKey (xem types/index.ts) ma user duoc phep
  * xem tren dashboard, hoac null neu khong gioi han (giu nguyen bo so lieu co
- * dinh theo audience nhu truoc day - xem dashboardService.ts). Cung quy uoc
- * voi getUserAllowedComplaintCategories: chi gioi han khi TAT CA cac role
- * dang active cua user deu da duoc admin "chot" danh sach dashboardMetrics;
- * nhieu role bi gioi han thi hop (union).
+ * dinh theo audience nhu truoc day - xem dashboardService.ts). Chi gioi han
+ * khi TAT CA cac role dang active cua user deu da duoc admin "chot" danh sach
+ * dashboardMetrics; nhieu role bi gioi han thi hop (union).
  */
 export async function getUserAllowedDashboardMetrics(
     user: IUser,

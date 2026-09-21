@@ -377,6 +377,36 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "appointments.read",
         "appointments.checkin",
     ],
+    // Can bo moi truong cap Phuong/Xa - nhan/xu ly rieng danh muc phan anh
+    // "ve_sinh_moi_truong" (dieu huong qua ComplaintTypeDefinition.
+    // allowedReceiverRoles cua danh muc do - xem
+    // scripts/seed-complaint-category-routing.ts). Cung mo hinh voi
+    // regional_police nhung khong co pccc.*/security.* (khong thuoc chuyen mon).
+    environment_officer: [
+        "dashboard.read",
+        "ai_chat.use",
+        "houses.read",
+        "households.read",
+        "citizens.read",
+        "residents.read",
+        "complaints.read",
+        "complaints.assign",
+        "complaints.update_status",
+        "requests.read",
+        "complaint_types.read",
+        "reports.read",
+        "reports.export",
+        "reports.kpi_read",
+        "meetings.register",
+        "surveys.respond",
+        "support_tickets.create",
+        "support_tickets.read_own",
+        "files.read",
+        "notifications.read",
+        "change_requests.create",
+        "appointments.read",
+        "appointments.checkin",
+    ],
     people_committee_official: [
         "dashboard.read",
         "ai_chat.use",
@@ -663,6 +693,12 @@ export const SYSTEM_ROLE_SCOPE_CONFIG: Record<
     // moi hoan toan) - giong Can bo UBND; dieu chinh lai qua man Quan ly vai
     // tro neu can khac.
     regional_police: {
+        scopeType: "WARD",
+        scopeMechanism: "ASSIGNED",
+    },
+    // Cung pham vi WARD/ASSIGNED voi regional_police - xem SYSTEM_ROLE_PERMISSIONS
+    // o tren.
+    environment_officer: {
         scopeType: "WARD",
         scopeMechanism: "ASSIGNED",
     },

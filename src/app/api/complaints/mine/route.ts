@@ -15,10 +15,12 @@ export async function GET(req: Request) {
         const actorUser = await requireUser(req);
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
+        const search = searchParams.get("search") || undefined;
         const result = await listMyComplaints(
             String(actorUser._id),
             page,
             limit,
+            search,
         );
         return apiSuccess(result);
     } catch (err) {

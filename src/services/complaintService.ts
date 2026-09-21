@@ -595,7 +595,6 @@ export async function listComplaints(params: {
     search?: string;
     relatedAssetId?: string;
     neighborhoodId?: string;
-    allowedCategories?: string[] | null;
     actorUser: IUser;
     canReadEscalated: boolean;
     // Chi co y nghia voi To truong/To pho (xem duoi) - "received" (mac dinh)
@@ -612,12 +611,7 @@ export async function listComplaints(params: {
     if (params.neighborhoodId) {
         clauses.push({ neighborhoodId: params.neighborhoodId });
     }
-    if (params.allowedCategories) {
-        const categories = params.category
-            ? params.allowedCategories.filter(c => c === params.category)
-            : params.allowedCategories;
-        clauses.push({ category: { $in: categories } });
-    } else if (params.category) {
+    if (params.category) {
         clauses.push({ category: params.category });
     }
     if (params.search) {
@@ -685,8 +679,15 @@ export async function listMyComplaints(
     userId: string,
     page: number,
     limit: number,
+    search?: string,
 ) {
-    const filter = { createdByUserId: userId };
+    const filter: Record<string, unknown> = { createdByUserId: userId };
+    if (search) {
+        filter.$or = [
+            { code: { $regex: search, $options: "i" } },
+            { title: { $regex: search, $options: "i" } },
+        ];
+    }
     const [items, total] = await Promise.all([
         Complaint.find(filter)
             .sort({ createdAt: -1 })
@@ -744,17 +745,16 @@ async function getTimelineFor(complaintId: string, publicOnly: boolean) {
 export interface ComplaintReadRequester {
     userId: string;
     isStaff: boolean;
-    allowedCategories?: string[] | null;
     actorUser?: IUser;
     canReadEscalated?: boolean;
 }
 
 /**
  * Nem HttpError neu requester khong duoc xem phan anh nay - chu phan anh luon
- * duoc xem; nhan vien phai co complaints.read (isStaff), dung nhom
- * (allowedCategories) va trong pham vi phu trach (assertComplaintInScope).
- * Dung chung cho getComplaintDetailForOwnerOrStaff va route liet ke tai lieu
- * dinh kem cua phan anh (xem /api/complaints/[id]/attachments).
+ * duoc xem; nhan vien phai co complaints.read (isStaff) va trong pham vi phu
+ * trach (assertComplaintInScope). Dung chung cho getComplaintDetailForOwnerOrStaff
+ * va route liet ke tai lieu dinh kem cua phan anh (xem
+ * /api/complaints/[id]/attachments).
  */
 export function assertComplaintReadable(
     complaint: IComplaint,
@@ -765,14 +765,6 @@ export function assertComplaintReadable(
         requester.userId;
     if (!requester.isStaff && !isOwner) {
         throw new HttpError("Bạn không có quyền xem phản ánh này", 403);
-    }
-    if (
-        requester.isStaff &&
-        !isOwner &&
-        requester.allowedCategories &&
-        !requester.allowedCategories.includes(complaint.category)
-    ) {
-        throw new HttpError("Bạn không có quyền xem nhóm phản ánh này", 403);
     }
     if (requester.isStaff && !isOwner && requester.actorUser) {
         assertComplaintInScope(

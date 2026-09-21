@@ -35,11 +35,10 @@ export interface IRole extends Document {
     name: string;
     description?: string;
     permissions: string[];
-    allowedComplaintCategories?: string[];
-    // Cung quy uoc voi truong tren: undefined = khong gioi han (giu nguyen
-    // bo so lieu dashboard co dinh theo audience nhu truoc day - xem
-    // dashboardService.ts), mot mang cu the = CHI hien dung nhung so lieu do
-    // (DASHBOARD_METRIC_KEYS trong types/index.ts), bat ke audience/vai tro.
+    // undefined = khong gioi han (giu nguyen bo so lieu dashboard co dinh theo
+    // audience nhu truoc day - xem dashboardService.ts), mot mang cu the = CHI
+    // hien dung nhung so lieu do (DASHBOARD_METRIC_KEYS trong types/index.ts),
+    // bat ke audience/vai tro.
     dashboardMetrics?: string[];
     scopeType: AccessScopeTier;
     scopeMechanism?: ScopeAssignmentMechanism;
@@ -49,8 +48,7 @@ export interface IRole extends Document {
     subScopeKinds?: (typeof NEIGHBORHOOD_COLLABORATOR_SCOPES)[number][];
     // Vai tro (KHONG ke house_owner - luon mo san cho bat ky ai co
     // "users.create") ma NGUOI GIU vai tro nay duoc phep chon khi "Tạo tài
-    // khoản" (xem userService.getCreatableRolesForActor). Khac
-    // allowedComplaintCategories: KHONG dung quy uoc
+    // khoản" (xem userService.getCreatableRolesForActor).
     // undefined = khong gioi han - default rong (khong duoc tao vai tro nao
     // ngoai house_owner) la lua chon AN TOAN vi day la quyen han nhay cam
     // (tao tai khoan voi vai tro tuy y), phai admin CHOT tung vai tro duoc
@@ -78,9 +76,6 @@ const RoleSchema = new Schema<IRole>(
         name: { type: String, required: true, trim: true },
         description: { type: String, trim: true },
         permissions: { type: [String], default: [], index: true },
-        // Khong dat default [] - can phan biet "chua cau hinh" (undefined, xem
-        // tat ca nhu truoc day) voi "admin da chot chi cho xem mot so nhom" ([]).
-        allowedComplaintCategories: { type: [String], default: undefined },
         dashboardMetrics: { type: [String], default: undefined },
         allowedCreatableRoles: { type: [String], default: [] },
         scopeType: {

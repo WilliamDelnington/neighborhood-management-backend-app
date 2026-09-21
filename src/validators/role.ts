@@ -12,18 +12,12 @@ const permissionsField = z
         "Danh sách permission chứa key không hợp lệ",
     );
 
-// Truoc la z.array(z.enum(NHOM_PHAN_ANH)) (danh sach tinh) - nay category la
-// key cua ComplaintTypeDefinition (danh muc quan tri duoc, co the la danh
-// muc tuy chinh do admin tao sau nay), nen chuyen sang permissive regex-string.
-const complaintCategoriesField = z.array(
-    z.string().regex(/^[a-z][a-z0-9_]*$/, "Nhóm phản ánh không hợp lệ"),
-);
-// Khac 2 truong tren: danh muc so lieu dashboard la CO DINH (khong co collection
+// Khac truong duoi: danh muc so lieu dashboard la CO DINH (khong co collection
 // quan tri duoc tuong ung nhu ComplaintTypeDefinition/RequestTypeDefinition),
 // nen dung thang z.enum thay vi regex-string long leo.
 const dashboardMetricsField = z.array(z.enum(DASHBOARD_METRIC_KEYS));
 // Danh sach role key duoc phep chon khi "Tạo tài khoản" (xem
-// userService.getCreatableRolesForActor) - khac 2 truong tren, KHONG dung quy
+// userService.getCreatableRolesForActor) - khac truong tren, KHONG dung quy
 // uoc undefined/null = khong gioi han vi day la quyen nhay cam, nen luon la
 // mang (mac dinh rong).
 const creatableRolesField = z.array(
@@ -53,8 +47,6 @@ export const createRoleSchema = z.object({
     name: z.string().min(1, "Thiếu tên vai trò"),
     description: z.string().optional(),
     permissions: permissionsField,
-    // Bo trong = khong gioi han (xem tat ca nhom phan anh).
-    allowedComplaintCategories: complaintCategoriesField.optional(),
     // Bo trong = khong gioi han (giu nguyen bo so lieu dashboard co dinh theo
     // audience nhu truoc day - xem dashboardService.ts).
     dashboardMetrics: dashboardMetricsField.optional(),
@@ -71,8 +63,6 @@ export const updateRoleSchema = z.object({
     name: z.string().min(1, "Thiếu tên vai trò").optional(),
     description: z.string().optional(),
     permissions: permissionsField.optional(),
-    // undefined = khong doi, null = go gioi han (xem tat ca), mang = chot gioi han.
-    allowedComplaintCategories: complaintCategoriesField.nullable().optional(),
     dashboardMetrics: dashboardMetricsField.nullable().optional(),
     // undefined = khong doi, mang (ke ca rong) = thay the toan bo danh sach -
     // khong co gia tri null o day (xem ghi chu creatableRolesField).

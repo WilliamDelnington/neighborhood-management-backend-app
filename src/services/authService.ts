@@ -5,7 +5,7 @@ import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdMemberCount } from "@/services/citizenService";
 import { loginRateLimiter } from "@/lib/rateLimit";
-import { getUserPermissionSet, getUserAllowedComplaintCategories } from "@/lib/rbac";
+import { getUserPermissionSet } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/types";
 import { maskIdNumber } from "@/lib/encryption";
 import type {
@@ -405,10 +405,9 @@ export function sanitizeUser(user: IUser) {
  */
 export async function sanitizeUserWithPermissions(user: IUser) {
     const base = sanitizeUser(user);
-    const [permissions, roleDocs, allowedComplaintCategories] = await Promise.all([
+    const [permissions, roleDocs] = await Promise.all([
         getUserPermissionSet(user),
         RoleModel.find({ key: { $in: user.roles } }).select("key name"),
-        getUserAllowedComplaintCategories(user),
     ]);
 
     const roleLabels: Record<string, string> = {};
@@ -421,6 +420,5 @@ export async function sanitizeUserWithPermissions(user: IUser) {
         ...base,
         permissions: [...permissions],
         roleLabels,
-        allowedComplaintCategories,
     };
 }

@@ -40,6 +40,7 @@ export const ROLE_LABEL: Record<string, string> = {
     neighborhood_collaborator: "Cộng tác viên Tổ dân phố",
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
+    environment_officer: "Cán bộ môi trường",
     people_committee_official: "Cán bộ UBND",
     social_affairs_official: "Cán bộ Văn hóa – Xã hội",
     health_official: "Cán bộ Y tế",
