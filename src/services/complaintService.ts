@@ -979,6 +979,56 @@ export async function updateComplaint(
     return complaint;
 }
 
+/**
+ * Khi nguoi gui XAC NHAN phan anh da hoan thanh (confirmComplaintResolution),
+ * tu dong dong (status="resolved") MOI RequestRecipient con "hoat dong"
+ * (status != "resolved") cua (cac) Request lien ket toi Complaint nay (cung
+ * quy uoc "hoat dong" voi hasActiveLinkedRequest o tren). Truoc day chi co
+ * dong bo MOT CHIEU Request -> Complaint (syncComplaintStatusFromRequest);
+ * khong co chieu nguoc lai, nen mot Request/Cong viec noi bo van "Chờ xác
+ * nhận" (hoac trang thai khac) vinh vien sau khi phan anh da hoan_thanh - dac
+ * biet khi nhan vien dat truc tiep "da_xu_ly" qua updateComplaintStatus (bo
+ * qua hoan toan nhanh dong bo tu Request) roi nguoi gui xac nhan ngay sau do.
+ * Khong throw/chan neu that bai tim Request - hoan toan la hieu ung phu cua
+ * viec xac nhan phan anh, khong phai dieu kien tien quyet.
+ */
+export async function autoResolveLinkedRequestRecipients(
+    complaint: IComplaint,
+    actorUser: IUser,
+): Promise<void> {
+    const requestIds = await RequestModel.find({
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+    }).distinct("_id");
+    if (requestIds.length === 0) return;
+
+    const recipients = await RequestRecipient.find({
+        requestId: { $in: requestIds },
+        status: { $ne: "resolved" },
+    });
+    if (recipients.length === 0) return;
+
+    const now = new Date();
+    for (const recipient of recipients) {
+        recipient.status = "resolved";
+        recipient.resolvedAt = now;
+        // eslint-disable-next-line no-await-in-loop
+        await recipient.save();
+        // eslint-disable-next-line no-await-in-loop
+        await writeAuditLog({
+            actorId: String(actorUser._id),
+            action: "request.confirm_completion",
+            targetModel: "Request",
+            targetId: recipient.requestId,
+            metadata: {
+                userId: String(recipient.userId),
+                decision: "resolved",
+                reason: "complaint.confirm_resolution",
+            },
+        });
+    }
+}
+
 export async function confirmComplaintResolution(
     actorUser: IUser,
     complaintId: string,
@@ -1004,6 +1054,7 @@ export async function confirmComplaintResolution(
     if (input?.rating !== undefined) complaint.rating = input.rating;
     if (input?.ratingNote !== undefined) complaint.ratingNote = input.ratingNote;
     await complaint.save();
+    await autoResolveLinkedRequestRecipients(complaint, actorUser);
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
