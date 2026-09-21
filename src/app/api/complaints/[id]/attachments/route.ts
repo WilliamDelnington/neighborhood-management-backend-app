@@ -1,10 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException, HttpError } from "@/lib/response";
-import {
-    requireUser,
-    userHasPermission,
-    getUserAllowedComplaintCategories,
-} from "@/lib/rbac";
+import { requireUser, userHasPermission } from "@/lib/rbac";
 import { Complaint } from "@/models";
 import { assertComplaintReadable } from "@/services/complaintService";
 import { listAttachments } from "@/services/attachmentService";
@@ -31,16 +27,12 @@ export async function GET(
         if (!complaint) throw new HttpError("Khong tim thay phan anh", 404);
 
         const isStaff = await userHasPermission(actorUser, "complaints.read");
-        const allowedCategories = isStaff
-            ? await getUserAllowedComplaintCategories(actorUser)
-            : null;
         const canReadEscalated = isStaff
             ? await userHasPermission(actorUser, "complaints.read_escalated")
             : false;
         assertComplaintReadable(complaint, {
             userId: String(actorUser._id),
             isStaff,
-            allowedCategories,
             actorUser: isStaff ? actorUser : undefined,
             canReadEscalated,
         });

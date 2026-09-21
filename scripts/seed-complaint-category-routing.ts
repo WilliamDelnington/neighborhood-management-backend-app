@@ -10,13 +10,8 @@ import { config as loadEnv } from "dotenv";
  *    bo moi truong) - permissions/scope lay tu SYSTEM_ROLE_PERMISSIONS/
  *    SYSTEM_ROLE_SCOPE_CONFIG (src/lib/systemRoles.ts), giong cach
  *    scripts/backfill-role-scope-config.ts tao vai tro he thong con thieu.
- * 2. Dat allowedComplaintCategories cho 2 vai tro (chi anh huong MAN HINH XEM
- *    cua ho - "Phạm vi xem phản ánh" o RoleListPage.tsx, KHONG anh huong ai
- *    duoc thong bao khi co phan anh moi - xem buoc 3):
- *      - regional_police       -> ["an_ninh_trat_tu", "pccc"]
- *      - environment_officer   -> ["ve_sinh_moi_truong"]
- * 3. Dat ComplaintTypeDefinition.allowedReceiverRoles (day moi la truong QUYET
- *    DINH ai duoc thong bao/dinh tuyen khi phan anh moi duoc tao - xem
+ * 2. Dat ComplaintTypeDefinition.allowedReceiverRoles (truong QUYET DINH ai
+ *    duoc thong bao/dinh tuyen khi phan anh moi duoc tao - xem
  *    resolveComplaintTypeRecipientIds trong complaintService.ts):
  *      - an_ninh_trat_tu, pccc -> ["regional_police"]
  *      - ve_sinh_moi_truong    -> ["environment_officer"]
@@ -78,31 +73,7 @@ async function main() {
         console.log(`Vai tro "${ENV_ROLE_KEY}" da ton tai, giu nguyen permissions/scope hien co.`);
     }
 
-    // Buoc 2: allowedComplaintCategories - chi anh huong man hinh xem cua ho.
-    await Role.updateOne(
-        { key: "regional_police" },
-        {
-            $set: {
-                allowedComplaintCategories: ["an_ninh_trat_tu", "pccc"],
-                updatedBy: actorId,
-            },
-        },
-    );
-    await Role.updateOne(
-        { key: ENV_ROLE_KEY },
-        {
-            $set: {
-                allowedComplaintCategories: ["ve_sinh_moi_truong"],
-                updatedBy: actorId,
-            },
-        },
-    );
-    console.log(
-        "Da dat allowedComplaintCategories cho regional_police (an_ninh_trat_tu, pccc) va " +
-            `${ENV_ROLE_KEY} (ve_sinh_moi_truong).`,
-    );
-
-    // Buoc 3: allowedReceiverRoles - truong THUC SU quyet dinh dinh tuyen/thong bao.
+    // Buoc 2: allowedReceiverRoles - truong quyet dinh dinh tuyen/thong bao.
     const receiverRoleUpdates: Array<{ key: string; roles: string[] }> = [
         { key: "an_ninh_trat_tu", roles: ["regional_police"] },
         { key: "pccc", roles: ["regional_police"] },

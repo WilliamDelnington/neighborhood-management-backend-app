@@ -22,7 +22,6 @@ import {
     type IUser,
 } from "@/models";
 import {
-    getUserAllowedComplaintCategories,
     getUserAllowedDashboardMetrics,
     getUserPermissionSet,
 } from "@/lib/rbac";
@@ -574,7 +573,7 @@ export async function getDashboardSummary(actorUser: IUser) {
                   ])
                 : Promise.resolve([]),
             capabilities.complaints
-                ? getComplaintDashboardRows(actorUser, context.complaintFilter)
+                ? getComplaintDashboardRows(context.complaintFilter)
                 : Promise.resolve([]),
             capabilities.complaints && houseIds.length > 0
                 ? Complaint.aggregate([
@@ -951,16 +950,10 @@ export async function getDashboardSummary(actorUser: IUser) {
 }
 
 async function getComplaintDashboardRows(
-    actorUser: IUser,
     scopeFilter: Record<string, unknown>,
 ): Promise<Array<{ status: string; count: number }>> {
-    const allowedCategories = await getUserAllowedComplaintCategories(actorUser);
-    const match = {
-        ...scopeFilter,
-        ...(allowedCategories ? { category: { $in: allowedCategories } } : {}),
-    };
     const rows = await Complaint.aggregate([
-        { $match: match },
+        { $match: scopeFilter },
         { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
     return rows.map(row => ({

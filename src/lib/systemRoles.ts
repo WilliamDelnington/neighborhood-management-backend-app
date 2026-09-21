@@ -378,9 +378,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         "appointments.checkin",
     ],
     // Can bo moi truong cap Phuong/Xa - nhan/xu ly rieng danh muc phan anh
-    // "ve_sinh_moi_truong" (xem allowedComplaintCategories o
-    // SYSTEM_ROLE_SCOPE_CONFIG khong dinh nghia truong nay - dat truc tiep khi
-    // seed Role, giong cach regional_police duoc gan an_ninh_trat_tu/pccc - xem
+    // "ve_sinh_moi_truong" (dieu huong qua ComplaintTypeDefinition.
+    // allowedReceiverRoles cua danh muc do - xem
     // scripts/seed-complaint-category-routing.ts). Cung mo hinh voi
     // regional_police nhung khong co pccc.*/security.* (khong thuoc chuyen mon).
     environment_officer: [

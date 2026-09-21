@@ -127,12 +127,6 @@ export async function updateRole(
     if (input.name !== undefined) role.name = input.name;
     if (input.description !== undefined) role.description = input.description;
     if (input.permissions !== undefined) role.permissions = input.permissions;
-    if (input.allowedComplaintCategories !== undefined) {
-        role.allowedComplaintCategories =
-            input.allowedComplaintCategories === null
-                ? undefined
-                : input.allowedComplaintCategories;
-    }
     if (input.dashboardMetrics !== undefined) {
         role.dashboardMetrics =
             input.dashboardMetrics === null ? undefined : input.dashboardMetrics;

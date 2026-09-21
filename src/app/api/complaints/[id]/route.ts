@@ -1,11 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { apiSuccess, apiErrorFromException } from "@/lib/response";
-import {
-    requireUser,
-    userHasPermission,
-    requirePermission,
-    getUserAllowedComplaintCategories,
-} from "@/lib/rbac";
+import { requireUser, userHasPermission, requirePermission } from "@/lib/rbac";
 import {
     getComplaintDetailForOwnerOrStaff,
     deleteComplaint,
@@ -23,16 +18,12 @@ export async function GET(
         await connectDB();
         const actorUser = await requireUser(req);
         const isStaff = await userHasPermission(actorUser, "complaints.read");
-        const allowedCategories = isStaff
-            ? await getUserAllowedComplaintCategories(actorUser)
-            : null;
         const canReadEscalated = isStaff
             ? await userHasPermission(actorUser, "complaints.read_escalated")
             : false;
         const result = await getComplaintDetailForOwnerOrStaff(params.id, {
             userId: String(actorUser._id),
             isStaff,
-            allowedCategories,
             actorUser: isStaff ? actorUser : undefined,
             canReadEscalated,
         });

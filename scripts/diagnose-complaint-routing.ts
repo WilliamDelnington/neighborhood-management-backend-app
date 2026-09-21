@@ -7,8 +7,7 @@ import { config as loadEnv } from "dotenv";
  * doi: ban than phan anh (category/neighborhoodId/wardCode/targetHouseId),
  * ComplaintTypeDefinition tuong ung (allowedReceiverRoles/allowedSenderRoles),
  * va TOAN BO user dang giu vai tro co trong allowedReceiverRoles (roles/
- * wardCode/status) + Role doc cua tung vai tro do (scopeType/scopeMechanism/
- * allowedComplaintCategories).
+ * wardCode/status) + Role doc cua tung vai tro do (scopeType/scopeMechanism).
  *
  * Chay: npx tsx scripts/diagnose-complaint-routing.ts HB-PA-2026-0018
  */
@@ -122,7 +121,6 @@ async function main() {
                       active: role.active,
                       scopeType: role.scopeType,
                       scopeMechanism: role.scopeMechanism,
-                      allowedComplaintCategories: role.allowedComplaintCategories ?? null,
                   }
                 : "KHONG TIM THAY Role nay trong DB",
         );
