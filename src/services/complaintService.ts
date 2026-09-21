@@ -980,17 +980,24 @@ export async function updateComplaint(
 }
 
 /**
- * Khi nguoi gui XAC NHAN phan anh da hoan thanh (confirmComplaintResolution),
- * tu dong dong (status="resolved") MOI RequestRecipient con "hoat dong"
- * (status != "resolved") cua (cac) Request lien ket toi Complaint nay (cung
- * quy uoc "hoat dong" voi hasActiveLinkedRequest o tren). Truoc day chi co
- * dong bo MOT CHIEU Request -> Complaint (syncComplaintStatusFromRequest);
- * khong co chieu nguoc lai, nen mot Request/Cong viec noi bo van "Chờ xác
- * nhận" (hoac trang thai khac) vinh vien sau khi phan anh da hoan_thanh - dac
- * biet khi nhan vien dat truc tiep "da_xu_ly" qua updateComplaintStatus (bo
- * qua hoan toan nhanh dong bo tu Request) roi nguoi gui xac nhan ngay sau do.
- * Khong throw/chan neu that bai tim Request - hoan toan la hieu ung phu cua
- * viec xac nhan phan anh, khong phai dieu kien tien quyet.
+ * Dong (status="resolved") MOI RequestRecipient con "hoat dong" (status !=
+ * "resolved") cua (cac) Request lien ket toi Complaint nay (cung quy uoc
+ * "hoat dong" voi hasActiveLinkedRequest o tren). Dung o HAI noi:
+ *   - confirmComplaintResolution (nguoi gui XAC NHAN phan anh da hoan
+ *     thanh): truoc day chi co dong bo MOT CHIEU Request -> Complaint
+ *     (syncComplaintStatusFromRequest), khong co chieu nguoc lai, nen mot
+ *     Request/Cong viec noi bo van "Chờ xác nhận" (hoac trang thai khac)
+ *     vinh vien sau khi phan anh da hoan_thanh - dac biet khi nhan vien dat
+ *     truc tiep "da_xu_ly" qua updateComplaintStatus (bo qua hoan toan
+ *     nhanh dong bo tu Request).
+ *   - requestComplaintReevaluation (nguoi gui DE NGHI XEM XET LAI): dong
+ *     vong xu ly CU de hasActiveLinkedRequest tro ve false, mo lai
+ *     canReceiveOrChooseAssignee cho vong xu ly MOI - thieu buoc nay khien
+ *     phan anh quay lai "dang_xu_ly" nhung khong con nut "Tiep nhan"/"Chon
+ *     nguoi phu trach" nao de tiep tuc (Request cu con "hoat dong" nhung
+ *     khong con ai duoc nhac xac nhan no).
+ * Khong throw/chan neu khong tim thay Request - hoan toan la hieu ung phu,
+ * khong phai dieu kien tien quyet cua ham goi no.
  */
 export async function autoResolveLinkedRequestRecipients(
     complaint: IComplaint,
@@ -1107,6 +1114,15 @@ export async function requestComplaintReevaluation(
 
     complaint.status = "dang_xu_ly";
     await complaint.save();
+    // Dong (resolved) Request/vong xu ly CU (neu con hoat dong) - de
+    // hasActiveLinkedRequest tro ve false, mo lai nut "Tiep nhan"/"Chon nguoi
+    // phu trach" (canReceiveOrChooseAssignee) cho vong xu ly MOI, giong dung
+    // thiet ke da ghi trong docstring cua hasActiveLinkedRequest ("sau khi
+    // Request do da resolved ... co the tao THEM mot Request moi"). Thieu
+    // buoc nay khien phan anh quay lai "dang_xu_ly" nhung khong ai tiep tuc
+    // xu ly duoc (Request/RequestRecipient cu con "hoat dong" nhung khong
+    // con ai duoc nhac de xac nhan no).
+    await autoResolveLinkedRequestRecipients(complaint, actorUser);
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
