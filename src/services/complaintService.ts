@@ -803,11 +803,15 @@ export async function getComplaintDetailForOwnerOrStaff(
     const timeline = await getTimelineFor(complaintId, !requester.isStaff);
     const plain = complaint.toObject();
     if (!requester.isStaff) delete (plain as any).internalNotes;
-    // Chi tinh cho staff - resident khong dung toi flag nay (khong thay nut
-    // Tiep nhan/Chon nguoi phu trach), tranh 1 query thua cho request cua ho.
+    // Chi tinh cho staff - resident khong dung toi 2 truong nay (khong thay
+    // nut Tiep nhan/Chon nguoi phu trach, cung khong co "Yeu cau cong viec"
+    // rieng), tranh query thua cho request cua ho.
     (plain as any).canReceiveOrChooseAssignee = requester.isStaff
         ? await canReceiveOrChooseAssignee(complaint)
         : false;
+    (plain as any).linkedRequestId = requester.isStaff
+        ? await getLatestLinkedRequestId(complaint._id)
+        : null;
 
     return { complaint: plain, timeline };
 }
@@ -1257,6 +1261,26 @@ async function hasActiveLinkedRequest(
         status: { $ne: "resolved" },
     });
     return activeCount > 0;
+}
+
+/**
+ * Tra ve _id cua Request lien ket GAN NHAT (moi tao nhat) toi complaintId nay,
+ * hoac null neu chua tung co Request nao. Mot Complaint co the co nhieu
+ * Request qua tung vong xu ly (xem hasActiveLinkedRequest o tren) - Request
+ * moi nhat luon la ban dang hoat dong (neu con dang xu ly) hoac ban gan nhat
+ * (neu phan anh da hoan_thanh/dong), nen dung lam dich cho nut "Xem yêu cầu
+ * công việc" o FE (ComplaintDetailPage.tsx) dieu huong toi.
+ */
+async function getLatestLinkedRequestId(
+    complaintId: mongoose.Types.ObjectId | string,
+): Promise<mongoose.Types.ObjectId | null> {
+    const request = await RequestModel.findOne({
+        relatedModel: "Complaint",
+        relatedId: complaintId,
+    })
+        .sort({ createdAt: -1 })
+        .select("_id");
+    return request?._id ?? null;
 }
 
 /**
