@@ -235,3 +235,26 @@ export async function getStaffOnlyComplaintCategoryKeys(): Promise<string[]> {
         )
         .map(d => d.key);
 }
+
+/**
+ * Danh sach key cac danh muc phan anh ma actor (theo vai tro) la nguoi NHAN
+ * (xuat hien trong allowedReceiverRoles cua danh muc active tuong ung) - vd
+ * regional_police -> [an_ninh_trat_tu, pccc], environment_officer ->
+ * [ve_sinh_moi_truong], secretary/people_committee_official ->
+ * [to_de_xuat_len_phuong]. Dung boi listComplaints de loc danh sach cho cac
+ * vai tro cap Phuong (WARD/ASSIGNED) THEO DUNG danh muc ho phu trach thay vi
+ * dung chung mot bo loc "chi danh cho nhan vien" (xem
+ * getStaffOnlyComplaintCategoryKeys) cho MOI vai tro cap Phuong - nham lan
+ * truoc gop ca cac vai tro "phong ban" chuyen mon (police/moi truong) vao
+ * chung nhanh do, khien ho khong con thay duoc phan anh cua CU DAN gui truc
+ * tiep cho minh (vd an_ninh_trat_tu) sau khi duoc gan Phuong/Xa.
+ */
+export async function getReceivableComplaintCategoryKeysForRoles(
+    roles: string[],
+): Promise<string[]> {
+    const definitions = await ComplaintTypeDefinition.find({
+        active: true,
+        allowedReceiverRoles: { $in: roles },
+    }).select("key");
+    return definitions.map(d => d.key);
+}
