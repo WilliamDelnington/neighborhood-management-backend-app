@@ -38,6 +38,7 @@ import {
 } from "@/services/requestService";
 import { getMyAssignedComplaintCounts } from "@/services/complaintService";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
+import { countUnansweredSurveys } from "@/services/surveyService";
 import { getUnreadCount } from "@/services/notificationReadService";
 import {
     getFinanceReport,
@@ -2007,8 +2008,7 @@ export async function getMyHouseDashboard(actorUser: IUser) {
         activeComplaints,
         openSupportTickets,
         houseIds,
-        openSurveyDocs,
-        respondedSurveyIds,
+        pendingSurveys,
         upcomingMeetingDocs,
         myMeetingRegistrations,
     ] = await Promise.all([
@@ -2023,20 +2023,13 @@ export async function getMyHouseDashboard(actorUser: IUser) {
             status: { $nin: SUPPORT_TICKET_TERMINAL_STATUSES },
         }),
         getHouseIdsForActingOwner(userId),
-        Survey.find({ status: "dang_mo" }).select("_id"),
-        SurveyResponse.find({ userId }).select("surveyId"),
+        countUnansweredSurveys(actorUser),
         Meeting.find({ startTime: { $gte: new Date() }, published: true })
             .sort({ startTime: 1 })
             .select("_id title startTime location"),
         MeetingRegistration.find({ userId }).select("meetingId"),
     ]);
 
-    const respondedSurveyIdSet = new Set(
-        respondedSurveyIds.map(response => String(response.surveyId)),
-    );
-    const pendingSurveys = openSurveyDocs.filter(
-        survey => !respondedSurveyIdSet.has(String(survey._id)),
-    ).length;
     const registeredMeetingIdSet = new Set(
         myMeetingRegistrations.map(registration =>
             String(registration.meetingId),
