@@ -24,6 +24,7 @@ import { getSetting } from "@/services/settingsService";
 import {
     getComplaintTypeByKey,
     getStaffOnlyComplaintCategoryKeys,
+    getReceivableComplaintCategoryKeysForRoles,
 } from "@/services/complaintTypeDefinitionService";
 import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import {
@@ -633,21 +634,32 @@ export async function listComplaints(params: {
     // vai tro nao, xem ghi chu o complaintScopeFilter).
     const isWardTier = !isAdmin && !!params.actorUser.wardCode;
 
-    if (!isAdmin && (isNeighborhoodTier || isWardTier)) {
-        const staffOnlyKeys = await getStaffOnlyComplaintCategoryKeys();
-        if (isWardTier) {
-            // "Chi thay phan anh To truong/To pho GUI LEN" - thay the hoan
-            // toan cach xem "moi phan anh trong Phuong" truoc day (areaScopeFilter
-            // qua nhanh khong canReadEscalated cua complaintScopeFilter).
-            clauses.push({
-                category: staffOnlyKeys.length ? { $in: staffOnlyKeys } : { $in: [] },
-            });
-        } else if (params.view === "sent") {
+    if (!isAdmin && isWardTier) {
+        // Loc THEO DUNG danh muc vai tro nay la nguoi nhan (allowedReceiverRoles) -
+        // vd regional_police chi thay an_ninh_trat_tu/pccc, environment_officer
+        // chi thay ve_sinh_moi_truong, secretary/people_committee_official chi
+        // thay to_de_xuat_len_phuong. TRUOC DAY dung chung mot bo loc
+        // "staffOnlyKeys" (chi danh muc KHONG cho cu dan gui) cho MOI vai tro cap
+        // Phuong - vo tinh gop ca cac vai tro "phong ban" chuyen mon (police/moi
+        // truong) vao nhanh do, khien ho khong con thay duoc phan anh CU DAN gui
+        // truc tiep cho minh sau khi duoc gan Phuong/Xa (bug that: "cong an
+        // khong nhan duoc phan anh an ninh trat tu tu cu dan").
+        const receivableKeys = await getReceivableComplaintCategoryKeysForRoles(
+            params.actorUser.roles,
+        );
+        clauses.push({
+            category: receivableKeys.length ? { $in: receivableKeys } : { $in: [] },
+        });
+    } else if (!isAdmin && isNeighborhoodTier) {
+        if (params.view === "sent") {
             clauses.push({ createdByUserId: params.actorUser._id });
-        } else if (staffOnlyKeys.length) {
-            // "received" (mac dinh) - khong gom cac de xuat To truong/To pho
-            // (chinh minh hoac dong nghiep) da gui len Phuong.
-            clauses.push({ category: { $nin: staffOnlyKeys } });
+        } else {
+            const staffOnlyKeys = await getStaffOnlyComplaintCategoryKeys();
+            if (staffOnlyKeys.length) {
+                // "received" (mac dinh) - khong gom cac de xuat To truong/To pho
+                // (chinh minh hoac dong nghiep) da gui len Phuong.
+                clauses.push({ category: { $nin: staffOnlyKeys } });
+            }
         }
     }
 
