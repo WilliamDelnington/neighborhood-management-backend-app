@@ -18,6 +18,9 @@ export interface IComplaintTypeDefinition extends Document {
     // true = loai duoc seed san tu NHOM_PHAN_ANH (xem scripts/seed-complaint-types.ts)
     // - khoa key/xoa, chi cho sua name/description/allowedReceiverRoles/active.
     isBuiltIn: boolean;
+    // true = phan anh thuoc loai nay duoc danh dau khan cap (hien thi/uu tien
+    // rieng o phia frontend, khong lam thay doi luong dieu huong nguoi nhan).
+    isUrgent: boolean;
     active: boolean;
     wardCode?: number;
     wardName?: string;
@@ -41,6 +44,7 @@ const ComplaintTypeDefinitionSchema = new Schema<IComplaintTypeDefinition>(
         allowedReceiverRoles: { type: [String], default: [] },
         allowedSenderRoles: { type: [String], default: [] },
         isBuiltIn: { type: Boolean, default: false },
+        isUrgent: { type: Boolean, default: false },
         active: { type: Boolean, default: true, index: true },
         wardCode: { type: Number, index: true },
         wardName: { type: String },
