@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { connectDB } from "@/lib/mongodb";
 import { checkPcccDeadlinesAndNotify } from "@/services/pcccService";
 import { checkAppointmentRemindersAndNoShow } from "@/services/appointmentService";
+import { checkOverdueComplaintsAndNotify } from "@/services/complaintService";
 
 // next dev co the goi register() (xem src/instrumentation.ts) nhieu lan khi
 // module server duoc bien dich lai - dung cờ toan cuc de dam bao job cron chi
@@ -11,6 +12,8 @@ declare global {
     var __pcccDeadlineSchedulerStarted: boolean | undefined;
     // eslint-disable-next-line no-var
     var __appointmentSchedulerStarted: boolean | undefined;
+    // eslint-disable-next-line no-var
+    var __complaintOverdueSchedulerStarted: boolean | undefined;
 }
 
 async function runPcccDeadlineCheck() {
@@ -81,4 +84,34 @@ export function startAppointmentScheduler(): void {
     );
 
     setTimeout(runAppointmentRemindersAndNoShowCheck, 5000);
+}
+
+async function runComplaintOverdueCheck() {
+    try {
+        await connectDB();
+        const warned = await checkOverdueComplaintsAndNotify();
+        if (warned > 0) {
+            console.log(`[complaint-overdue] Da canh bao ${warned} phan anh qua han 24h`);
+        }
+    } catch (err) {
+        console.error("[complaint-overdue] Loi khi kiem tra phan anh qua han:", err);
+    }
+}
+
+/**
+ * Dang ky job kiem tra dinh ky cac phan anh qua han 24h chua xu ly xong (xem
+ * checkOverdueComplaintsAndNotify trong complaintService.ts). Cung hinh dang
+ * voi startPcccDeadlineScheduler/startAppointmentScheduler o tren. Lich chay
+ * cau hinh qua COMPLAINT_OVERDUE_CRON (mac dinh moi 30 phut - du gan de canh
+ * bao khong tre qua lau sau khi vua qua nguong 24h).
+ */
+export function startComplaintOverdueScheduler(): void {
+    if (global.__complaintOverdueSchedulerStarted) return;
+    global.__complaintOverdueSchedulerStarted = true;
+
+    const schedule = process.env.COMPLAINT_OVERDUE_CRON || "*/30 * * * *";
+    cron.schedule(schedule, runComplaintOverdueCheck);
+    console.log(`[complaint-overdue] Da dang ky lich kiem tra phan anh qua han: "${schedule}"`);
+
+    setTimeout(runComplaintOverdueCheck, 5000);
 }

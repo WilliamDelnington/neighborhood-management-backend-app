@@ -13,11 +13,18 @@ export interface SendGmailEmailParams {
  * Gui email qua Gmail SMTP (tai khoan Gmail thuong + "App password", KHONG
  * phai OAuth2 - don gian nhat cho quy mo he thong nay, khong can flow xin
  * quyen rieng). Day la KENH THU HAI (sau in-app, xem lib/notificationAdapters.ts) -
- * chi danh cho luong "digest" thong bao dinh ky (gop nhieu thong bao cua CUNG
- * mot nguoi nhan thanh MOT email), KHONG duoc goi truc tiep moi khi co 1
- * thong bao moi phat sinh - lam vay se spam hop thu nguoi nhan neu ho quan ly
- * nhieu Nha/Ho (vd mot to truong nhan hang tram xac nhan cung luc). Noi goi
- * ham nay (job dinh ky) chiu trach nhiem tu gop noi dung truoc khi goi.
+ * mac dinh chi danh cho luong "digest" thong bao dinh ky (gop nhieu thong bao
+ * cua CUNG mot nguoi nhan thanh MOT email), KHONG duoc goi truc tiep moi khi
+ * co 1 thong bao moi phat sinh - lam vay se spam hop thu nguoi nhan neu ho
+ * quan ly nhieu Nha/Ho (vd mot to truong nhan hang tram xac nhan cung luc).
+ * Noi goi ham nay (job dinh ky) chiu trach nhiem tu gop noi dung truoc khi goi.
+ *
+ * NGOAI LE duy nhat: emailAdapter (notificationAdapters.ts) goi truc tiep,
+ * dong bo, khong gop - CHI cho cac truong hop khan cap that su duoc liet ke ro
+ * (phan anh an_ninh_trat_tu/pccc khi tao, va canh bao phan anh qua han 24h,
+ * xem checkOverdueComplaintsAndNotify trong complaintService.ts). So luong cac
+ * truong hop nay nho va hiem nen chap nhan duoc rui ro spam nguoc lai loi ich
+ * bao khan cap kip thoi.
  *
  * Cau hinh: bat "2-Step Verification" cho tai khoan Gmail dung de gui, sau do
  * tao "App password" tai https://myaccount.google.com/apppasswords (KHAC mat
