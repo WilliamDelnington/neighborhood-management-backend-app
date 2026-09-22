@@ -6,6 +6,7 @@ import {
     Citizen,
     HouseRecord,
     Neighborhood,
+    Notification,
     Request as RequestModel,
     RequestRecipient,
     ScopeAssignment,
@@ -17,6 +18,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { generateYearlyCode } from "@/lib/utils";
 import { createNotification } from "@/services/notificationService";
+import { emailAdapter } from "@/lib/notificationAdapters";
 import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter } from "@/lib/rbac";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
@@ -348,6 +350,12 @@ const HOUSE_SCOPED_COMPLAINT_ROLES = new Set([
     "cooperator",
 ]);
 
+// Danh muc phan anh duoc coi la khan cap - gui THEM email (ngoai in-app) ngay
+// khi tao, xem "NGOAI LE" trong lib/integrations/gmail.ts. Hardcode (khong
+// dua vao ComplaintTypeDefinition) vi day la quyet dinh nghiep vu it thay
+// doi, khong can quan tri qua UI.
+const EMERGENCY_COMPLAINT_CATEGORIES = new Set(["an_ninh_trat_tu", "pccc"]);
+
 /**
  * Dieu huong nguoi nhan/nguoi phu trach chinh cho mot phan anh, dua tren
  * ComplaintTypeDefinition.allowedReceiverRoles (thu tu trong mang la thu tu
@@ -507,6 +515,37 @@ export async function createComplaint(
         recipientIds = routed.recipientIds;
     }
 
+    // Chuan hoa toa do GPS nguoi gui gui kem (tuy chon) - cung quy uoc voi
+    // normalizeHouseGis trong houseRecordService.ts: null/undefined/0 nghia
+    // la chua co du lieu, khong luu [0, 0].
+    const hasGisCoords =
+        input.gisLatitude !== undefined &&
+        input.gisLatitude !== null &&
+        input.gisLatitude !== 0 &&
+        input.gisLongitude !== undefined &&
+        input.gisLongitude !== null &&
+        input.gisLongitude !== 0;
+    const gis = hasGisCoords
+        ? {
+              gisLatitude: input.gisLatitude,
+              gisLongitude: input.gisLongitude,
+              gisAccuracyMeters: input.gisAccuracyMeters ?? null,
+              gisSource:
+                  input.gisSource && input.gisSource !== "unavailable"
+                      ? input.gisSource
+                      : ("manual" as const),
+              gisCapturedAt: input.gisCapturedAt
+                  ? new Date(input.gisCapturedAt)
+                  : new Date(),
+          }
+        : {
+              gisLatitude: null,
+              gisLongitude: null,
+              gisAccuracyMeters: null,
+              gisSource: "unavailable" as const,
+              gisCapturedAt: null,
+          };
+
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
         // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
@@ -518,6 +557,7 @@ export async function createComplaint(
         title: input.title,
         content: input.content,
         area: input.area,
+        ...gis,
         status: "moi_tiep_nhan",
         cluster,
         neighborhoodId,
@@ -561,7 +601,7 @@ export async function createComplaint(
     }
 
     if (recipientIds.size > 0) {
-        await createNotification({
+        const notification = await createNotification({
             title: "Phản ánh mới cần xử lý",
             body: `Mã ${code}: ${input.title}`,
             type: "complaint.created",
@@ -570,6 +610,18 @@ export async function createComplaint(
             relatedId: complaint._id,
             createdBy: userId,
         });
+
+        // Danh muc khan cap: gui THEM email ngay lap tuc toi cung nhom nguoi
+        // nhan da xac dinh o tren (khong tao thong bao rieng) - xem "NGOAI LE"
+        // trong lib/integrations/gmail.ts.
+        if (EMERGENCY_COMPLAINT_CATEGORIES.has(input.category)) {
+            await emailAdapter.deliver(
+                [...recipientIds].map(recipientId => ({
+                    notificationId: notification._id,
+                    userId: recipientId,
+                })),
+            );
+        }
     }
     // Rieng, KHONG chung mot lan goi voi targetUserIds o tren - createNotification
     // chi xet targetRoles khi targetUserIds rong (xem notificationService.ts),
@@ -746,6 +798,73 @@ export async function getMyAssignedComplaintCounts(
     }
 
     return { inProgress: rows.length, overdue };
+}
+
+const OVERDUE_ALERT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Quet cac phan anh CHUA xu ly xong (status khong nam trong
+ * COMPLAINT_TERMINAL_STATUSES) da qua 24h ke tu luc tao (createdAt) va CHUA
+ * tung duoc canh bao (overdueAlertSentAt rong), gui thong bao + email khan
+ * cap mot lan duy nhat cho moi phan anh (dat overdueAlertSentAt ngay sau khi
+ * gui de lan chay tiep theo cua job bo qua). Goi tu scheduler dinh ky (xem
+ * src/lib/scheduler.ts), khong lien quan request cua nguoi dung.
+ *
+ * Nguoi nhan: assigneeId/secondaryAssigneeIds neu da co nguoi phu trach; neu
+ * CHUA co ai nhan xu ly sau 24h (truong hop dang lo ngai nhat), roi ve dung
+ * lai danh sach targetUserIds cua thong bao "complaint.created" ban dau (xem
+ * createComplaint) thay vi tu dinh tuyen lai tu dau.
+ */
+export async function checkOverdueComplaintsAndNotify(): Promise<number> {
+    const threshold = new Date(Date.now() - OVERDUE_ALERT_THRESHOLD_MS);
+    const overdue = await Complaint.find({
+        status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+        createdAt: { $lte: threshold },
+        overdueAlertSentAt: { $exists: false },
+    });
+
+    for (const complaint of overdue) {
+        const recipientIds = new Set<string>();
+        if (complaint.assigneeId) recipientIds.add(String(complaint.assigneeId));
+        complaint.secondaryAssigneeIds.forEach(id => recipientIds.add(String(id)));
+
+        if (recipientIds.size === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            const originalNotification = await Notification.findOne({
+                type: "complaint.created",
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+            }).select("targetUserIds");
+            originalNotification?.targetUserIds.forEach(id =>
+                recipientIds.add(String(id)),
+            );
+        }
+
+        if (recipientIds.size > 0) {
+            // eslint-disable-next-line no-await-in-loop
+            const notification = await createNotification({
+                title: "Phản ánh quá hạn xử lý",
+                body: `Mã ${complaint.code}: "${complaint.title}" đã quá 24 giờ chưa xử lý xong.`,
+                type: "complaint.overdue",
+                targetUserIds: [...recipientIds],
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+            });
+            // eslint-disable-next-line no-await-in-loop
+            await emailAdapter.deliver(
+                [...recipientIds].map(recipientId => ({
+                    notificationId: notification._id,
+                    userId: recipientId,
+                })),
+            );
+        }
+
+        complaint.overdueAlertSentAt = new Date();
+        // eslint-disable-next-line no-await-in-loop
+        await complaint.save();
+    }
+
+    return overdue.length;
 }
 
 async function getTimelineFor(complaintId: string, publicOnly: boolean) {
