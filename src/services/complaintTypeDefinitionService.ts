@@ -167,6 +167,15 @@ export async function updateComplaintTypeDefinition(
     return definition;
 }
 
+/**
+ * Ngung dung (active=false) - hoat dong tren CA danh muc isBuiltIn: isBuiltIn
+ * chi khoa key/xoa ban ghi that su (xem model), khong nen chan viec tat active
+ * - da tung chan ca isBuiltIn khien phan lon danh muc seed san (chiem da so
+ * du lieu dev) khong the "go" duoc khoi danh sach chon cua nguoi dung. Danh
+ * muc isBuiltIn khong gan wardCode nen chi actorUser co role "admin" moi qua
+ * duoc assertDefinitionInScope o tren - ward-tier (bi thu/UBND) van khong tat
+ * duoc danh muc toan cuc, chi tat duoc danh muc cua chinh phuong minh.
+ */
 export async function archiveComplaintTypeDefinition(
     actorUser: IUser,
     id: string,
@@ -174,12 +183,6 @@ export async function archiveComplaintTypeDefinition(
     const definition = await ComplaintTypeDefinition.findById(id);
     if (!definition) throw new HttpError("Không tìm thấy loại phản ánh", 404);
     assertDefinitionInScope(actorUser, definition);
-    if (definition.isBuiltIn) {
-        throw new HttpError(
-            "Không thể ngừng sử dụng loại phản ánh hệ thống (isBuiltIn)",
-            409,
-        );
-    }
     definition.active = false;
     definition.updatedBy = actorUser._id as any;
     await definition.save();
