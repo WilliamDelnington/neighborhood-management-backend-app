@@ -20,18 +20,28 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     }
 }
 
+// Danh muc khong gan wardCode (isBuiltIn seed san - xem
+// scripts/seed-complaint-types.ts - HOAC admin he thong tu tao qua
+// createComplaintTypeDefinition khi actorUser khong co wardCode) la danh muc
+// TOAN CUC, phai hien voi MOI actor bat ke wardCode cua ho. Dung wardCode
+// $exists:false thay vi isBuiltIn:true de bao gom ca 2 truong hop, neu khong
+// loai phan anh moi do admin he thong tao se khong co wardCode nhung van bi
+// loai khoi scope (isBuiltIn luon la false voi danh muc do), khien khong cong
+// dan/can bo nao thay duoc no du da active.
+const GLOBAL_DEFINITION_SCOPE = { wardCode: { $exists: false } };
+
 /**
- * Loai phan anh isBuiltIn=true (seed san, khong gan wardCode - xem
- * scripts/seed-complaint-types.ts) phai luon hien voi MOI actor, ke ca cong
- * dan khong co wardCode (house_owner tu tao phan anh) - truoc day dieu kien
- * {wardCode: actorUser.wardCode} loai bo ca isBuiltIn (vi wardCode undefined
- * != actorUser.wardCode), va !actorUser.wardCode tra ve rong hoan toan, khien
- * cong dan khong chon duoc loai phan anh nao (xem ComplaintCreatePage.tsx).
+ * Truoc day dieu kien {wardCode: actorUser.wardCode} loai bo ca danh muc toan
+ * cuc (vi wardCode undefined != actorUser.wardCode), va !actorUser.wardCode
+ * tra ve rong hoan toan, khien cong dan khong chon duoc loai phan anh nao (xem
+ * ComplaintCreatePage.tsx).
  */
 function definitionScope(actorUser: IUser): Record<string, unknown> {
     if (actorUser.roles.includes("admin")) return {};
-    if (!actorUser.wardCode) return { isBuiltIn: true };
-    return { $or: [{ isBuiltIn: true }, { wardCode: actorUser.wardCode }] };
+    if (!actorUser.wardCode) return GLOBAL_DEFINITION_SCOPE;
+    return {
+        $or: [GLOBAL_DEFINITION_SCOPE, { wardCode: actorUser.wardCode }],
+    };
 }
 
 function assertDefinitionInScope(
@@ -95,12 +105,19 @@ export async function createComplaintTypeDefinition(
     await assertRoleKeysExist(input.allowedReceiverRoles);
     await assertRoleKeysExist(input.allowedSenderRoles);
 
+    // Chi gan wardCode/wardName khi actor (bi thu/can bo UBND) thuc su thuoc
+    // mot phuong/xa cu the - danh muc cua ho chi danh cho phuong do. Admin he
+    // thong (khong co wardCode) tao danh muc TOAN CUC (xem
+    // GLOBAL_DEFINITION_SCOPE o definitionScope) - khong duoc gan wardCode:
+    // undefined mot cach tuong minh, mongoose van luu field do (= khong con la
+    // "khong ton tai" nua) khien $exists:false khong con khop.
     const definition = await ComplaintTypeDefinition.create({
         ...input,
         key,
         isBuiltIn: false,
-        wardCode: actorUser.wardCode,
-        wardName: actorUser.wardName,
+        ...(actorUser.wardCode
+            ? { wardCode: actorUser.wardCode, wardName: actorUser.wardName }
+            : {}),
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });
