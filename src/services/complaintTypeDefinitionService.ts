@@ -60,6 +60,19 @@ export async function listComplaintTypeDefinitions(params: {
     search?: string;
     page?: number;
     limit?: number;
+    // true = nguoi goi CHI dung danh sach nay de CHON loai phan anh se GUI (vd
+    // category picker cua man tao phan anh - ComplaintCreatePage.tsx), KHONG
+    // phai man quan tri "Loai phan anh". Loc them theo allowedSenderRoles cua
+    // actorUser (ngoai definitionScope da co san, vi definitionScope chi loc
+    // theo pham vi phuong/xa - khong loai duoc danh muc TOAN CUC nhung gioi
+    // han vai tro gui, vd "De xuat len Phuong" chi danh cho To truong/To pho)
+    // - dung DUNG logic voi assertValidComplaintCategory (complaintService.ts)
+    // o buoc submit, de tranh hien danh muc actor CHON duoc nhung GUI se bi
+    // tu choi 403. Man quan tri (permission complaint_types.read) KHONG duoc
+    // truyen true vi nguoi quan tri (vd bi thu) can thay TOAN BO danh muc
+    // trong pham vi phu trach de sua, ke ca danh muc ho khong tu gui duoc -
+    // xem route.ts (GET /api/complaint-types).
+    filterBySenderRole?: boolean;
 }) {
     const page = params.page || 1;
     const limit = params.limit || 10;
@@ -75,6 +88,9 @@ export async function listComplaintTypeDefinitions(params: {
                 { name: { $regex: params.search, $options: "i" } },
             ],
         });
+    }
+    if (params.filterBySenderRole && !params.actorUser.roles.includes("admin")) {
+        conditions.push({ allowedSenderRoles: { $in: params.actorUser.roles } });
     }
     const filter: Record<string, unknown> = { $and: conditions };
 
