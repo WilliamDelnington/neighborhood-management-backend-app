@@ -862,7 +862,7 @@ export const TRANG_THAI_GIAO_DICH_LABEL: Record<TrangThaiGiaoDich, string> = {
 // ---------------------------------------------------------------------------
 // Thong bao he thong / Notification
 // ---------------------------------------------------------------------------
-export const NOTIFICATION_CHANNEL = ["in_app", "zalo_oa_future"] as const;
+export const NOTIFICATION_CHANNEL = ["in_app", "zalo_oa_future", "email"] as const;
 export type NotificationChannel = typeof NOTIFICATION_CHANNEL[number];
 
 export const NOTIFICATION_STATUS = [

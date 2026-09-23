@@ -16,6 +16,7 @@ const complaintTypeDefinitionBaseSchema = z.object({
     // resolveComplaintTypeRecipientIds) - khong sap xep lai o day.
     allowedReceiverRoles: z.array(z.string()).min(1),
     allowedSenderRoles: z.array(z.string()).min(1),
+    isUrgent: z.boolean().default(false),
     active: z.boolean().default(true),
 });
 

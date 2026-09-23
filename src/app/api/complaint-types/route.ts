@@ -1,5 +1,10 @@
 import { connectDB } from "@/lib/mongodb";
-import { requireAnyPermission, requirePermission, requireUser } from "@/lib/rbac";
+import {
+    requireAnyPermission,
+    requirePermission,
+    requireUser,
+    userHasPermission,
+} from "@/lib/rbac";
 import {
     apiErrorFromException,
     apiSuccess,
@@ -25,6 +30,16 @@ export async function GET(req: Request) {
             "complaint_types.read",
             "complaints.create",
         ]);
+        // Chi nguoi co quyen "complaint_types.read" (man quan tri "Loai phan
+        // anh") moi duoc xem TOAN BO danh muc trong pham vi phu trach. Nguoi
+        // goi khac (chi co "complaints.create", vd cong dan/nhan vien dang
+        // dung category picker cua man tao phan anh) chi thay danh muc ho
+        // THUC SU gui duoc - xem filterBySenderRole trong
+        // listComplaintTypeDefinitions.
+        const canManage = await userHasPermission(
+            actorUser,
+            "complaint_types.read",
+        );
         const { searchParams } = new URL(req.url);
         const { page, limit } = paginationParams(searchParams);
         const activeParam = searchParams.get("active");
@@ -38,6 +53,7 @@ export async function GET(req: Request) {
                     activeParam === null
                         ? undefined
                         : activeParam === "true" || activeParam === "1",
+                filterBySenderRole: !canManage,
             }),
         );
     } catch (err) {
