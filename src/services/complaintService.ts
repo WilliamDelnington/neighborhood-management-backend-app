@@ -778,6 +778,37 @@ const EMERGENCY_MAP_STATUSES: TrangThaiPhanAnh[] = [
     "dang_xu_ly",
 ];
 
+// Trang thai con CAN CHU Y/xu ly (chua ket thuc) - dung cho badge so luong
+// canh muc "Phản ánh" tren menu (xem countPendingComplaints ben duoi). Loai bo
+// da_xu_ly/hoan_thanh (da xong) va dong (da dong, du huong nao) - can_bo_sung
+// van tinh la "cho xu ly" vi ban than no la mot buoc trong quy trinh (cho cu
+// dan bo sung), khong phai diem ket thuc.
+const PENDING_COMPLAINT_STATUSES: TrangThaiPhanAnh[] = [
+    "moi_tiep_nhan",
+    "dang_xu_ly",
+    "can_bo_sung",
+];
+
+/**
+ * So phan anh dang CHO XU LY (chua hoan_thanh/da_xu_ly/dong) trong pham vi
+ * "Nhận từ cư dân" (view mac dinh - khong truyen view) cua actor - dung cho
+ * badge so luong canh muc "Phản ánh" tren menu, cung quy uoc voi
+ * countMyPendingRequests (Yêu cầu công việc).
+ */
+export async function countPendingComplaints(
+    actorUser: IUser,
+    canReadEscalated: boolean,
+): Promise<number> {
+    const clauses = await buildComplaintFilterClauses({
+        status: PENDING_COMPLAINT_STATUSES,
+        actorUser,
+        canReadEscalated,
+    });
+    const filter: Record<string, unknown> =
+        clauses.length > 0 ? { $and: clauses } : {};
+    return Complaint.countDocuments(filter);
+}
+
 export interface EmergencyComplaintGisPoint {
     _id: string;
     code: string;
