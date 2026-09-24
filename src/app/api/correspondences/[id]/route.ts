@@ -4,7 +4,7 @@ import { requireUser, requirePermission } from "@/lib/rbac";
 import { updateCorrespondenceSchema } from "@/validators/correspondence";
 import type { ICorrespondenceType } from "@/models";
 import {
-    assertCorrespondenceInScope,
+    assertCorrespondenceReadable,
     getCorrespondenceById,
     updateCorrespondence,
 } from "@/services/correspondenceService";
@@ -22,10 +22,11 @@ export async function GET(
         await requirePermission(actorUser, "correspondences.read");
         // getCorrespondenceById tra ve doc da populate correspondenceTypeId -
         // scope thuc su duoc kiem trong updateCorrespondence/... cho cac thao
-        // tac khac; o day GET chi tu choi neu khong phai admin/nguoi
-        // gui/nguoi nhan hop le, xem assertCorrespondenceInScope.
+        // tac khac; o day GET chi tu choi neu khong phai nguoi quan ly khong
+        // gioi han pham vi/nguoi gui/nguoi nhan hop le, xem
+        // assertCorrespondenceReadable.
         const correspondence = await getCorrespondenceById(params.id);
-        assertCorrespondenceInScope(
+        await assertCorrespondenceReadable(
             actorUser,
             correspondence,
             correspondence.correspondenceTypeId as unknown as ICorrespondenceType,

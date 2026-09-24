@@ -261,6 +261,21 @@ export async function getUserAllowedDashboardMetrics(
 }
 
 /**
+ * true neu user quan ly du lieu KHONG GIOI HAN pham vi: admin, hoac giu mot
+ * vai tro dang hoat dong co Role.scopeType = "ALL" (cau hinh o man Quan ly
+ * vai tro - xem models/Role.ts), khong hardcode theo ten vai tro.
+ */
+export async function hasUnlimitedScope(user: IUser): Promise<boolean> {
+    if (user.roles.includes("admin")) return true;
+    const role = await RoleModel.exists({
+        key: { $in: user.roles },
+        active: true,
+        scopeType: "ALL",
+    });
+    return !!role;
+}
+
+/**
  * Xay dung dieu kien Mongo de loc du lieu theo cum dan cu duoc phan cong,
  * tru khi user la admin (xem toan bo) hoac co scope "all".
  */
