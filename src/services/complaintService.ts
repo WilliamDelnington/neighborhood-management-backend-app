@@ -27,6 +27,7 @@ import {
     getComplaintTypeByKey,
     getStaffOnlyComplaintCategoryKeys,
     getReceivableComplaintCategoryKeysForRoles,
+    listComplaintTypeDefinitions,
 } from "@/services/complaintTypeDefinitionService";
 import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import {
@@ -640,11 +641,13 @@ export async function createComplaint(
     return complaint;
 }
 
-export async function listComplaints(params: {
-    page: number;
-    limit: number;
-    status?: string;
-    category?: string;
+// Rut trich tu listComplaints de dung chung boi getEmergencyComplaintGisOverview
+// (ban do "khan cap" tren Ban do) - CUNG mot bo quy tac pham vi/vai tro, chi
+// khac o cho category/status co the truyen mang ($in) thay vi 1 gia tri, va
+// khong phan trang (goi cho ca hai dau vao qua $and, khong ghi de len nhau).
+async function buildComplaintFilterClauses(params: {
+    status?: string | string[];
+    category?: string | string[];
     search?: string;
     relatedAssetId?: string;
     neighborhoodId?: string;
@@ -655,9 +658,15 @@ export async function listComplaints(params: {
     // nghiep da gui len Phuong), "sent" = chi cac de xuat HO da gui len
     // Phuong. Vai tro khac bo qua tham so nay.
     view?: "received" | "sent";
-}) {
+}): Promise<Record<string, unknown>[]> {
     const clauses: Record<string, unknown>[] = [];
-    if (params.status) clauses.push({ status: params.status });
+    if (params.status) {
+        clauses.push(
+            Array.isArray(params.status)
+                ? { status: { $in: params.status } }
+                : { status: params.status },
+        );
+    }
     if (params.relatedAssetId) {
         clauses.push({ relatedAssetId: params.relatedAssetId });
     }
@@ -665,7 +674,11 @@ export async function listComplaints(params: {
         clauses.push({ neighborhoodId: params.neighborhoodId });
     }
     if (params.category) {
-        clauses.push({ category: params.category });
+        clauses.push(
+            Array.isArray(params.category)
+                ? { category: { $in: params.category } }
+                : { category: params.category },
+        );
     }
     if (params.search) {
         clauses.push({
@@ -717,6 +730,22 @@ export async function listComplaints(params: {
 
     const scope = await complaintScopeFilter(params.actorUser, params.canReadEscalated);
     if (Object.keys(scope).length > 0) clauses.push(scope);
+    return clauses;
+}
+
+export async function listComplaints(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    category?: string;
+    search?: string;
+    relatedAssetId?: string;
+    neighborhoodId?: string;
+    actorUser: IUser;
+    canReadEscalated: boolean;
+    view?: "received" | "sent";
+}) {
+    const clauses = await buildComplaintFilterClauses(params);
     const filter: Record<string, unknown> =
         clauses.length > 0 ? { $and: clauses } : {};
     const [items, total] = await Promise.all([
@@ -737,6 +766,128 @@ export async function listComplaints(params: {
         limit: params.limit,
         totalPages: Math.max(1, Math.ceil(total / params.limit)),
     };
+}
+
+// Cac trang thai con "song" (chua dong/xong) - marker khan cap tren Ban do
+// CHI hien trong khoang nay, bien mat ngay khi chuyen sang 1 trong 4 trang
+// thai con lai (da_xu_ly/hoan_thanh/dong/can_bo_sung). KHONG co "da_tiep_nhan"
+// rieng - receiveComplaint() chuyen thang moi_tiep_nhan -> dang_xu_ly (xem
+// TRANG_THAI_PHAN_ANH o types/index.ts, chi co 6 gia tri thuc su).
+const EMERGENCY_MAP_STATUSES: TrangThaiPhanAnh[] = [
+    "moi_tiep_nhan",
+    "dang_xu_ly",
+];
+
+// Trang thai con CAN CHU Y/xu ly (chua ket thuc) - dung cho badge so luong
+// canh muc "Phản ánh" tren menu (xem countPendingComplaints ben duoi). Loai bo
+// da_xu_ly/hoan_thanh (da xong) va dong (da dong, du huong nao) - can_bo_sung
+// van tinh la "cho xu ly" vi ban than no la mot buoc trong quy trinh (cho cu
+// dan bo sung), khong phai diem ket thuc.
+const PENDING_COMPLAINT_STATUSES: TrangThaiPhanAnh[] = [
+    "moi_tiep_nhan",
+    "dang_xu_ly",
+    "can_bo_sung",
+];
+
+/**
+ * So phan anh dang CHO XU LY (chua hoan_thanh/da_xu_ly/dong) trong pham vi
+ * "Nhận từ cư dân" (view mac dinh - khong truyen view) cua actor - dung cho
+ * badge so luong canh muc "Phản ánh" tren menu, cung quy uoc voi
+ * countMyPendingRequests (Yêu cầu công việc).
+ */
+export async function countPendingComplaints(
+    actorUser: IUser,
+    canReadEscalated: boolean,
+): Promise<number> {
+    const clauses = await buildComplaintFilterClauses({
+        status: PENDING_COMPLAINT_STATUSES,
+        actorUser,
+        canReadEscalated,
+    });
+    const filter: Record<string, unknown> =
+        clauses.length > 0 ? { $and: clauses } : {};
+    return Complaint.countDocuments(filter);
+}
+
+export interface EmergencyComplaintGisPoint {
+    _id: string;
+    code: string;
+    title: string;
+    category: string;
+    categoryLabel: string;
+    status: TrangThaiPhanAnh;
+    area?: string;
+    gisLatitude: number;
+    gisLongitude: number;
+    gisAccuracyMeters?: number | null;
+    createdAt: string;
+    neighborhoodName?: string;
+}
+
+/**
+ * Ban do "Khan cap" o trang Ban do (khac listComplaints - khong phan trang,
+ * chi tra ve phan anh thuoc danh muc isUrgent, dang o 1 trong 3 trang thai
+ * con "song", VA da co toa do GPS). Dung chung buildComplaintFilterClauses
+ * de giu DUNG pham vi/vai tro nhu danh sach phan anh thuong (khong duoc lo
+ * phan anh ngoai pham vi phu trach cua actor qua kenh nay).
+ */
+export async function getEmergencyComplaintGisOverview(
+    actorUser: IUser,
+    canReadEscalated: boolean,
+): Promise<{ points: EmergencyComplaintGisPoint[] }> {
+    const urgentTypesResult = await listComplaintTypeDefinitions({
+        actorUser,
+        active: true,
+        limit: 200,
+    });
+    const urgentTypes = urgentTypesResult.items.filter(t => t.isUrgent);
+    if (!urgentTypes.length) return { points: [] };
+    const urgentKeys = urgentTypes.map(t => t.key);
+    const categoryLabelByKey = new Map(urgentTypes.map(t => [t.key, t.name]));
+
+    const clauses = await buildComplaintFilterClauses({
+        status: EMERGENCY_MAP_STATUSES,
+        category: urgentKeys,
+        actorUser,
+        canReadEscalated,
+    });
+    clauses.push({ gisLatitude: { $ne: null } }, { gisLongitude: { $ne: null } });
+
+    const complaints = await Complaint.find({ $and: clauses })
+        .select(
+            "code title category status area gisLatitude gisLongitude gisAccuracyMeters createdAt neighborhoodId",
+        )
+        .populate("neighborhoodId", "name")
+        .lean();
+
+    const points: EmergencyComplaintGisPoint[] = complaints
+        .filter(
+            (c): c is typeof c & { gisLatitude: number; gisLongitude: number } =>
+                typeof c.gisLatitude === "number" &&
+                typeof c.gisLongitude === "number",
+        )
+        .map(c => ({
+            _id: String(c._id),
+            code: c.code,
+            title: c.title,
+            category: c.category,
+            categoryLabel: categoryLabelByKey.get(c.category) || c.category,
+            status: c.status,
+            ...(c.area ? { area: c.area } : {}),
+            gisLatitude: c.gisLatitude,
+            gisLongitude: c.gisLongitude,
+            gisAccuracyMeters: c.gisAccuracyMeters ?? null,
+            createdAt: (c.createdAt as unknown as Date).toISOString(),
+            ...((c.neighborhoodId as unknown as { name?: string } | null)?.name
+                ? {
+                      neighborhoodName: (
+                          c.neighborhoodId as unknown as { name?: string }
+                      ).name,
+                  }
+                : {}),
+        }));
+
+    return { points };
 }
 
 export async function listMyComplaints(
