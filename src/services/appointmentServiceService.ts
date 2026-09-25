@@ -9,9 +9,48 @@ import {
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import type {
+    AppointmentServiceExceptionInput,
     CreateAppointmentServiceInput,
     UpdateAppointmentServiceInput,
 } from "@/validators/appointmentService";
+
+const toUtcDate = (dateStr: string): Date => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+};
+
+/**
+ * Chuyen ngay ngoai le tu chuoi "YYYY-MM-DD" sang Date UTC 00:00 (cung quy
+ * uoc Appointment.appointedDate) va tu choi neu hai ngoai le chong lan nhau -
+ * mot ngay chi duoc co DUNG MOT cau hinh ngoai le, tranh mo ho nen dung khung
+ * gio nao (xem appointmentService.resolveSlotsForDate).
+ */
+function normalizeServiceExceptions(
+    exceptions: AppointmentServiceExceptionInput[],
+) {
+    const normalized = exceptions
+        .map(e => ({
+            ...e,
+            date: toUtcDate(e.date),
+            endDate: e.endDate && e.endDate !== e.date ? toUtcDate(e.endDate) : undefined,
+            // Ngay nghi khong can khung gio - bo di de du lieu khong gay nham lan.
+            timeSlots: e.type === "closed" ? [] : e.timeSlots,
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+    for (let i = 1; i < normalized.length; i += 1) {
+        const prev = normalized[i - 1];
+        const prevEnd = prev.endDate ?? prev.date;
+        if (normalized[i].date.getTime() <= prevEnd.getTime()) {
+            throw new HttpError(
+                `Ngày ngoại lệ bị trùng nhau (${normalized[i].date
+                    .toISOString()
+                    .slice(0, 10)})`,
+                422,
+            );
+        }
+    }
+    return normalized;
+}
 
 async function assertOfficerUserIdsValid(userIds: string[]): Promise<void> {
     if (!userIds.length) return;
@@ -132,6 +171,7 @@ export async function createAppointmentService(
         autoApprove: input.autoApprove,
         assignedOfficerUserIds: input.assignedOfficerUserIds,
         timeSlots: input.timeSlots,
+        exceptions: normalizeServiceExceptions(input.exceptions),
         active: input.active,
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
@@ -186,9 +226,17 @@ export async function updateAppointmentService(
     }
 
     for (const [key, value] of Object.entries(input)) {
-        if (value !== undefined && key !== "neighborhoodId" && key !== "wardCode") {
+        if (
+            value !== undefined &&
+            key !== "neighborhoodId" &&
+            key !== "wardCode" &&
+            key !== "exceptions"
+        ) {
             (service as unknown as Record<string, unknown>)[key] = value;
         }
+    }
+    if (input.exceptions !== undefined) {
+        service.set("exceptions", normalizeServiceExceptions(input.exceptions));
     }
     if (nextScope === "neighborhood") {
         service.neighborhoodId = resolvedNeighborhoodId as any;

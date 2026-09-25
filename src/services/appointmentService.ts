@@ -10,6 +10,7 @@ import {
     type IHouseRecord,
     type IUser,
 } from "@/models";
+import type { Types } from "mongoose";
 import { HttpError } from "@/lib/response";
 import { generateYearlyCode } from "@/lib/utils";
 import { createNotification } from "@/services/notificationService";
@@ -74,6 +75,57 @@ function parseDateOnly(dateStr: string): Date {
 function toIsoDayOfWeek(date: Date): number {
     const jsDay = date.getUTCDay();
     return jsDay === 0 ? 7 : jsDay;
+}
+
+type ResolvedSlot = {
+    _id: Types.ObjectId;
+    startTime: string;
+    endTime: string;
+    maxCapacity: number;
+};
+
+/**
+ * Khung gio THUC SU ap dung cho mot dich vu vao mot ngay, theo thu tu uu tien:
+ * 1. Ngay ngoai le RIENG cua dich vu (service.exceptions) - "closed" thi dong,
+ *    "custom_hours" thi dung khung gio rieng cua ngoai le. Uu tien hon ngay
+ *    nghi/le chung de dich vu van lam viec (khac gio) duoc vao ngay le.
+ * 2. Ngay nghi/le chung cua phuong/he thong (AppointmentHoliday) - dong.
+ * 3. Khung gio thuong theo thu trong tuan (service.timeSlots).
+ * Dung chung cho getAvailableSlots/createAppointment/rescheduleAppointment de
+ * ba noi LUON thong nhat.
+ */
+async function resolveSlotsForDate(
+    service: IAppointmentService,
+    date: Date,
+): Promise<{ closedReason?: string; slots: ResolvedSlot[] }> {
+    const time = date.getTime();
+    const exception = (service.exceptions || []).find(e => {
+        const end = (e.endDate ?? e.date).getTime();
+        return e.date.getTime() <= time && time <= end;
+    });
+    if (exception) {
+        if (exception.type === "closed") {
+            return {
+                closedReason: exception.note
+                    ? `dịch vụ tạm ngưng tiếp nhận (${exception.note})`
+                    : "dịch vụ tạm ngưng tiếp nhận",
+                slots: [],
+            };
+        }
+        return { slots: exception.timeSlots.filter(slot => slot.active) };
+    }
+
+    const holiday = await findHolidayForWard(service.wardCode, date);
+    if (holiday) {
+        return { closedReason: `ngày nghỉ/lễ (${holiday.name})`, slots: [] };
+    }
+
+    const isoDayOfWeek = toIsoDayOfWeek(date);
+    return {
+        slots: service.timeSlots.filter(
+            slot => slot.active && slot.dayOfWeek === isoDayOfWeek,
+        ),
+    };
 }
 
 /** Ghep Date (chi lay phan ngay) voi gio "HH:mm" thanh mot thoi diem cu the. */
@@ -352,17 +404,11 @@ export async function getAvailableSlots(serviceId: string, dateStr: string) {
     }
 
     const date = parseDateOnly(dateStr);
-    // 19.2.8/19.2.9: ngay nghi/le/tam ngung tiep nhan - khong co khung gio nao
-    // duoc mo, giong het truong hop khong cau hinh khung gio cho THU nay (tra
-    // ve rong, KHONG throw loi - tranh doi hoi 2 man dat/doi lich phai xu ly
-    // rieng mot loai loi khac biet cho truong hop nay).
-    const holiday = await findHolidayForWard(service.wardCode, date);
-    if (holiday) return [];
-
-    const isoDayOfWeek = toIsoDayOfWeek(date);
-    const activeSlots = service.timeSlots.filter(
-        slot => slot.active && slot.dayOfWeek === isoDayOfWeek,
-    );
+    // 19.2.8/19.2.9: ngay nghi/le/tam ngung tiep nhan (hoac ngoai le "closed"
+    // cua dich vu) - khong co khung gio nao duoc mo, giong het truong hop khong
+    // cau hinh khung gio cho THU nay (tra ve rong, KHONG throw loi - tranh doi
+    // hoi 2 man dat/doi lich phai xu ly rieng mot loai loi khac biet).
+    const { slots: activeSlots } = await resolveSlotsForDate(service, date);
     if (activeSlots.length === 0) return [];
 
     const counters = await AppointmentSlotCounter.find({
@@ -561,17 +607,16 @@ export async function createAppointment(
     // getAvailableSlots da tra ve rong cho ngay nay nen client binh thuong
     // khong the chon duoc, day la lop chan phong thu (vd client dung du lieu
     // cu, hoac ngay nghi moi duoc khai bao sau khi client da tai danh sach).
-    const holiday = await findHolidayForWard(service.wardCode, appointedDate);
-    if (holiday) {
+    const resolved = await resolveSlotsForDate(service, appointedDate);
+    if (resolved.closedReason) {
         throw new HttpError(
-            `Ngay ${input.appointedDate} la ngay nghi/le (${holiday.name}), khong the dat lich hen`,
+            `Ngày ${input.appointedDate} là ${resolved.closedReason}, không thể đặt lịch hẹn`,
             422,
         );
     }
 
-    const slot = service.timeSlots.find(s => String(s._id) === input.timeSlotId);
-    if (!slot || !slot.active) throw new HttpError("Khung giờ không hợp lệ", 422);
-    if (slot.dayOfWeek !== toIsoDayOfWeek(appointedDate)) {
+    const slot = resolved.slots.find(s => String(s._id) === input.timeSlotId);
+    if (!slot) {
         throw new HttpError("Khung giờ không áp dụng cho ngày đã chọn", 422);
     }
 
@@ -893,23 +938,19 @@ export async function rescheduleAppointment(
     // 19.2.8/19.2.9: khong cho doi sang ngay nghi/le/tam ngung tiep nhan -
     // cung ly do voi createAppointment (lop chan phong thu, binh thuong client
     // khong the chon duoc ngay nay vi getAvailableSlots da tra ve rong).
-    const newDateHoliday = await findHolidayForWard(
-        service.wardCode,
-        newAppointedDate,
-    );
-    if (newDateHoliday) {
+    const resolved = await resolveSlotsForDate(service, newAppointedDate);
+    if (resolved.closedReason) {
         throw new HttpError(
-            `Ngay ${input.appointedDate} la ngay nghi/le (${newDateHoliday.name}), khong the doi lich sang ngay nay`,
+            `Ngày ${input.appointedDate} là ${resolved.closedReason}, không thể đổi lịch sang ngày này`,
             422,
         );
     }
 
-    const newSlot = service.timeSlots.find(
+    const newSlot = resolved.slots.find(
         s => String(s._id) === input.timeSlotId,
     );
-    if (!newSlot || !newSlot.active) throw new HttpError("Khung gio khong hop le", 422);
-    if (newSlot.dayOfWeek !== toIsoDayOfWeek(newAppointedDate)) {
-        throw new HttpError("Khung gio khong ap dung cho ngay da chon", 422);
+    if (!newSlot) {
+        throw new HttpError("Khung giờ không áp dụng cho ngày đã chọn", 422);
     }
     if (
         String(newSlot._id) === String(appointment.timeSlotId) &&
