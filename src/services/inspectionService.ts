@@ -304,11 +304,16 @@ export async function updateInspectionCampaignDetails(
         throw new HttpError("Chỉ người tạo chiến dịch hoặc quản trị viên được sửa thông tin", 403);
     }
     if (campaign.status !== "DRAFT") {
-        throw new HttpError("Chỉ có thể sửa tên và mục tiêu khi chiến dịch còn ở bản nháp", 409);
+        throw new HttpError("Chỉ có thể sửa thông tin chiến dịch khi còn ở bản nháp", 409);
+    }
+    const startAt = input.startAt ? new Date(input.startAt) : campaign.startAt;
+    const dueAt = input.dueAt ? new Date(input.dueAt) : campaign.dueAt;
+    if (dueAt <= startAt) {
+        throw new HttpError("Thời hạn phải sau thời điểm bắt đầu", 422);
     }
     const updated = await InspectionCampaign.findOneAndUpdate(
         { _id: campaignId, status: "DRAFT" },
-        { $set: { name: input.name, purpose: input.purpose } },
+        { $set: { name: input.name, purpose: input.purpose, startAt, dueAt } },
         { new: true },
     );
     if (!updated) throw new HttpError("Chiến dịch vừa được người khác cập nhật", 409);
@@ -317,7 +322,11 @@ export async function updateInspectionCampaignDetails(
         action: "inspection.campaign.details.update",
         targetModel: "InspectionCampaign",
         targetId: updated._id,
-        metadata: { name: input.name },
+        metadata: {
+            name: input.name,
+            startAt: startAt.toISOString(),
+            dueAt: dueAt.toISOString(),
+        },
     });
     return getInspectionCampaignById(actorUser, campaignId);
 }

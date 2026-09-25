@@ -157,6 +157,51 @@ describe("To truong tao tai khoan chu ho thay (createHouseOwnerByStaff)", () => 
         expect(res.status).toBe(201);
     });
 
+    it("admin tao duoc tai khoan cho ca vai tro reserved (vd Bi thu, chu ho), chi tru admin", async () => {
+        // Dam bao Role doc he thong ton tai (createTestUser tu seed theo vai tro).
+        await createTestUser({ roles: ["secretary", "household_head"] });
+        const admin = await createTestUser({ roles: ["admin"] });
+        const headers = await authHeaders(admin);
+
+        const creatable = await readJson(
+            await creatableRolesRoute(
+                makeRequest("/api/users/creatable-roles", { headers }),
+            ),
+        );
+        const keys = creatable.data.map((r: any) => r.key);
+        expect(keys).toContain("secretary");
+        expect(keys).toContain("household_head");
+        expect(keys).not.toContain("admin");
+
+        const secretaryRes = await createUserRoute(
+            makeRequest("/api/users", {
+                method: "POST",
+                headers,
+                body: {
+                    phone: "0911111115",
+                    displayName: "Bi thu do admin tao",
+                    idNumber: "001111111115",
+                    role: "secretary",
+                },
+            }),
+        );
+        expect(secretaryRes.status).toBe(201);
+
+        const adminRes = await createUserRoute(
+            makeRequest("/api/users", {
+                method: "POST",
+                headers,
+                body: {
+                    phone: "0911111116",
+                    displayName: "Admin khong duoc tao",
+                    idNumber: "001111111116",
+                    role: "admin",
+                },
+            }),
+        );
+        expect(adminRes.status).toBe(403);
+    });
+
     it("GET /api/users/creatable-roles tra ve dung danh sach theo vai tro cua actor", async () => {
         await RoleModel.create({
             key: "social_cultral_leader",

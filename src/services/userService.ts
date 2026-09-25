@@ -193,13 +193,15 @@ export async function searchResidentUsers(
  * createHouseOwnerByStaff bo qua moi kiem tra khi role==="house_owner"). Vi
  * vay house_owner duoc tra ve rieng, KHONG phu thuoc vao viec co Role doc
  * active hay khong (khac cac vai tro con lai). Cac vai tro con lai: admin
- * duoc bo qua moi gioi han (tao duoc bat ky vai tro active nao, tru
- * ACCOUNT_CREATION_RESERVED_ROLE_KEYS); nguoi khac chi duoc chon vai tro nam
+ * duoc bo qua moi gioi han (tao duoc bat ky vai tro active nao, CHI tru vai
+ * tro admin); nguoi khac chi duoc chon vai tro nam
  * trong allowedCreatableRoles cua BAT KY vai tro active nao ho dang giu (hop
  * cac vai tro co the giu nhieu vai tro cung luc) - xem Role.allowedCreatableRoles.
  * Loai bo phong thu cac key trong ACCOUNT_CREATION_RESERVED_ROLE_KEYS ngay ca
  * khi lo duoc cau hinh nham vao allowedCreatableRoles cua mot vai tro.
  */
+const ADMIN_ONLY_RESERVED_ROLE_KEY = "admin";
+
 export async function getCreatableRolesForActor(
     actorUser: IUser,
 ): Promise<{ key: string; name: string }[]> {
@@ -210,9 +212,14 @@ export async function getCreatableRolesForActor(
     };
 
     if (actorUser.roles.includes("admin")) {
+        // Admin tao duoc tai khoan cho MOI vai tro dang hoat dong - KE CA cac
+        // vai tro trong ACCOUNT_CREATION_RESERVED_ROLE_KEYS (chu ho, dai dien,
+        // can bo phuong...) - chi tru chinh vai tro admin (khong ai duoc tao
+        // tai khoan admin qua man nay). Gioi han ACCOUNT_CREATION_RESERVED_ROLE_KEYS
+        // van ap dung day du cho nguoi khong phai admin (xem ben duoi).
         const roles = await RoleModel.find({
             active: true,
-            key: { $nin: [...ACCOUNT_CREATION_RESERVED_ROLE_KEYS, "house_owner"] },
+            key: { $nin: [ADMIN_ONLY_RESERVED_ROLE_KEY, "house_owner"] },
         }).sort({ sortOrder: 1, name: 1 });
         return [houseOwnerEntry, ...roles.map(r => ({ key: r.key, name: r.name }))];
     }

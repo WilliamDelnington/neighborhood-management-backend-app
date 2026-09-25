@@ -3,14 +3,28 @@ import {
     APPOINTMENT_SERVICE_SCOPES,
     APPOINTMENT_HOUSE_REQUIREMENTS,
     APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
+    APPOINTMENT_SERVICE_EXCEPTION_TYPES,
 } from "@/models";
 
 const timeSlotTimeSchema = z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ không hợp lệ (HH:mm)");
 
+// _id cua khung gio da ton tai - gui lai khi sua de GIU NGUYEN id (Appointment
+// .timeSlotId va AppointmentSlotCounter tham chieu id nay; mat id = bo dem so
+// cho da dat bi reset, co the dat vuot suc chua).
+const subdocIdSchema = z
+    .string()
+    .regex(/^[a-f\d]{24}$/i, "Id không hợp lệ")
+    .optional();
+
+const dateOnlySchema = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ (YYYY-MM-DD)");
+
 const timeSlotSchema = z
     .object({
+        _id: subdocIdSchema,
         dayOfWeek: z.number().int().min(1).max(7),
         startTime: timeSlotTimeSchema,
         endTime: timeSlotTimeSchema,
@@ -21,6 +35,42 @@ const timeSlotSchema = z
         message: "Giờ kết thúc phải sau giờ bắt đầu",
         path: ["endTime"],
     });
+
+const exceptionSlotSchema = z
+    .object({
+        _id: subdocIdSchema,
+        startTime: timeSlotTimeSchema,
+        endTime: timeSlotTimeSchema,
+        maxCapacity: z.number().int().min(1).max(1000).default(5),
+        active: z.boolean().default(true),
+    })
+    .refine(data => data.startTime < data.endTime, {
+        message: "Giờ kết thúc phải sau giờ bắt đầu",
+        path: ["endTime"],
+    });
+
+// Ngay ngoai le rieng cua dich vu - xem models/AppointmentService.ts.
+const serviceExceptionSchema = z
+    .object({
+        _id: subdocIdSchema,
+        date: dateOnlySchema,
+        endDate: dateOnlySchema.optional(),
+        type: z.enum(APPOINTMENT_SERVICE_EXCEPTION_TYPES),
+        note: z.string().trim().max(500).optional(),
+        timeSlots: z.array(exceptionSlotSchema).default([]),
+    })
+    .refine(data => !data.endDate || data.endDate >= data.date, {
+        message: "Ngày kết thúc phải từ ngày bắt đầu trở đi",
+        path: ["endDate"],
+    })
+    .refine(data => data.type !== "custom_hours" || data.timeSlots.length > 0, {
+        message: "Cần ít nhất một khung giờ khi làm việc khác giờ",
+        path: ["timeSlots"],
+    });
+
+export type AppointmentServiceExceptionInput = z.infer<
+    typeof serviceExceptionSchema
+>;
 
 const appointmentServiceBaseSchema = z.object({
     key: z
@@ -49,6 +99,7 @@ const appointmentServiceBaseSchema = z.object({
     autoApprove: z.boolean().default(true),
     assignedOfficerUserIds: z.array(z.string()).default([]),
     timeSlots: z.array(timeSlotSchema).default([]),
+    exceptions: z.array(serviceExceptionSchema).default([]),
     active: z.boolean().default(true),
 });
 

@@ -26,7 +26,10 @@ export async function GET(req: Request) {
         const result = await listCorrespondences({
             page,
             limit,
-            view: view === "sent" || view === "received" ? view : undefined,
+            view:
+                view === "sent" || view === "received" || view === "all"
+                    ? view
+                    : undefined,
             status,
             actorUser,
         });

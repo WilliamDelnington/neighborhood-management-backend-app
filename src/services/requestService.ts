@@ -951,6 +951,19 @@ export async function listMyRequests(
     };
 }
 
+/**
+ * So yeu cau cong viec dang duoc GIAO cho actor MA CHUA hoan thanh (status !=
+ * "resolved") - dung cho badge so luong canh muc "Yêu cầu công việc" tren menu
+ * (xem requestBadgeStore.ts o frontend), cung quy uoc voi
+ * getUnreadCountByRelatedModel (Van ban).
+ */
+export async function countMyPendingRequests(userId: string): Promise<number> {
+    return RequestRecipient.countDocuments({
+        userId,
+        status: { $ne: "resolved" },
+    });
+}
+
 export type DashboardRequestItem = {
     _id: string;
     requestId: string;

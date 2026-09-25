@@ -89,6 +89,8 @@ export async function createCompany(
         organizationId: input.organizationId || undefined,
         businessTypeIds: input.businessTypeIds || [],
         companyTypeId: input.companyTypeId || undefined,
+        numberOfEmployees: input.numberOfEmployees ?? undefined,
+        legalStatus: input.legalStatus,
         phone: input.phone,
         active: input.active ?? true,
         status: resolveInitialVerificationStatus(houseRecord),

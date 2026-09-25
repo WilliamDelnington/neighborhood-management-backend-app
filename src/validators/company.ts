@@ -18,6 +18,8 @@ export const createCompanySchema = z.object({
     // Loai hinh doanh nghiep (phap ly) - mot gia tri duy nhat, khac
     // businessTypeIds - xem ghi chu tren models/Company.ts.
     companyTypeId: z.string().nullable().optional(),
+    numberOfEmployees: z.coerce.number().int().nonnegative().nullable().optional(),
+    legalStatus: z.string().trim().optional(),
     phone: z.string().optional(),
     active: z.boolean().default(true),
     note: z.string().optional(),
