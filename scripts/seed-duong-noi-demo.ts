@@ -60,8 +60,6 @@
  *   - THEM 12 Request loai "pccc"/"security" (dot 1 chi dung "task"/"other")
  *     tu admin gui toi Cong an dia ban, da dang hoa priority/dueDate.
  *
-<<<<<<< HEAD
-=======
  * DOT 3 (bo sung THEM MOI mot bo nha/ho dan/ho KD/cong ty rieng cho MOI to dan
  * pho, quy mo lon hon dot 1 - khong thay the dot 1/2 o tren):
  *   - THEM 8 nha so (5 chu ca nhan co tai khoan, 1 chu ca nhan KHONG tao tai
@@ -76,7 +74,6 @@
  *     RESIDENT_PERSONAS tren nhieu nhan khau/ho hon (2-3 nguoi/ho).
  *   - THEM 3 ho kinh doanh + 2 cong ty rieng cho dot nay.
  *
->>>>>>> dev
  * Chay: npm run seed:duong-noi-demo   (hoac: tsx scripts/seed-duong-noi-demo.ts)
  *
  * LUU Y DNS/IMPORT: xem giai thich chi tiet trong scripts/create-proposal-accounts.ts
@@ -113,8 +110,6 @@ const TOTAL_REQUESTS = 25;
 const TOTAL_PCCC_WAVE2 = 10;
 const TOTAL_SECURITY_WAVE2 = 10;
 const TOTAL_REQUESTS_WAVE2 = 12;
-<<<<<<< HEAD
-=======
 
 // DOT 3: mot bo House/Household/Citizen/Business/Company rieng, THEM MOI cho
 // MOI to dan pho (dia chi/ten deu mang hau to "dot 3" nen khong trung voi dot
@@ -127,7 +122,6 @@ const COMPANIES_PER_NEIGHBORHOOD_WAVE3 = 2;
 // 8 nha dot 3 = 5 chu ca nhan co tai khoan + 1 chu ca nhan KHONG tai khoan
 // (Person) + 2 chu to chuc.
 const INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3 = 5;
->>>>>>> dev
 
 // So dien thoai duoc sinh TU NOI DUNG (to dan pho + vai tro + so thu tu),
 // KHONG phai tu mot bo dem vi tri tang dan - bai hoc rut ra tu lan chay dau:
@@ -174,8 +168,6 @@ const PHONE_KIND = {
     // (xem RESIDENT_PERSONAS/TOTAL_*_WAVE2 ben duoi) de lam nguoi nhan Request
     // loai "pccc"/"security" va inspectorId cho PCCC dot 2.
     regionalPolice: 8,
-<<<<<<< HEAD
-=======
     // DOT 3 - them 8 nha/10 ho dan/3 ho KD/2 cong ty MOI moi to dan pho (xem
     // muc 3b ben duoi) - can cac kind rieng, khac dot 1, de khong trung so
     // dien thoai voi cac tai khoan dot 1 (owner/householdHeadDedicated/...).
@@ -185,7 +177,6 @@ const PHONE_KIND = {
     businessRepDedicatedW3: 12,
     companyRepDedicatedW3: 13,
     orgRepresentativeW3: 14,
->>>>>>> dev
 } as const;
 function phoneFor(slot: number, kind: number, seq: number): string {
     return `08${slot}${kind}${String(seq).padStart(6, "0")}`;
@@ -503,8 +494,6 @@ async function main() {
         },
         { birthYearsAgo: 45, flags: { isMartyrFamily: true } },
     ];
-<<<<<<< HEAD
-=======
     // DOT 3: du ca 8 gia tri HouseRecord.physicalStatus (moi nha 1 gia tri
     // khac nhau, xem "8 nha so dot 3" ben duoi) va ca 5 gia tri
     // Household.status (VERIFICATION_STATUS, gan qua transitionHouseholdStatus
@@ -529,7 +518,6 @@ async function main() {
     ] as const;
     // DOT 3: gioi tinh du ca 3 gia tri (dot 1 chi xen ke nam/nu).
     const GENDER_CYCLE_WAVE3 = ["nam", "nu", "khac"] as const;
->>>>>>> dev
 
     for (const neighborhood of neighborhoods) {
         console.log(`\n== ${neighborhood.code} - ${neighborhood.name} ==`);

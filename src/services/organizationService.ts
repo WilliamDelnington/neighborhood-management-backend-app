@@ -3,6 +3,7 @@ import {
     HouseRecord,
     Organization,
     User,
+    type ICompany,
     type IOrganization,
     type IUser,
 } from "@/models";
@@ -156,7 +157,7 @@ export async function createOrganization(
     // chuc mo coi neu lien ket that bai). Ma so thue cua to chuc bat buoc
     // trung voi cong ty - cung mot phap nhan - nen neu bo trong thi lay tu
     // cong ty.
-    let sourceCompany: Awaited<ReturnType<typeof Company.findById>> = null;
+    let sourceCompany: ICompany | null = null;
     if (input.sourceCompanyId) {
         sourceCompany = await Company.findById(input.sourceCompanyId);
         if (!sourceCompany) throw new HttpError("Không tìm thấy công ty", 404);
