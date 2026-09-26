@@ -18,6 +18,11 @@ export const createOrganizationSchema = z.object({
     // Chuc danh tu do cua nguoi dai dien ban dau (vd "Giam doc") - luu vao
     // OrganizationRepresentative.title, khong bat buoc.
     representativeTitle: z.string().optional(),
+    // Tao to chuc TU mot Company da ton tai (cung phap nhan vua hoat dong o
+    // mot nha vua dung ten chu so huu nha) - sau khi tao, Company.organizationId
+    // duoc tu dong lien ket toi to chuc moi. Xem
+    // organizationService.createOrganization.
+    sourceCompanyId: z.string().optional(),
     phone: z.string().optional(),
     email: z.string().optional(),
     address: z.string().optional(),
@@ -31,6 +36,11 @@ export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 // dam bao luon co lich su thay vi bi ghi de - xem
 // organizationRepresentativeService.ts.
 export const updateOrganizationSchema = createOrganizationSchema
-    .omit({ taxCode: true, representativeUserId: true, representativeTitle: true })
+    .omit({
+        taxCode: true,
+        representativeUserId: true,
+        representativeTitle: true,
+        sourceCompanyId: true,
+    })
     .partial();
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;

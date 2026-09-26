@@ -335,7 +335,15 @@ export async function listHouseOwnerships(houseId: string) {
         active: -1,
         startDate: -1,
     });
+    return attachOwnerDisplay(rows);
+}
 
+/**
+ * Gan ten/so dien thoai hien thi cho tung ban ghi HouseOwnership - ownerId co
+ * the tro toi User/Person/Organization tuy ownerType nen khong populate duoc,
+ * phai tra cuu theo tung loai roi ghep lai.
+ */
+async function attachOwnerDisplay(rows: IHouseOwnership[]) {
     const userIds = rows
         .filter(r => r.ownerType === "user")
         .map(r => r.ownerId);
@@ -388,6 +396,94 @@ export async function listHouseOwnerships(houseId: string) {
         }
         return plain;
     });
+}
+
+export type HouseOwnershipSummary = {
+    ownerType: OwnerType;
+    ownerId: string;
+    relationshipType: IHouseOwnership["relationshipType"];
+    ownerDisplayName?: string;
+    ownerPhone?: string;
+};
+
+/**
+ * Tom tat cac quan he so huu/quan ly DANG ACTIVE cua nhieu nha cung luc (mot
+ * query cho ca trang) - dung cho cot "Chủ sở hữu / quản lý" o danh sach nha
+ * so, tranh goi listHouseOwnerships lap lai cho tung nha. Chu so huu chinh
+ * dung dau, sau do dong so huu, cuoi cung nguoi duoc uy quyen quan ly.
+ */
+export async function getActiveOwnershipSummariesForHouses(
+    houseIds: Types.ObjectId[],
+): Promise<Map<string, HouseOwnershipSummary[]>> {
+    const result = new Map<string, HouseOwnershipSummary[]>();
+    if (!houseIds.length) return result;
+    const rows = await HouseOwnership.find({
+        houseId: { $in: houseIds },
+        active: true,
+    }).sort({ startDate: 1 });
+    const order: Record<string, number> = {
+        primary_owner: 0,
+        co_owner: 1,
+        authorized_manager: 2,
+    };
+    const enriched = (await attachOwnerDisplay(rows)).sort(
+        (a, b) =>
+            (order[a.relationshipType] ?? 9) - (order[b.relationshipType] ?? 9),
+    );
+    for (const row of enriched) {
+        const key = String(row.houseId);
+        const list = result.get(key) || [];
+        list.push({
+            ownerType: row.ownerType,
+            ownerId: String(row.ownerId),
+            relationshipType: row.relationshipType,
+            ownerDisplayName: row.ownerDisplayName,
+            ownerPhone: row.ownerPhone,
+        });
+        result.set(key, list);
+    }
+    return result;
+}
+
+const escapeRegex = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Id cac nha co quan he so huu/quan ly DANG ACTIVE ma ten hoac so dien thoai
+ * cua chu the (User/Person/Organization - ca ma so thue cua to chuc) khop tu
+ * khoa - dung cho o tim kiem danh sach nha so (tim theo chu nha/nguoi quan
+ * ly, khong chi ma nha/dia chi).
+ */
+export async function findHouseIdsByOwnerKeyword(
+    keyword: string,
+): Promise<Types.ObjectId[]> {
+    const pattern = { $regex: escapeRegex(keyword.trim()), $options: "i" };
+    const [users, persons, organizations] = await Promise.all([
+        User.find({ $or: [{ displayName: pattern }, { phone: pattern }] })
+            .select("_id")
+            .limit(500),
+        Person.find({ $or: [{ fullName: pattern }, { phone: pattern }] })
+            .select("_id")
+            .limit(500),
+        Organization.find({
+            $or: [{ name: pattern }, { taxCode: pattern }, { phone: pattern }],
+        })
+            .select("_id")
+            .limit(500),
+    ]);
+    const ownerClauses = [
+        { ownerType: "user", ids: users.map(u => u._id) },
+        { ownerType: "person", ids: persons.map(p => p._id) },
+        { ownerType: "organization", ids: organizations.map(o => o._id) },
+    ]
+        .filter(c => c.ids.length)
+        .map(c => ({ ownerType: c.ownerType, ownerId: { $in: c.ids } }));
+    if (!ownerClauses.length) return [];
+    const houseIds = await HouseOwnership.distinct("houseId", {
+        active: true,
+        $or: ownerClauses,
+    });
+    return houseIds as Types.ObjectId[];
 }
 
 /**

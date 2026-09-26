@@ -44,6 +44,8 @@ import { createNotification } from "@/services/notificationService";
 import {
     createInitialOwnership,
     deleteAllOwnershipsForHouse,
+    findHouseIdsByOwnerKeyword,
+    getActiveOwnershipSummariesForHouses,
     getHouseIdsForActingOwner,
     isHouseOwnerActor,
     resolveActiveHouseOwnerActingUserIds,
@@ -847,14 +849,23 @@ export async function listHouseRecords(params: {
         filter.wardCode = params.wardCode;
     }
 
+    // Tim theo ma nha/dia chi HOAC ten/so dien thoai chu so huu, nguoi quan
+    // ly. Dung $and thay vi gan de filter.$or - nhanh To truong kiem chu nha
+    // o tren da dung filter.$or cho pham vi, gan de se lam mat gioi han pham
+    // vi do.
     if (params.search) {
-        filter.$or = [
+        const ownerHouseIds = await findHouseIdsByOwnerKeyword(params.search);
+        const searchClauses: Record<string, unknown>[] = [
             { code: { $regex: params.search, $options: "i" } },
             { address: { $regex: params.search, $options: "i" } },
         ];
+        if (ownerHouseIds.length) {
+            searchClauses.push({ _id: { $in: ownerHouseIds } });
+        }
+        filter.$and = [{ $or: searchClauses }];
     }
 
-    const [items, total] = await Promise.all([
+    const [docs, total] = await Promise.all([
         HouseRecord.find(filter)
             .sort({ createdAt: -1 })
             .skip((params.page - 1) * params.limit)
@@ -862,6 +873,13 @@ export async function listHouseRecords(params: {
             .populate(HOUSE_RECORD_POPULATE),
         HouseRecord.countDocuments(filter),
     ]);
+    const ownershipsByHouse = await getActiveOwnershipSummariesForHouses(
+        docs.map(d => d._id as Types.ObjectId),
+    );
+    const items = docs.map(d => ({
+        ...d.toObject(),
+        ownerships: ownershipsByHouse.get(String(d._id)) || [],
+    }));
 
     return {
         items,

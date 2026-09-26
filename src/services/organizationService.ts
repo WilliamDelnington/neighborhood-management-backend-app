@@ -1,6 +1,14 @@
-import { Organization, User, type IOrganization, type IUser } from "@/models";
+import {
+    Company,
+    HouseRecord,
+    Organization,
+    User,
+    type IOrganization,
+    type IUser,
+} from "@/models";
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
+import { assertHouseRecordInScope } from "@/services/houseRecordService";
 import {
     addOrganizationRepresentative,
     getOrganizationIdsForRepresentative,
@@ -144,6 +152,32 @@ export async function createOrganization(
     }
     await assertRepresentativeUser(representativeUserId);
 
+    // Tao tu Company co san: kiem tra TRUOC khi tao to chuc (tranh tao ra to
+    // chuc mo coi neu lien ket that bai). Ma so thue cua to chuc bat buoc
+    // trung voi cong ty - cung mot phap nhan - nen neu bo trong thi lay tu
+    // cong ty.
+    let sourceCompany: Awaited<ReturnType<typeof Company.findById>> = null;
+    if (input.sourceCompanyId) {
+        sourceCompany = await Company.findById(input.sourceCompanyId);
+        if (!sourceCompany) throw new HttpError("Không tìm thấy công ty", 404);
+        const houseRecord = await HouseRecord.findById(sourceCompany.houseId);
+        if (houseRecord) await assertHouseRecordInScope(actorUser, houseRecord);
+        if (sourceCompany.organizationId) {
+            throw new HttpError(
+                "Công ty này đã được liên kết với một tổ chức khác",
+                409,
+            );
+        }
+        if (!input.taxCode) {
+            input = { ...input, taxCode: sourceCompany.taxCode };
+        } else if (input.taxCode !== sourceCompany.taxCode) {
+            throw new HttpError(
+                "Mã số thuế phải trùng với mã số thuế của công ty đã chọn",
+                422,
+            );
+        }
+    }
+
     // Khong co taxCode thi khong co gi de doi chieu trung lap - bo qua kiem
     // tra (findOne({taxCode: undefined}) se khop nham voi ban ghi khac cung
     // chua co taxCode, sai y nghia "trung lap").
@@ -151,14 +185,20 @@ export async function createOrganization(
         const existing = await Organization.findOne({ taxCode: input.taxCode });
         if (existing) {
             throw new HttpError(
-                "Mã số thuế / số đăng ký kinh doanh đã tồn tại",
+                sourceCompany
+                    ? `Đã có tổ chức "${existing.name}" cùng mã số thuế - hãy liên kết công ty với tổ chức đó trong trang chi tiết công ty`
+                    : "Mã số thuế / số đăng ký kinh doanh đã tồn tại",
                 409,
             );
         }
     }
 
-    const { representativeUserId: _ignored, representativeTitle, ...organizationFields } =
-        input;
+    const {
+        representativeUserId: _ignored,
+        representativeTitle,
+        sourceCompanyId: _sourceCompanyId,
+        ...organizationFields
+    } = input;
     const organization = await Organization.create({
         ...organizationFields,
         createdBy: actorUser._id,
@@ -179,8 +219,30 @@ export async function createOrganization(
         action: "organization.create",
         targetModel: "Organization",
         targetId: organization._id,
-        metadata: { name: organization.name, taxCode: organization.taxCode },
+        metadata: {
+            name: organization.name,
+            taxCode: organization.taxCode,
+            sourceCompanyId: sourceCompany ? String(sourceCompany._id) : undefined,
+        },
     });
+
+    // Chi ghi lien ket (khong di qua updateCompany/assertVerificationEditable)
+    // - day la thong tin tham chieu, khong thay doi du lieu da xac thuc cua
+    // cong ty. Dieu kien organizationId rong chong ghi de neu co request khac
+    // lien ket cung luc.
+    if (sourceCompany) {
+        await Company.updateOne(
+            { _id: sourceCompany._id, organizationId: { $in: [null, undefined] } },
+            { $set: { organizationId: organization._id, updatedBy: actorUser._id } },
+        );
+        await writeAuditLog({
+            actorId: String(actorUser._id),
+            action: "company.link_organization",
+            targetModel: "Company",
+            targetId: sourceCompany._id,
+            metadata: { organizationId: String(organization._id) },
+        });
+    }
 
     const created = await Organization.findById(organization._id);
     await created!.populate("representativeUserId", "displayName phone");

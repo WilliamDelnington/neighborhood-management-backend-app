@@ -1,4 +1,4 @@
-import { Role as RoleModel, User, Household, Citizen, type IUser } from "@/models";
+import { Role as RoleModel, User, Household, Citizen, type IUser, type IRole } from "@/models";
 import { signSessionToken, hashPassword, comparePassword } from "@/lib/auth";
 import { verifyZaloAccessToken, verifyZaloPhoneToken } from "@/lib/zalo";
 import { HttpError } from "@/lib/response";
@@ -407,7 +407,9 @@ export async function sanitizeUserWithPermissions(user: IUser) {
     const base = sanitizeUser(user);
     const [permissions, roleDocs] = await Promise.all([
         getUserPermissionSet(user),
-        RoleModel.find({ key: { $in: user.roles } }).select("key name"),
+        RoleModel.find({ key: { $in: user.roles } }).select(
+            "key name active scopeType scopeMechanism",
+        ),
     ]);
 
     const roleLabels: Record<string, string> = {};
@@ -420,5 +422,59 @@ export async function sanitizeUserWithPermissions(user: IUser) {
         ...base,
         permissions: [...permissions],
         roleLabels,
+        missingScopeAssignments: getMissingScopeAssignments(user, roleDocs),
     };
+}
+
+export type MissingScopeAssignment = {
+    roleKey: string;
+    roleLabel: string;
+    scopeType: "WARD" | "NEIGHBORHOOD";
+};
+
+/**
+ * Cac vai tro "dia ly" (Role.scopeType WARD/NEIGHBORHOOD, scopeMechanism
+ * ASSIGNED - doc tu config, khong hardcode ten vai tro) ma user dang giu
+ * nhung CHUA duoc gan Phuong/Xa hoac To dan pho nao. Kiem tra dung cac truong
+ * cache ma rbac.areaScopeFilter/wardScopeFilter/neighborhoodScopeFilter thuc
+ * su dung de loc du lieu (wardCode; neighborhoodId/assignedNeighborhoodIds),
+ * nen "chua gan" o day trung khop voi "khong thay du lieu gi" o backend.
+ * Trang quan tri (RequireScopeAssignment) chan truy cap khi mang nay khac
+ * rong. User co vai tro scopeType=ALL (vd admin) khong bao gio bi chan.
+ */
+function getMissingScopeAssignments(
+    user: IUser,
+    roleDocs: Pick<
+        IRole,
+        "key" | "name" | "active" | "scopeType" | "scopeMechanism"
+    >[],
+): MissingScopeAssignment[] {
+    const activeRoles = roleDocs.filter(r => r.active !== false);
+    if (
+        user.roles.includes("admin") ||
+        activeRoles.some(r => r.scopeType === "ALL")
+    ) {
+        return [];
+    }
+
+    const hasWard = !!user.wardCode;
+    const hasNeighborhood =
+        !!user.neighborhoodId ||
+        (user.assignedNeighborhoodIds?.length ?? 0) > 0;
+
+    const missing: MissingScopeAssignment[] = [];
+    for (const role of activeRoles) {
+        if (role.scopeMechanism !== "ASSIGNED") continue;
+        if (
+            (role.scopeType === "WARD" && !hasWard) ||
+            (role.scopeType === "NEIGHBORHOOD" && !hasNeighborhood)
+        ) {
+            missing.push({
+                roleKey: role.key,
+                roleLabel: role.name || ROLE_LABEL[role.key] || role.key,
+                scopeType: role.scopeType,
+            });
+        }
+    }
+    return missing;
 }

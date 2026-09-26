@@ -117,3 +117,59 @@ describe("POST /api/auth/zalo/login", () => {
         expect(json.data.displayName).toBe("Người Test");
     });
 });
+
+describe("GET /api/auth/me - missingScopeAssignments", () => {
+    const getMe = async (user: Awaited<ReturnType<typeof createTestUser>>) => {
+        const { authHeaders } = await import("../helpers");
+        const json = await readJson(
+            await meRoute(
+                makeRequest("/api/auth/me", { headers: await authHeaders(user) }),
+            ),
+        );
+        return json.data.missingScopeAssignments as {
+            roleKey: string;
+            scopeType: string;
+        }[];
+    };
+
+    it("liet ke moi vai tro cap Phuong chua duoc gan wardCode", async () => {
+        const user = await createTestUser({
+            roles: ["people_committee_official", "regional_police"],
+        });
+        const missing = await getMe(user);
+        expect(missing.map(m => m.roleKey).sort()).toEqual([
+            "people_committee_official",
+            "regional_police",
+        ]);
+        expect(missing.every(m => m.scopeType === "WARD")).toBe(true);
+    });
+
+    it("rong khi vai tro cap Phuong da duoc gan wardCode", async () => {
+        const user = await createTestUser({
+            roles: ["secretary"],
+            wardCode: 10001,
+        });
+        expect(await getMe(user)).toEqual([]);
+    });
+
+    it("liet ke vai tro cap To dan pho chua duoc gan to dan pho nao", async () => {
+        const user = await createTestUser({
+            roles: ["neighborhood_coleader"],
+        });
+        const missing = await getMe(user);
+        expect(missing).toHaveLength(1);
+        expect(missing[0]).toMatchObject({
+            roleKey: "neighborhood_coleader",
+            scopeType: "NEIGHBORHOOD",
+        });
+    });
+
+    it("khong chan admin hay vai tro OWNED (chu nha)", async () => {
+        const admin = await createTestUser({
+            roles: ["admin", "people_committee_official"],
+        });
+        const owner = await createTestUser({ roles: ["house_owner"] });
+        expect(await getMe(admin)).toEqual([]);
+        expect(await getMe(owner)).toEqual([]);
+    });
+});
