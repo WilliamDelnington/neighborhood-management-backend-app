@@ -13,9 +13,11 @@ export async function register() {
             startPcccDeadlineScheduler,
             startAppointmentScheduler,
             startComplaintOverdueScheduler,
+            startImportJobCleanupScheduler,
         } = await import("@/lib/scheduler");
         startPcccDeadlineScheduler();
         startAppointmentScheduler();
         startComplaintOverdueScheduler();
+        startImportJobCleanupScheduler();
     }
 }

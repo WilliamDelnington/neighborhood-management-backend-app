@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import { checkPcccDeadlinesAndNotify } from "@/services/pcccService";
 import { checkAppointmentRemindersAndNoShow } from "@/services/appointmentService";
 import { checkOverdueComplaintsAndNotify } from "@/services/complaintService";
+import { cleanupImportJobs } from "@/services/importJobCleanupService";
 
 // next dev co the goi register() (xem src/instrumentation.ts) nhieu lan khi
 // module server duoc bien dich lai - dung cờ toan cuc de dam bao job cron chi
@@ -14,6 +15,8 @@ declare global {
     var __appointmentSchedulerStarted: boolean | undefined;
     // eslint-disable-next-line no-var
     var __complaintOverdueSchedulerStarted: boolean | undefined;
+    // eslint-disable-next-line no-var
+    var __importJobCleanupSchedulerStarted: boolean | undefined;
 }
 
 async function runPcccDeadlineCheck() {
@@ -114,4 +117,34 @@ export function startComplaintOverdueScheduler(): void {
     console.log(`[complaint-overdue] Da dang ky lich kiem tra phan anh qua han: "${schedule}"`);
 
     setTimeout(runComplaintOverdueCheck, 5000);
+}
+
+async function runImportJobCleanup() {
+    try {
+        await connectDB();
+        const result = await cleanupImportJobs();
+        if (Object.values(result).some(count => count > 0)) {
+            console.log(
+                `[import-cleanup] Xoa ${result.abandonedDeleted} job bo do, danh dau ${result.staleMarkedFailed} job bi gian doan, don gon ${result.pruned} job da ket thuc, xoa ${result.expiredDeleted} job qua han luu`,
+            );
+        }
+    } catch (err) {
+        console.error("[import-cleanup] Loi khi don dep import job:", err);
+    }
+}
+
+/**
+ * Dang ky job don dep ImportJob dinh ky (xem importJobCleanupService.ts) -
+ * cung hinh dang voi cac scheduler o tren. Lich chay cau hinh qua
+ * IMPORT_JOB_CLEANUP_CRON (mac dinh moi 30 phut).
+ */
+export function startImportJobCleanupScheduler(): void {
+    if (global.__importJobCleanupSchedulerStarted) return;
+    global.__importJobCleanupSchedulerStarted = true;
+
+    const schedule = process.env.IMPORT_JOB_CLEANUP_CRON || "*/30 * * * *";
+    cron.schedule(schedule, runImportJobCleanup);
+    console.log(`[import-cleanup] Da dang ky lich don dep import job: "${schedule}"`);
+
+    setTimeout(runImportJobCleanup, 5000);
 }

@@ -10,6 +10,7 @@ type CliOptions = {
     primaryRole?: string;
     address?: string;
     notificationPermission: boolean;
+    yes: boolean;
     help: boolean;
 };
 
@@ -18,13 +19,21 @@ Create one standalone user account without creating a HouseOwnership, Household,
 Citizen, neighborhood assignment, or any other business relationship.
 
 Usage:
-  npm run users:create -- --name <name> --phone <phone> --role <role> --password <password> [options]
+  npm run users:create -- --name <name> --phone <phone> --role <role> [options]
 
 Required:
   --name <name>              Display name
   --phone <phone>            Unique login phone number
   --role <role>              Active role key; repeat for multiple roles
-  --password <password>      Password with at least 6 characters
+
+Password (at least 6 characters), first one found is used:
+  --password <password>      On the command line (ends up in shell history)
+  NEW_USER_PASSWORD=<pw>     Environment variable set BEFORE running the script
+  (neither)                  Asked interactively, hidden, typed twice
+
+Production:
+  Allowed. If MONGODB_URI points to the production database you must type the
+  database name to confirm, or pass --yes when running non-interactively.
 
 Options:
   --email <email>            Unique email address
@@ -32,9 +41,12 @@ Options:
   --primary-role <role>      Primary role; defaults to the first --role
   --notifications            Enable notification permission
   --no-notifications         Disable notification permission (default)
+  --yes                      Skip the production-database confirmation
   --help                     Show this help without connecting to MongoDB
 
 Examples:
+  NEW_USER_PASSWORD='ChangeMe123!' npm run users:create -- --name "Nguyen Van A" --phone 0901234567 --role secretary
+  npm run users:create -- --name "Nguyen Van A" --phone 0901234567 --role secretary   (asks for the password)
   npm run users:create -- --name "Nguyen Van A" --phone 0901234567 --role secretary --password "ChangeMe123!"
   npm run users:create -- --name "Ward Officer" --phone 0901234568 --email officer@example.vn --role people_committee_official --password "ChangeMe123!" --notifications
   npm run users:create -- --name "Multi-role User" --phone 0901234569 --role secretary --role regional_police --primary-role secretary --password "ChangeMe123!"
@@ -52,6 +64,7 @@ function parseArgs(args: string[]): CliOptions {
     const options: CliOptions = {
         roles: [],
         notificationPermission: false,
+        yes: false,
         help: false,
     };
 
@@ -96,6 +109,10 @@ function parseArgs(args: string[]): CliOptions {
             case "--no-notifications":
                 options.notificationPermission = false;
                 break;
+            case "--yes":
+            case "-y":
+                options.yes = true;
+                break;
             default:
                 throw new Error(`Unknown option: ${arg}`);
         }
@@ -114,13 +131,9 @@ function validateOptions(options: CliOptions): void {
         !options.name && "--name",
         !options.phone && "--phone",
         options.roles.length === 0 && "--role",
-        !options.password && "--password",
     ].filter(Boolean);
     if (missing.length) {
         throw new Error(`Missing required option(s): ${missing.join(", ")}`);
-    }
-    if ((options.password as string).length < 6) {
-        throw new Error("Password must contain at least 6 characters");
     }
     if (options.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(options.email)) {
         throw new Error("Invalid email address");
@@ -152,15 +165,23 @@ async function main(): Promise<void> {
     loadEnv();
 
     const { connectDB } = await import("@/lib/mongodb");
-    const { assertNotProtectedDatabase } = await import("@/lib/config");
     const { normalizePhone } = await import("@/lib/encryption");
     const { hashPassword } = await import("@/lib/auth");
     const { Role, User } = await import("../src/models");
+    const { confirmProductionTarget, resolvePassword } = await import(
+        "./lib/cliPrompt"
+    );
 
     if (!process.env.MONGODB_URI) {
         throw new Error("Missing MONGODB_URI (check .env.local)");
     }
-    assertNotProtectedDatabase(process.env.MONGODB_URI);
+    // Chi tao MOT tai khoan - duoc phep tren production (khac seed*), nhung
+    // phai xac nhan ro rang, xem confirmProductionTarget.
+    await confirmProductionTarget(process.env.MONGODB_URI, options.yes);
+    const password = await resolvePassword(options.password);
+    if (password.length < 6) {
+        throw new Error("Password must contain at least 6 characters");
+    }
     await connectDB();
 
     const phone = normalizePhone(options.phone as string);
@@ -192,7 +213,7 @@ async function main(): Promise<void> {
         phone,
         email: options.email || undefined,
         address: options.address || undefined,
-        passwordHash: await hashPassword(options.password as string),
+        passwordHash: await hashPassword(password),
         roles: options.roles,
         primaryRole: options.primaryRole,
         status: "active",

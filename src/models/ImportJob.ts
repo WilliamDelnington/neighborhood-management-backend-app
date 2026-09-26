@@ -70,6 +70,9 @@ export interface IImportJob extends Document {
     // duoc chon truoc luc upload).
     relatedModel?: string;
     relatedId?: mongoose.Types.ObjectId;
+    // true khi previewData/rawRows da duoc don gon sau khi job ket thuc (xem
+    // services/importJobCleanupService.ts) - chi con giu lai dong loi.
+    pruned?: boolean;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -108,6 +111,7 @@ const ImportJobSchema = new Schema<IImportJob>(
         createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
         relatedModel: { type: String },
         relatedId: { type: Schema.Types.ObjectId },
+        pruned: { type: Boolean, default: false },
     },
     // minimize:false - mac dinh Mongoose se xoa hang cac truong Mixed dang
     // object rong ({}) khi luu/serialize (vd suggestedMapping/columnMapping
@@ -115,6 +119,9 @@ const ImportJobSchema = new Schema<IImportJob>(
     // duoc mot object hop le thay vi undefined.
     { timestamps: true, minimize: false },
 );
+
+// Phuc vu job don dep dinh ky (loc theo trang thai + thoi diem cap nhat cuoi).
+ImportJobSchema.index({ status: 1, updatedAt: 1 });
 
 export default (mongoose.models.ImportJob as Model<IImportJob>) ||
     mongoose.model<IImportJob>("ImportJob", ImportJobSchema);
