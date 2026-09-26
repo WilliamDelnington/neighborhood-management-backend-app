@@ -56,6 +56,7 @@
         "organizations:fix-taxcode-index": "tsx scripts/fix-organization-taxcode-index.ts",
         "users:create": "tsx scripts/create-user.ts",
         "users:set-password": "tsx scripts/set-user-password.ts",
+        "imports:report": "tsx scripts/import-jobs-report.ts",
         "test": "vitest run"
     },
     "dependencies": {
