@@ -14,6 +14,9 @@ import { isValidVnPhone } from "@/lib/phone";
 // CHI admin moi duoc chon - kiem tra trong userService.createHouseOwnerByStaff)
 // deu la du lieu dong (xem model Role) nen KHONG con liet ke tinh o day - xem
 // getCreatableExtraRoles trong userService.ts.
+// NGOAI LE: admin duoc tao tai khoan cho moi vai tro trong danh sach nay, CHI
+// tru "admin" (xem userService.getCreatableRolesForActor) - danh sach nay chi
+// con chan nguoi KHONG phai admin.
 export const ACCOUNT_CREATION_RESERVED_ROLE_KEYS = [
     "admin",
     "household_head",

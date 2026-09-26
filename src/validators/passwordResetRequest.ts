@@ -19,3 +19,13 @@ export const updatePasswordResetRequestStatusSchema = z.object({
 export type UpdatePasswordResetRequestStatusInput = z.infer<
     typeof updatePasswordResetRequestStatusSchema
 >;
+
+export const checkPasswordResetRequestSchema = z.object({
+    phone: z
+        .string()
+        .min(1, "Thiếu số điện thoại")
+        .refine(isValidVnPhone, "Số điện thoại không hợp lệ"),
+});
+export type CheckPasswordResetRequestInput = z.infer<
+    typeof checkPasswordResetRequestSchema
+>;

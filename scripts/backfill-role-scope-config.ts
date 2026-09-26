@@ -11,8 +11,8 @@ import { config as loadEnv } from "dotenv";
  * thuc (dev/production):
  * - Voi vai tro DA CO SAN: chi $set 3 truong pham vi noi tren (va $unset 2
  *   truong cu), KHONG dong den
- *   permissions/allowedCreatableRoles/allowedComplaintCategories/
- *   allowedRequestTypes/sortOrder/... - khac scripts/backfill-roles.ts (script
+ *   permissions/allowedCreatableRoles/allowedRequestTypes/sortOrder/... -
+ *   khac scripts/backfill-roles.ts (script
  *   do truyen object khong co toan tu $ nao, MongoDB coi la THAY THE toan bo
  *   document tru _id, se xoa mat cac truong khong duoc liet ke o do neu chay
  *   lai - script nay CO CHU DICH tranh lap lai rui ro do bang cach chi $set).

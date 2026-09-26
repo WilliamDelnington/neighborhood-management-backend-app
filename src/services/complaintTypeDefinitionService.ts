@@ -20,18 +20,28 @@ async function assertRoleKeysExist(roleKeys: string[]) {
     }
 }
 
+// Danh muc khong gan wardCode (isBuiltIn seed san - xem
+// scripts/seed-complaint-types.ts - HOAC admin he thong tu tao qua
+// createComplaintTypeDefinition khi actorUser khong co wardCode) la danh muc
+// TOAN CUC, phai hien voi MOI actor bat ke wardCode cua ho. Dung wardCode
+// $exists:false thay vi isBuiltIn:true de bao gom ca 2 truong hop, neu khong
+// loai phan anh moi do admin he thong tao se khong co wardCode nhung van bi
+// loai khoi scope (isBuiltIn luon la false voi danh muc do), khien khong cong
+// dan/can bo nao thay duoc no du da active.
+const GLOBAL_DEFINITION_SCOPE = { wardCode: { $exists: false } };
+
 /**
- * Loai phan anh isBuiltIn=true (seed san, khong gan wardCode - xem
- * scripts/seed-complaint-types.ts) phai luon hien voi MOI actor, ke ca cong
- * dan khong co wardCode (house_owner tu tao phan anh) - truoc day dieu kien
- * {wardCode: actorUser.wardCode} loai bo ca isBuiltIn (vi wardCode undefined
- * != actorUser.wardCode), va !actorUser.wardCode tra ve rong hoan toan, khien
- * cong dan khong chon duoc loai phan anh nao (xem ComplaintCreatePage.tsx).
+ * Truoc day dieu kien {wardCode: actorUser.wardCode} loai bo ca danh muc toan
+ * cuc (vi wardCode undefined != actorUser.wardCode), va !actorUser.wardCode
+ * tra ve rong hoan toan, khien cong dan khong chon duoc loai phan anh nao (xem
+ * ComplaintCreatePage.tsx).
  */
 function definitionScope(actorUser: IUser): Record<string, unknown> {
     if (actorUser.roles.includes("admin")) return {};
-    if (!actorUser.wardCode) return { isBuiltIn: true };
-    return { $or: [{ isBuiltIn: true }, { wardCode: actorUser.wardCode }] };
+    if (!actorUser.wardCode) return GLOBAL_DEFINITION_SCOPE;
+    return {
+        $or: [GLOBAL_DEFINITION_SCOPE, { wardCode: actorUser.wardCode }],
+    };
 }
 
 function assertDefinitionInScope(
@@ -50,6 +60,19 @@ export async function listComplaintTypeDefinitions(params: {
     search?: string;
     page?: number;
     limit?: number;
+    // true = nguoi goi CHI dung danh sach nay de CHON loai phan anh se GUI (vd
+    // category picker cua man tao phan anh - ComplaintCreatePage.tsx), KHONG
+    // phai man quan tri "Loai phan anh". Loc them theo allowedSenderRoles cua
+    // actorUser (ngoai definitionScope da co san, vi definitionScope chi loc
+    // theo pham vi phuong/xa - khong loai duoc danh muc TOAN CUC nhung gioi
+    // han vai tro gui, vd "De xuat len Phuong" chi danh cho To truong/To pho)
+    // - dung DUNG logic voi assertValidComplaintCategory (complaintService.ts)
+    // o buoc submit, de tranh hien danh muc actor CHON duoc nhung GUI se bi
+    // tu choi 403. Man quan tri (permission complaint_types.read) KHONG duoc
+    // truyen true vi nguoi quan tri (vd bi thu) can thay TOAN BO danh muc
+    // trong pham vi phu trach de sua, ke ca danh muc ho khong tu gui duoc -
+    // xem route.ts (GET /api/complaint-types).
+    filterBySenderRole?: boolean;
 }) {
     const page = params.page || 1;
     const limit = params.limit || 10;
@@ -65,6 +88,9 @@ export async function listComplaintTypeDefinitions(params: {
                 { name: { $regex: params.search, $options: "i" } },
             ],
         });
+    }
+    if (params.filterBySenderRole && !params.actorUser.roles.includes("admin")) {
+        conditions.push({ allowedSenderRoles: { $in: params.actorUser.roles } });
     }
     const filter: Record<string, unknown> = { $and: conditions };
 
@@ -95,12 +121,19 @@ export async function createComplaintTypeDefinition(
     await assertRoleKeysExist(input.allowedReceiverRoles);
     await assertRoleKeysExist(input.allowedSenderRoles);
 
+    // Chi gan wardCode/wardName khi actor (bi thu/can bo UBND) thuc su thuoc
+    // mot phuong/xa cu the - danh muc cua ho chi danh cho phuong do. Admin he
+    // thong (khong co wardCode) tao danh muc TOAN CUC (xem
+    // GLOBAL_DEFINITION_SCOPE o definitionScope) - khong duoc gan wardCode:
+    // undefined mot cach tuong minh, mongoose van luu field do (= khong con la
+    // "khong ton tai" nua) khien $exists:false khong con khop.
     const definition = await ComplaintTypeDefinition.create({
         ...input,
         key,
         isBuiltIn: false,
-        wardCode: actorUser.wardCode,
-        wardName: actorUser.wardName,
+        ...(actorUser.wardCode
+            ? { wardCode: actorUser.wardCode, wardName: actorUser.wardName }
+            : {}),
         createdBy: actorUser._id,
         updatedBy: actorUser._id,
     });
@@ -150,6 +183,15 @@ export async function updateComplaintTypeDefinition(
     return definition;
 }
 
+/**
+ * Ngung dung (active=false) - hoat dong tren CA danh muc isBuiltIn: isBuiltIn
+ * chi khoa key/xoa ban ghi that su (xem model), khong nen chan viec tat active
+ * - da tung chan ca isBuiltIn khien phan lon danh muc seed san (chiem da so
+ * du lieu dev) khong the "go" duoc khoi danh sach chon cua nguoi dung. Danh
+ * muc isBuiltIn khong gan wardCode nen chi actorUser co role "admin" moi qua
+ * duoc assertDefinitionInScope o tren - ward-tier (bi thu/UBND) van khong tat
+ * duoc danh muc toan cuc, chi tat duoc danh muc cua chinh phuong minh.
+ */
 export async function archiveComplaintTypeDefinition(
     actorUser: IUser,
     id: string,
@@ -157,12 +199,6 @@ export async function archiveComplaintTypeDefinition(
     const definition = await ComplaintTypeDefinition.findById(id);
     if (!definition) throw new HttpError("Không tìm thấy loại phản ánh", 404);
     assertDefinitionInScope(actorUser, definition);
-    if (definition.isBuiltIn) {
-        throw new HttpError(
-            "Không thể ngừng sử dụng loại phản ánh hệ thống (isBuiltIn)",
-            409,
-        );
-    }
     definition.active = false;
     definition.updatedBy = actorUser._id as any;
     await definition.save();
@@ -234,4 +270,27 @@ export async function getStaffOnlyComplaintCategoryKeys(): Promise<string[]> {
                 ),
         )
         .map(d => d.key);
+}
+
+/**
+ * Danh sach key cac danh muc phan anh ma actor (theo vai tro) la nguoi NHAN
+ * (xuat hien trong allowedReceiverRoles cua danh muc active tuong ung) - vd
+ * regional_police -> [an_ninh_trat_tu, pccc], environment_officer ->
+ * [ve_sinh_moi_truong], secretary/people_committee_official ->
+ * [to_de_xuat_len_phuong]. Dung boi listComplaints de loc danh sach cho cac
+ * vai tro cap Phuong (WARD/ASSIGNED) THEO DUNG danh muc ho phu trach thay vi
+ * dung chung mot bo loc "chi danh cho nhan vien" (xem
+ * getStaffOnlyComplaintCategoryKeys) cho MOI vai tro cap Phuong - nham lan
+ * truoc gop ca cac vai tro "phong ban" chuyen mon (police/moi truong) vao
+ * chung nhanh do, khien ho khong con thay duoc phan anh cua CU DAN gui truc
+ * tiep cho minh (vd an_ninh_trat_tu) sau khi duoc gan Phuong/Xa.
+ */
+export async function getReceivableComplaintCategoryKeysForRoles(
+    roles: string[],
+): Promise<string[]> {
+    const definitions = await ComplaintTypeDefinition.find({
+        active: true,
+        allowedReceiverRoles: { $in: roles },
+    }).select("key");
+    return definitions.map(d => d.key);
 }

@@ -1,5 +1,10 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
-import { TRANG_THAI_PHAN_ANH, type TrangThaiPhanAnh } from "@/types";
+import {
+    TRANG_THAI_PHAN_ANH,
+    HOUSE_GIS_SOURCES,
+    type TrangThaiPhanAnh,
+    type HouseGisSource,
+} from "@/types";
 
 export interface IComplaint extends Document {
     code: string;
@@ -14,6 +19,15 @@ export interface IComplaint extends Document {
     title: string;
     content: string;
     area?: string;
+    // Toa do GPS nguoi gui chup luc tao phan anh (tuy chon) - cung quy uoc voi
+    // gis* cua HouseRecord.ts (null/undefined = chua co, khong luu [0,0]).
+    // Khac House: khong co GeoJSON `location`/chi muc 2dsphere vi hien chua
+    // co nhu cau tim kiem phan anh theo vi tri - chi de hien thi/tham khao.
+    gisLatitude?: number | null;
+    gisLongitude?: number | null;
+    gisAccuracyMeters?: number | null;
+    gisSource?: HouseGisSource;
+    gisCapturedAt?: Date | null;
     status: TrangThaiPhanAnh;
     cluster?: string;
     neighborhoodId?: mongoose.Types.ObjectId;
@@ -38,6 +52,10 @@ export interface IComplaint extends Document {
     // (status da chuyen sang "hoan_thanh", khong con hanh dong nao ghi de).
     rating?: number;
     ratingNote?: string;
+    // Dat mot lan duy nhat khi checkOverdueComplaintsAndNotify (complaintService.ts)
+    // gui canh bao email qua han xu ly dau tien - ngan gui lap lai email nay o
+    // moi lan job dinh ky chay tiep theo cho cung mot phan anh.
+    overdueAlertSentAt?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -49,6 +67,15 @@ const ComplaintSchema = new Schema<IComplaint>(
         title: { type: String, required: true, trim: true },
         content: { type: String, required: true },
         area: { type: String },
+        gisLatitude: { type: Number, default: null },
+        gisLongitude: { type: Number, default: null },
+        gisAccuracyMeters: { type: Number, default: null, min: 0 },
+        gisSource: {
+            type: String,
+            enum: HOUSE_GIS_SOURCES,
+            default: "unavailable",
+        },
+        gisCapturedAt: { type: Date, default: null },
         status: {
             type: String,
             enum: TRANG_THAI_PHAN_ANH,
@@ -100,6 +127,7 @@ const ComplaintSchema = new Schema<IComplaint>(
         },
         rating: { type: Number, min: 1, max: 5 },
         ratingNote: { type: String, trim: true },
+        overdueAlertSentAt: { type: Date },
     },
     { timestamps: true },
 );

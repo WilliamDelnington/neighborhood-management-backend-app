@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TRANG_THAI_PHAN_ANH } from "@/types";
+import { TRANG_THAI_PHAN_ANH, HOUSE_GIS_SOURCES } from "@/types";
 
 // Permissive - chi kiem tra HINH THUC cua key (cung quy uoc voi
 // requestTypeKeySchema trong validators/request.ts). Gia tri THUC te (co
@@ -12,7 +12,7 @@ const complaintCategoryKeySchema = z
     .max(50)
     .regex(/^[a-z][a-z0-9_]*$/, "Nhóm phản ánh không hợp lệ");
 
-export const createComplaintSchema = z.object({
+const createComplaintBaseSchema = z.object({
     category: complaintCategoryKeySchema,
     title: z.string().min(3, "Tiêu đề quá ngắn"),
     content: z.string().min(10, "Nội dung quá ngắn"),
@@ -27,8 +27,44 @@ export const createComplaintSchema = z.object({
     // Chi co y nghia khi category="ha_tang" - lien ket toi mot tai san cu the
     // trong so ha tang (B11.03), khong bat buoc.
     relatedAssetId: z.string().optional(),
+    // Toa do GPS nguoi gui chup luc tao phan anh (tuy chon) - cung quy uoc gis*
+    // voi HouseRecord (xem validators/houseRecord.ts). 0/0 duoc coi la chua co
+    // toa do o service layer, khong lam sai lech thanh Null Island.
+    gisLatitude: z.number().min(-90).max(90).nullable().optional(),
+    gisLongitude: z.number().min(-180).max(180).nullable().optional(),
+    gisAccuracyMeters: z.number().min(0).nullable().optional(),
+    gisSource: z.enum(HOUSE_GIS_SOURCES).optional(),
+    gisCapturedAt: z.string().datetime().nullable().optional(),
+    // Bat buoc = true khi gisSource la "address_lookup"/"device_gps" (du lieu
+    // vi tri nhay cam theo Luat BVDLCN so 91/2025/QH15) - xem
+    // requiresComplaintGeoConsent ben duoi, cung quy uoc voi houseRecord.ts.
+    geoConsentAccepted: z.boolean().optional(),
 });
-export type CreateComplaintInput = z.infer<typeof createComplaintSchema>;
+
+// Cung logic voi requiresGeoConsent trong validators/houseRecord.ts - lop
+// chan phia server cho gisSource nhay cam ("address_lookup"/"device_gps"),
+// KHONG chi dua vao checkbox phia client.
+function requiresComplaintGeoConsent(data: {
+    gisSource?: (typeof HOUSE_GIS_SOURCES)[number];
+    geoConsentAccepted?: boolean;
+}): boolean {
+    return (
+        (data.gisSource !== "address_lookup" &&
+            data.gisSource !== "device_gps") ||
+        data.geoConsentAccepted === true
+    );
+}
+const GEO_CONSENT_ISSUE = {
+    message:
+        "Cần xác nhận đồng ý thu thập vị trí (dữ liệu nhạy cảm) trước khi gửi tọa độ từ địa chỉ/GPS",
+    path: ["geoConsentAccepted"],
+};
+
+export const createComplaintSchema = createComplaintBaseSchema.refine(
+    requiresComplaintGeoConsent,
+    GEO_CONSENT_ISSUE,
+);
+export type CreateComplaintInput = z.infer<typeof createComplaintBaseSchema>;
 
 export const updateComplaintStatusSchema = z.object({
     status: z.enum(TRANG_THAI_PHAN_ANH),

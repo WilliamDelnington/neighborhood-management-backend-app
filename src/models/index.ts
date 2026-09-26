@@ -191,6 +191,14 @@ export {
     type IInfrastructureAsset,
 } from "./InfrastructureAsset";
 export {
+    default as Poi,
+    type IPoi,
+    POI_CATEGORIES,
+    POI_SOURCES,
+    type PoiCategory,
+    type PoiSource,
+} from "./Poi";
+export {
     default as PeriodicReport,
     type IPeriodicReport,
     type IPeriodicReportAutoSummary,
@@ -225,12 +233,16 @@ export {
     default as AppointmentService,
     type IAppointmentService,
     type IAppointmentTimeSlot,
+    type IAppointmentExceptionSlot,
+    type IAppointmentServiceException,
+    type AppointmentServiceExceptionType,
     type AppointmentServiceScope,
     type AppointmentHouseRequirement,
     type AppointmentHouseStatusRequirement,
     APPOINTMENT_SERVICE_SCOPES,
     APPOINTMENT_HOUSE_REQUIREMENTS,
     APPOINTMENT_HOUSE_STATUS_REQUIREMENTS,
+    APPOINTMENT_SERVICE_EXCEPTION_TYPES,
 } from "./AppointmentService";
 export {
     default as Appointment,

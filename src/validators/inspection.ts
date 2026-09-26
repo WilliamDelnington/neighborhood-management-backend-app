@@ -67,6 +67,10 @@ export const updateInspectionCampaignDetailsSchema = z.object({
         .trim()
         .min(1, "Vui lòng nhập mục tiêu chiến dịch")
         .max(5000),
+    // Khong bat buoc - bo trong thi giu nguyen. Thoi han phai sau thoi diem
+    // bat dau (so voi gia tri moi HOAC gia tri dang luu - kiem tra o service).
+    startAt: z.string().datetime().optional(),
+    dueAt: z.string().datetime().optional(),
 });
 export type UpdateInspectionCampaignDetailsInput = z.infer<
     typeof updateInspectionCampaignDetailsSchema

@@ -171,4 +171,39 @@ describe("Neighborhood organization", () => {
             }),
         ).toBeTruthy();
     });
+
+    it("xoa duoc du lieu GeoJSON da luu khi bam 'Xóa' roi Luu (boundaryType chuyen khoi GEOJSON)", async () => {
+        const admin = await createTestUser({ roles: ["admin"] });
+        const headers = await authHeaders(admin);
+        const created = await createNeighborhood(headers, "TDP-GIS", 908);
+        const neighborhoodId = created.data._id as string;
+
+        const withGeometry = await updateNeighborhoodRoute(
+            makeRequest(`/api/neighborhoods/${neighborhoodId}`, {
+                method: "PATCH",
+                headers,
+                body: {
+                    boundaryType: "GEOJSON",
+                    geometry: {
+                        type: "Polygon",
+                        coordinates: [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+                    },
+                },
+            }),
+            { params: { id: neighborhoodId } },
+        );
+        expect(withGeometry.status).toBe(200);
+        expect((await Neighborhood.findById(neighborhoodId))?.geometry).toBeDefined();
+
+        const cleared = await updateNeighborhoodRoute(
+            makeRequest(`/api/neighborhoods/${neighborhoodId}`, {
+                method: "PATCH",
+                headers,
+                body: { boundaryType: "NONE" },
+            }),
+            { params: { id: neighborhoodId } },
+        );
+        expect(cleared.status).toBe(200);
+        expect((await Neighborhood.findById(neighborhoodId))?.geometry).toBeUndefined();
+    });
 });

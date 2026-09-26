@@ -15,6 +15,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { hashPassword } from "@/lib/auth";
+import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 
 // Danh sach truong duoc coi la "dinh danh/dia chi" cua nha so - mot khi ho so
 // da "verified", nhung truong nay khong con sua truc tiep duoc nua (phai gui
@@ -902,6 +903,60 @@ export async function getHouseRecordById(id: string): Promise<IHouseRecord> {
     const houseRecord =
         await HouseRecord.findById(id).populate(HOUSE_RECORD_POPULATE);
     if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
+    return withInferredUsageTypes(houseRecord);
+}
+
+const MAX_HOUSE_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_HOUSE_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"];
+
+/**
+ * Tai len/thay anh dai dien cua Nha so - cung quyen+pham vi voi updateHouseRecord
+ * (houses.update + assertHouseRecordInScope, kiem tra o route) nen chu nha
+ * cung tu doi anh nha minh duoc, khong chi staff/admin.
+ */
+export async function uploadHouseImage(
+    actorId: string,
+    houseId: string,
+    file: File,
+): Promise<IHouseRecord> {
+    const houseRecord = await HouseRecord.findById(houseId);
+    if (!houseRecord) throw new HttpError("Không tìm thấy nhà số", 404);
+
+    if (file.size > MAX_HOUSE_IMAGE_SIZE_BYTES) {
+        throw new HttpError(
+            "File vượt quá dung lượng cho phép (tối đa 10MB)",
+            400,
+        );
+    }
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!ALLOWED_HOUSE_IMAGE_EXTENSIONS.includes(ext)) {
+        throw new HttpError(
+            `Định dạng ảnh không được hỗ trợ (chỉ chấp nhận ${ALLOWED_HOUSE_IMAGE_EXTENSIONS.join(", ")})`,
+            400,
+        );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { url } = await saveUploadedFile(
+        buffer,
+        file.name,
+        `houses/${houseId}`,
+    );
+
+    const oldImage = houseRecord.imageUrl;
+    houseRecord.imageUrl = url;
+    houseRecord.updatedBy = actorId as any;
+    await houseRecord.save();
+    if (oldImage) await deleteUploadedFile(oldImage);
+
+    await writeAuditLog({
+        actorId,
+        action: "house.image.upload",
+        targetModel: "HouseRecord",
+        targetId: houseRecord._id,
+    });
+
+    await houseRecord.populate(HOUSE_RECORD_POPULATE);
     return withInferredUsageTypes(houseRecord);
 }
 

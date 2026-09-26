@@ -9,6 +9,7 @@ import {
     type IUser,
 } from "@/models";
 import { HttpError } from "@/lib/response";
+import { hasUnlimitedScope } from "@/lib/rbac";
 import { deleteUploadedFile, saveUploadedFile } from "@/lib/localUpload";
 import { createNotification } from "@/services/notificationService";
 import { getUnreadRelatedIds } from "@/services/notificationReadService";
@@ -109,6 +110,22 @@ export function assertCorrespondenceInScope(
         return;
     }
     throw new HttpError("Bạn không có quyền thao tác với văn bản này", 403);
+}
+
+/**
+ * Kiem tra quyen XEM (chi tiet/tep dinh kem/phan hoi) - rong hon
+ * assertCorrespondenceInScope: user quan ly khong gioi han pham vi (xem
+ * hasUnlimitedScope) duoc xem MOI van ban ke ca khong phai nguoi gui/nhan,
+ * nhung van KHONG duoc sua/gui/phan hoi van ban cua nguoi khac (cac thao tac
+ * do van di qua assertCorrespondenceInScope).
+ */
+export async function assertCorrespondenceReadable(
+    user: IUser,
+    correspondence: ICorrespondence,
+    type: ICorrespondenceType,
+): Promise<void> {
+    if (await hasUnlimitedScope(user)) return;
+    assertCorrespondenceInScope(user, correspondence, type);
 }
 
 export async function updateCorrespondence(
@@ -258,46 +275,54 @@ export async function sendCorrespondence(
 export async function listCorrespondences(params: {
     page: number;
     limit: number;
-    view?: "sent" | "received";
+    // "all" = MOI van ban trong he thong kem nguoi gui/nguoi nhan - chi danh
+    // cho user quan ly khong gioi han pham vi (xem hasUnlimitedScope). Bo
+    // trong: user khong gioi han mac dinh "all", con lai mac dinh "received".
+    view?: "sent" | "received" | "all";
     status?: string;
     actorUser: IUser;
 }) {
     const { actorUser } = params;
+    const canViewAll = await hasUnlimitedScope(actorUser);
+    const view = params.view || (canViewAll ? "all" : "received");
+    if (view === "all" && !canViewAll) {
+        throw new HttpError("Bạn không có quyền xem tất cả văn bản", 403);
+    }
     const filter: Record<string, unknown> = {};
-    let isReceivedView = true;
+    const isReceivedView = view === "received";
 
-    if (actorUser.roles.includes("admin")) {
+    if (view === "all") {
         if (params.status) filter.status = params.status;
-        if (params.view === "sent") {
-            filter.senderId = actorUser._id;
-            isReceivedView = false;
-        }
+    } else if (view === "sent") {
+        filter.senderId = actorUser._id;
+        if (params.status) filter.status = params.status;
     } else {
-        const view = params.view || "received";
-        if (view === "sent") {
-            filter.senderId = actorUser._id;
-            if (params.status) filter.status = params.status;
-            isReceivedView = false;
-        } else {
-            const userNeighborhoodIds = [
-                actorUser.neighborhoodId,
-                ...(actorUser.assignedNeighborhoodIds || []),
-            ].filter(Boolean);
-            filter.status = "da_gui";
-            filter.$or = [
-                { targetUserIds: actorUser._id },
-                { targetNeighborhoodIds: { $in: userNeighborhoodIds } },
-            ];
-        }
+        const userNeighborhoodIds = [
+            actorUser.neighborhoodId,
+            ...(actorUser.assignedNeighborhoodIds || []),
+        ].filter(Boolean);
+        filter.status = "da_gui";
+        filter.$or = [
+            { targetUserIds: actorUser._id },
+            { targetNeighborhoodIds: { $in: userNeighborhoodIds } },
+        ];
     }
 
+    let query = Correspondence.find(filter)
+        .sort({ isUrgent: -1, issuedAt: -1, createdAt: -1 })
+        .skip((params.page - 1) * params.limit)
+        .limit(params.limit)
+        .populate("correspondenceTypeId", "name code");
+    // Chi tab "Tất cả" moi populate nguoi gui/nguoi nhan - cac tab khac giu
+    // nguyen dang id (Mini App/resident-web-app doc senderId nhu chuoi).
+    if (view === "all") {
+        query = query
+            .populate("senderId", "displayName phone")
+            .populate("targetUserIds", "displayName phone")
+            .populate("targetNeighborhoodIds", "name code");
+    }
     const [rawItems, total] = await Promise.all([
-        Correspondence.find(filter)
-            .sort({ isUrgent: -1, issuedAt: -1, createdAt: -1 })
-            .skip((params.page - 1) * params.limit)
-            .limit(params.limit)
-            .populate("correspondenceTypeId", "name code")
-            .lean(),
+        query.lean(),
         Correspondence.countDocuments(filter),
     ]);
 
@@ -323,6 +348,8 @@ export async function listCorrespondences(params: {
         page: params.page,
         limit: params.limit,
         totalPages: Math.max(1, Math.ceil(total / params.limit)),
+        view,
+        canViewAll,
     };
 }
 
@@ -363,7 +390,7 @@ export async function listCorrespondenceAttachments(
     const { correspondence, type } = await loadCorrespondenceAndType(
         correspondenceId,
     );
-    assertCorrespondenceInScope(actorUser, correspondence, type);
+    await assertCorrespondenceReadable(actorUser, correspondence, type);
 
     return FileAsset.find({
         relatedModel: "Correspondence",
@@ -465,7 +492,7 @@ export async function listCorrespondenceReplies(
     const { correspondence, type } = await loadCorrespondenceAndType(
         correspondenceId,
     );
-    assertCorrespondenceInScope(actorUser, correspondence, type);
+    await assertCorrespondenceReadable(actorUser, correspondence, type);
 
     return CorrespondenceReply.find({ correspondenceId })
         .sort({ createdAt: 1 })

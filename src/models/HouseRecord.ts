@@ -78,6 +78,11 @@ export interface IHouseRecord extends Document {
         type: "Point";
         coordinates: [number, number];
     };
+    // Anh dai dien cua Nha so (vd anh mat tien) - tuy chon, khong phai tai
+    // lieu xac minh (khac AttachmentsPanel/FileAsset) nen luu truc tiep tren
+    // day giong User.avatarUrl thay vi qua FileAsset. Xem
+    // houseRecordService.uploadHouseImage.
+    imageUrl?: string;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -164,6 +169,7 @@ const HouseRecordSchema = new Schema<IHouseRecord>(
         },
         gisCapturedAt: { type: Date, default: null },
         location: { type: HouseLocationSchema, default: undefined },
+        imageUrl: { type: String },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
     },

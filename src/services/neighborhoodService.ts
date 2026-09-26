@@ -1,7 +1,9 @@
+import ExcelJS from "exceljs";
 import {
     HouseRecord,
     Neighborhood,
     NeighborhoodHistory,
+    Role,
     ScopeAssignment,
     FileAsset,
     InspectionCampaign,
@@ -13,6 +15,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { writeAuditLog } from "@/services/auditService";
 import { isCollaboratorOrLegacyCooperator } from "@/lib/systemRoles";
+import { addTableSheet } from "@/lib/excelResponse";
 import type {
     CreateNeighborhoodInput,
     AssignNeighborhoodCollaboratorInput,
@@ -20,7 +23,7 @@ import type {
 } from "@/validators/neighborhood";
 import type { NeighborhoodStatus } from "@/models/Neighborhood";
 
-const LEADER_POPULATE = "displayName phone status";
+const LEADER_POPULATE = "displayName phone status avatarUrl";
 
 /**
  * Ket thuc cac phan cong CONG TAC VIEN da qua han (endAt rieng cua tung phan
@@ -324,6 +327,17 @@ export async function updateNeighborhood(
             (neighborhood as unknown as Record<string, unknown>)[key] = value;
         }
     }
+    // Nguoi dung bam "Xóa" ranh giới GeoJSON tren form Sua To dan pho gui
+    // boundaryType KHAC GEOJSON kem geometry:undefined - vong lap tren BO QUA
+    // gan lai geometry vi gia tri la undefined (quy uoc chung: undefined =
+    // "khong dong den truong nay"), khien du lieu GIS cu "dinh" lai sau khi
+    // luu. Phai xoa geometry rieng moi khi boundaryType chuyen sang khac
+    // GEOJSON - day la tin hieu DUY NHAT phan biet duoc voi "khong dong den
+    // truong nay" qua PATCH thong thuong (xem GeoJsonBoundaryInput.tsx/
+    // toUpdateNeighborhoodInput o frontend).
+    if (patch.boundaryType !== undefined && patch.boundaryType !== "GEOJSON") {
+        neighborhood.geometry = undefined;
+    }
     if (patch.status !== undefined) neighborhood.active = patch.status === "ACTIVE";
     else if (patch.active !== undefined) {
         neighborhood.status = patch.active ? "ACTIVE" : "INACTIVE";
@@ -404,8 +418,12 @@ export async function assignNeighborhoodLeader(
     // Chinh sach mac dinh (1 to truong = 1 to dan pho) nen chi can go lien ket
     // to dan pho nay khoi ca neighborhoodId (chinh) lan assignedNeighborhoodIds
     // (phu) cua nguoi dung do, khong can phan biet chinh/phu.
+    // Giu lai assignedAt cua phan cong sap dong de ghi vao NeighborhoodHistory
+    // ben duoi (metadata.assignedAt) - cho phep hien thi khoang thoi gian day
+    // du "tu ngay -> den ngay" thay vi chi mot moc thoi gian ket thuc.
+    let closedLeaderAssignedAt: Date | undefined;
     if (currentLeaderId) {
-        await ScopeAssignment.updateOne(
+        const closedLeaderAssignment = await ScopeAssignment.findOneAndUpdate(
             {
                 roleKey: "neighborhood_leader",
                 scopeType: "NEIGHBORHOOD",
@@ -413,7 +431,8 @@ export async function assignNeighborhoodLeader(
                 unassignedAt: { $exists: false },
             },
             { unassignedAt: now, unassignedBy: actorId },
-        );
+        ).select("assignedAt");
+        closedLeaderAssignedAt = closedLeaderAssignment?.assignedAt;
         await User.updateOne(
             { _id: currentLeaderId, neighborhoodId: neighborhood._id },
             { $unset: { neighborhoodId: "" } },
@@ -439,7 +458,11 @@ export async function assignNeighborhoodLeader(
             neighborhoodId: neighborhood._id,
             actorId,
             action: "LEADER_UNASSIGNED",
-            metadata: { leaderUserId: currentLeaderId },
+            metadata: {
+                leaderUserId: currentLeaderId,
+                assignedAt: closedLeaderAssignedAt,
+                unassignedAt: now,
+            },
         });
 
         return neighborhood;
@@ -568,6 +591,53 @@ export async function getNeighborhoodLeadershipUserIds(
     coleaderAssignments.forEach(a => ids.add(String(a.userId)));
 
     return ids;
+}
+
+const MANAGEMENT_ROLE_KEYS = [
+    "neighborhood_leader",
+    "neighborhood_coleader",
+    "neighborhood_collaborator",
+];
+
+/**
+ * Toan bo lich su dam nhiem To truong/To pho/Cong tac vien cua MOT nguoi dung,
+ * xuyen suot moi to dan pho (khong chi mot to) - dung cho phan "Lịch sử quản
+ * lý Tổ dân phố" tren ho so Nguoi dung (UserDetailPage.tsx), doi xung voi
+ * getLeaderHistory/getColeaderHistory/getCollaboratorHistory (xem theo mot to
+ * dan pho cu the). Tra kem ten to dan pho vi mot nguoi co the tung phu trach
+ * nhieu to khac nhau qua thoi gian.
+ */
+export async function getUserNeighborhoodManagementHistory(userId: string) {
+    const rows = await ScopeAssignment.find({
+        userId,
+        scopeType: "NEIGHBORHOOD",
+        roleKey: { $in: MANAGEMENT_ROLE_KEYS },
+    })
+        .sort({ assignedAt: -1 })
+        .populate("assignedBy", "displayName")
+        .populate("unassignedBy", "displayName");
+
+    const neighborhoodIds = [
+        ...new Set(rows.map(r => String(r.scopeId))),
+    ];
+    const neighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("name code");
+    const neighborhoodById = new Map(
+        neighborhoods.map(n => [String(n._id), n]),
+    );
+
+    return rows.map(r => ({
+        _id: String(r._id),
+        roleKey: r.roleKey,
+        neighborhood: neighborhoodById.get(String(r.scopeId)) || null,
+        assignedAt: r.assignedAt,
+        assignedBy: r.assignedBy,
+        unassignedAt: r.unassignedAt,
+        unassignedBy: r.unassignedBy,
+        endAt: r.endAt,
+        note: r.note,
+    }));
 }
 
 /**
@@ -718,6 +788,29 @@ export async function listNeighborhoodHistory(neighborhoodId: string) {
         .sort({ createdAt: -1 })
         .limit(200)
         .populate("actorId", "displayName");
+}
+
+/**
+ * Toan bo lich su Cong tac vien cua mot to dan pho (ca da ket thuc), khac
+ * listNeighborhoodCollaborators (chi active) - dung cho man xem lich su, hien
+ * thi khoang thoi gian dam nhiem (assignedAt -> unassignedAt/endAt).
+ */
+export async function getCollaboratorHistory(neighborhoodId: string) {
+    const exists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!exists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
+
+    return ScopeAssignment.find({
+        roleKey: "neighborhood_collaborator",
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+    })
+        .sort({ assignedAt: -1 })
+        .populate("userId", LEADER_POPULATE)
+        .populate("subScope.streetId", "name code")
+        .populate("subScope.houseIds", "code address")
+        .populate("subScope.campaignId", "name status dueAt")
+        .populate("assignedBy", "displayName")
+        .populate("unassignedBy", "displayName");
 }
 
 export async function listNeighborhoodCollaborators(neighborhoodId: string) {
@@ -885,4 +978,77 @@ export async function unassignNeighborhoodCollaborator(
             metadata: { collaboratorUserId: assignment.userId },
         }),
     ]);
+}
+
+/**
+ * Xuat toan bo thanh vien (Tổ trưởng/Tổ phó/Cộng tác viên/vai tro NEIGHBORHOOD
+ * khac) cua TAT CA To dan pho ra 1 file Excel - dung cho man
+ * NeighborhoodListPage.tsx ("Xuất Excel"), khac han cac ham tren (luon gioi
+ * han theo MOT To). scopeId/roleKey la Mixed/string tren ScopeAssignment nen
+ * KHONG the .populate() truc tiep - phai batch-resolve rieng ten To/vai tro
+ * bang 2 truy van gop (giong ky thuat da dung o
+ * userService.getUserManagementScope), tranh N+1 truy van cho tung dong.
+ */
+export async function exportAllNeighborhoodMembers(): Promise<ExcelJS.Workbook> {
+    const assignments = await ScopeAssignment.find({
+        scopeType: "NEIGHBORHOOD",
+        unassignedAt: { $exists: false },
+    })
+        .sort({ scopeId: 1, roleKey: 1 })
+        .populate("userId", "displayName phone")
+        .lean();
+
+    const neighborhoodIds = Array.from(
+        new Set(assignments.map(a => String(a.scopeId))),
+    );
+    const neighborhoods = await Neighborhood.find({
+        _id: { $in: neighborhoodIds },
+    }).select("name code wardName");
+    const neighborhoodById = new Map(
+        neighborhoods.map(n => [String(n._id), n]),
+    );
+
+    const roleKeys = Array.from(new Set(assignments.map(a => a.roleKey)));
+    const roles = await Role.find({ key: { $in: roleKeys } }).select(
+        "key name",
+    );
+    const roleNameByKey = new Map(roles.map(r => [r.key, r.name]));
+
+    const rows = assignments
+        .filter(a => a.userId)
+        .map(a => {
+            const user = a.userId as unknown as {
+                displayName: string;
+                phone?: string;
+            };
+            const neighborhood = neighborhoodById.get(String(a.scopeId));
+            return {
+                displayName: user.displayName,
+                phone: user.phone || "",
+                roleName: roleNameByKey.get(a.roleKey) || a.roleKey,
+                neighborhoodName: neighborhood
+                    ? `${neighborhood.code} - ${neighborhood.name}`
+                    : String(a.scopeId),
+                wardName: neighborhood?.wardName || "",
+                assignedAt: a.assignedAt
+                    ? new Date(a.assignedAt).toLocaleDateString("vi-VN")
+                    : "",
+            };
+        });
+
+    const workbook = new ExcelJS.Workbook();
+    addTableSheet(
+        workbook,
+        "Thành viên Tổ dân phố",
+        [
+            { header: "Họ tên", key: "displayName", width: 26 },
+            { header: "Số điện thoại", key: "phone", width: 16 },
+            { header: "Vai trò", key: "roleName", width: 24 },
+            { header: "Tổ dân phố", key: "neighborhoodName", width: 30 },
+            { header: "Phường/Xã", key: "wardName", width: 24 },
+            { header: "Ngày được gán", key: "assignedAt", width: 18 },
+        ],
+        rows,
+    );
+    return workbook;
 }

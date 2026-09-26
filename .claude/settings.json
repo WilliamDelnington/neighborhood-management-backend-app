@@ -5,11 +5,40 @@
       "Bash(node -e \"const icons = require\\('lucide-react'\\); console.log\\(Object.keys\\(icons\\).filter\\(k => /message|warning|alert/i.test\\(k\\)\\).join\\('\\\\n'\\)\\)\")",
       "Read(//e/Resident Management/quan-ly-to-dan-pho-hoa-binh-admin/src/constants/**)",
       "Read(//e/Resident Management/quan-ly-to-dan-pho-hoa-binh-admin/**)",
-      "Bash(powershell -NoProfile -Command \"Get-ChildItem -Force 'e:\\\\Resident Management\\\\quan-ly-to-dan-pho-hoa-binh-admin' | Select-Object Name\")"
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem -Force 'e:\\\\Resident Management\\\\quan-ly-to-dan-pho-hoa-binh-admin' | Select-Object Name\")",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/**)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/**)",
+      "Bash(cd \"/d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app\" && find src/lib src/service src/store src/components/layout src/components/auth src/constants -maxdepth 2 -type f | sort)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/service/**)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/store/**)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/components/layout/**)",
+      "Bash(cd \"/d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app\" && find src/components/ui -maxdepth 1 -type f | sort && echo --- && cat src/types/index.ts 2>/dev/null | head -60 || find src/types -maxdepth 1)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/components/ui/**)",
+      "Read(//d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app/src/constants/**)",
+      "Bash(npm run *)",
+      "Bash(cd \"/d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app\" && grep -n \"main:\" tailwind.config.js -A2 | head -20)",
+      "Bash(echo \"TSC:$?\")",
+      "Bash(echo \"LINT:$?\")",
+      "Bash(curl -s -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyCT80vKTolW0bsd-OBoIgpN9X0GQu0sDIw\" -H \"Content-Type: application/json\" -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"xin chao\"}]}]}')",
+      "Bash(curl -s -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=AIzaSyCT80vKTolW0bsd-OBoIgpN9X0GQu0sDIw\" -H \"Content-Type: application/json\" -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"xin chao, ban la ai\"}]}]}')",
+      "Bash(curl -s \"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyCT80vKTolW0bsd-OBoIgpN9X0GQu0sDIw\")",
+      "Bash(curl -s \"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyBLfCea6lsawn2gu_gBGrRU-oxpScTvQjk\")",
+      "Bash(curl -s -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyBLfCea6lsawn2gu_gBGrRU-oxpScTvQjk -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(cd \"/d/projects/Dự án zalo tổ dân phố số/neighborhood-management-admin-web-app\" && npx tsc --noEmit -p tsconfig.json; echo \"TSC:$?\"; npx eslint src/components/layout/AiChatWidget.tsx; echo \"LINT:$?\")",
+      "Bash(awk 'NR==501,NR==1400' src/services/dashboardService.ts)",
+      "Bash(awk -F: '$1>=490 && $1<=1300')",
+      "Bash(identify happy.png)"
     ],
     "additionalDirectories": [
       "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin",
-      "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin\\src\\pages\\Security"
+      "e:\\Resident Management\\quan-ly-to-dan-pho-hoa-binh-admin\\src\\pages\\Security",
+      "D:\\projects\\Dự án zalo tổ dân phố số\\neighborhood-management-admin-web-app\\src\\constants",
+      "D:\\projects\\Dự án zalo tổ dân phố số\\neighborhood-management-admin-web-app\\src\\service",
+      "D:\\projects\\Dự án zalo tổ dân phố số\\neighborhood-management-admin-web-app\\src\\components\\layout"
     ]
   }
 }

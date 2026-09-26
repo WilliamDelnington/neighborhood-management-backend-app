@@ -36,6 +36,15 @@ export interface ICompany extends Document {
     // doanh khong co loai hinh phap ly nay) nen la truong rieng cua Company,
     // mot gia tri duy nhat (khac businessTypeIds - mang).
     companyTypeId?: mongoose.Types.ObjectId;
+    // So luong nhan vien/lao dong hien co cua cong ty - thong tin ke khai,
+    // khong anh huong bat ky logic nghiep vu nao (khac cac truong tham chieu
+    // khac o tren).
+    numberOfEmployees?: number;
+    // Tinh trang phap ly cua cong ty (vd "Dang hoat dong", "Tam ngung",
+    // "Giai the") - van ban tu do, KHAC companyTypeId (loai hinh doanh
+    // nghiep) va KHAC status (VerificationStatus - trang thai xac thuc noi
+    // bo cua he thong).
+    legalStatus?: string;
     phone?: string;
     active: boolean;
     // Trang thai xac thuc CUA CHINH cong ty nay - doc lap voi trang thai cua
@@ -91,6 +100,8 @@ const CompanySchema = new Schema<ICompany>(
             ref: "CompanyType",
             index: true,
         },
+        numberOfEmployees: { type: Number, min: 0 },
+        legalStatus: { type: String, trim: true },
         phone: { type: String, trim: true },
         active: { type: Boolean, default: true },
         status: {

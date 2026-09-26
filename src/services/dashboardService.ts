@@ -22,7 +22,6 @@ import {
     type IUser,
 } from "@/models";
 import {
-    getUserAllowedComplaintCategories,
     getUserAllowedDashboardMetrics,
     getUserPermissionSet,
 } from "@/lib/rbac";
@@ -38,6 +37,7 @@ import {
 } from "@/services/requestService";
 import { getMyAssignedComplaintCounts } from "@/services/complaintService";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
+import { countUnansweredSurveys } from "@/services/surveyService";
 import { getUnreadCount } from "@/services/notificationReadService";
 import {
     getFinanceReport,
@@ -573,7 +573,7 @@ export async function getDashboardSummary(actorUser: IUser) {
                   ])
                 : Promise.resolve([]),
             capabilities.complaints
-                ? getComplaintDashboardRows(actorUser, context.complaintFilter)
+                ? getComplaintDashboardRows(context.complaintFilter)
                 : Promise.resolve([]),
             capabilities.complaints && houseIds.length > 0
                 ? Complaint.aggregate([
@@ -950,16 +950,10 @@ export async function getDashboardSummary(actorUser: IUser) {
 }
 
 async function getComplaintDashboardRows(
-    actorUser: IUser,
     scopeFilter: Record<string, unknown>,
 ): Promise<Array<{ status: string; count: number }>> {
-    const allowedCategories = await getUserAllowedComplaintCategories(actorUser);
-    const match = {
-        ...scopeFilter,
-        ...(allowedCategories ? { category: { $in: allowedCategories } } : {}),
-    };
     const rows = await Complaint.aggregate([
-        { $match: match },
+        { $match: scopeFilter },
         { $group: { _id: "$status", count: { $sum: 1 } } },
     ]);
     return rows.map(row => ({
@@ -2007,8 +2001,7 @@ export async function getMyHouseDashboard(actorUser: IUser) {
         activeComplaints,
         openSupportTickets,
         houseIds,
-        openSurveyDocs,
-        respondedSurveyIds,
+        pendingSurveys,
         upcomingMeetingDocs,
         myMeetingRegistrations,
     ] = await Promise.all([
@@ -2023,20 +2016,13 @@ export async function getMyHouseDashboard(actorUser: IUser) {
             status: { $nin: SUPPORT_TICKET_TERMINAL_STATUSES },
         }),
         getHouseIdsForActingOwner(userId),
-        Survey.find({ status: "dang_mo" }).select("_id"),
-        SurveyResponse.find({ userId }).select("surveyId"),
+        countUnansweredSurveys(actorUser),
         Meeting.find({ startTime: { $gte: new Date() }, published: true })
             .sort({ startTime: 1 })
             .select("_id title startTime location"),
         MeetingRegistration.find({ userId }).select("meetingId"),
     ]);
 
-    const respondedSurveyIdSet = new Set(
-        respondedSurveyIds.map(response => String(response.surveyId)),
-    );
-    const pendingSurveys = openSurveyDocs.filter(
-        survey => !respondedSurveyIdSet.has(String(survey._id)),
-    ).length;
     const registeredMeetingIdSet = new Set(
         myMeetingRegistrations.map(registration =>
             String(registration.meetingId),

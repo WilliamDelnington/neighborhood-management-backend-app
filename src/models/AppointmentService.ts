@@ -43,6 +43,38 @@ export interface IAppointmentTimeSlot extends Document {
     active: boolean;
 }
 
+export const APPOINTMENT_SERVICE_EXCEPTION_TYPES = [
+    "closed",
+    "custom_hours",
+] as const;
+export type AppointmentServiceExceptionType =
+    (typeof APPOINTMENT_SERVICE_EXCEPTION_TYPES)[number];
+
+// Khung gio rieng cua mot ngay ngoai le - khong co dayOfWeek (ap dung cho
+// dung ngay/khoang ngay cua ngoai le). _id duoc Appointment.timeSlotId va
+// AppointmentSlotCounter tham chieu giong khung gio thuong.
+export interface IAppointmentExceptionSlot extends Document {
+    startTime: string;
+    endTime: string;
+    maxCapacity: number;
+    active: boolean;
+}
+
+/**
+ * Ngay ngoai le RIENG cua mot dich vu (khac AppointmentHoliday ap dung cho
+ * ca phuong/he thong): "closed" = khong tiep nhan; "custom_hours" = lam viec
+ * theo timeSlots rieng thay cho khung gio thuong trong tuan. Ngoai le cua
+ * dich vu duoc uu tien hon ngay nghi/le chung (vd van tiep nhan buoi sang
+ * ngay le) - xem appointmentService.resolveSlotsForDate.
+ */
+export interface IAppointmentServiceException extends Document {
+    date: Date;
+    endDate?: Date;
+    type: AppointmentServiceExceptionType;
+    note?: string;
+    timeSlots: mongoose.Types.DocumentArray<IAppointmentExceptionSlot>;
+}
+
 export interface IAppointmentService extends Document {
     key: string;
     name: string;
@@ -64,6 +96,7 @@ export interface IAppointmentService extends Document {
     // (xem plan: "per-service assigned staff list", khac blanket role check).
     assignedOfficerUserIds: mongoose.Types.ObjectId[];
     timeSlots: mongoose.Types.DocumentArray<IAppointmentTimeSlot>;
+    exceptions: mongoose.Types.DocumentArray<IAppointmentServiceException>;
     active: boolean;
     createdBy?: mongoose.Types.ObjectId;
     updatedBy?: mongoose.Types.ObjectId;
@@ -78,6 +111,27 @@ const AppointmentTimeSlotSchema = new Schema<IAppointmentTimeSlot>({
     maxCapacity: { type: Number, default: 5, min: 1 },
     active: { type: Boolean, default: true },
 });
+
+const AppointmentExceptionSlotSchema = new Schema<IAppointmentExceptionSlot>({
+    startTime: { type: String, required: true, trim: true },
+    endTime: { type: String, required: true, trim: true },
+    maxCapacity: { type: Number, default: 5, min: 1 },
+    active: { type: Boolean, default: true },
+});
+
+const AppointmentServiceExceptionSchema =
+    new Schema<IAppointmentServiceException>({
+        // UTC 00:00 cua ngay (cung quy uoc Appointment.appointedDate).
+        date: { type: Date, required: true },
+        endDate: { type: Date },
+        type: {
+            type: String,
+            enum: APPOINTMENT_SERVICE_EXCEPTION_TYPES,
+            required: true,
+        },
+        note: { type: String, trim: true },
+        timeSlots: { type: [AppointmentExceptionSlotSchema], default: [] },
+    });
 
 const AppointmentServiceSchema = new Schema<IAppointmentService>(
     {
@@ -120,6 +174,7 @@ const AppointmentServiceSchema = new Schema<IAppointmentService>(
             default: [],
         },
         timeSlots: { type: [AppointmentTimeSlotSchema], default: [] },
+        exceptions: { type: [AppointmentServiceExceptionSchema], default: [] },
         active: { type: Boolean, default: true, index: true },
         createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         updatedBy: { type: Schema.Types.ObjectId, ref: "User" },

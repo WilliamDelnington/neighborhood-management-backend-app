@@ -103,6 +103,11 @@ export function extractDbNameFromMongoUri(uri: string): string {
     return slashIndex === -1 ? "" : afterCredentials.slice(slashIndex + 1);
 }
 
+/** true neu MONGODB_URI tro vao database production (PROTECTED_DB_NAMES). */
+export function isProtectedDatabase(uri: string): boolean {
+    return PROTECTED_DB_NAMES.includes(extractDbNameFromMongoUri(uri));
+}
+
 /**
  * Chan cung mot script ghi/xoa hang loat neu MONGODB_URI dang tro vao database
  * production (xem PROTECTED_DB_NAMES). Goi truoc khi ket noi, ngay sau

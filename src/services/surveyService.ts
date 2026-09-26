@@ -1,6 +1,13 @@
-import { Survey, SurveyResponse, User, type ISurvey, type IUser } from "@/models";
+import {
+    Role,
+    Survey,
+    SurveyResponse,
+    User,
+    type ISurvey,
+    type IUser,
+} from "@/models";
 import { HttpError } from "@/lib/response";
-import { userHasPermission } from "@/lib/rbac";
+import { hasUnlimitedScope, userHasPermission } from "@/lib/rbac";
 import { createNotification } from "@/services/notificationService";
 import { writeAuditLog } from "@/services/auditService";
 import {
@@ -60,6 +67,69 @@ function isSurveyOwnerOrCoEditor(
     if (user.roles.includes("admin")) return true;
     if (String(survey.createdBy) === String(user._id)) return true;
     return survey.coEditorUserIds.some(id => String(id) === String(user._id));
+}
+
+/**
+ * true neu user la CHINH nguoi tao hoac dong chu bien cua khao sat - KHONG
+ * dac cach admin (khac isSurveyOwnerOrCoEditor). Dung de quyet dinh co phai
+ * canh bao + bao cho nguoi tao/dong chu bien khi mot nguoi quan ly khong gioi
+ * han pham vi mo/dong khao sat cua nguoi khac.
+ */
+function isSurveyCreatorOrCoEditor(user: IUser, survey: ISurvey): boolean {
+    if (String(survey.createdBy) === String(user._id)) return true;
+    return survey.coEditorUserIds.some(id => String(id) === String(user._id));
+}
+
+/**
+ * Tai khao sat cho thao tac MO/DONG - rong hon requireOwnedSurvey: ngoai nguoi
+ * tao/dong chu bien/admin, user quan ly KHONG GIOI HAN pham vi (xem
+ * hasUnlimitedScope) cung duoc mo/dong (nhung van KHONG duoc sua/xoa noi
+ * dung khao sat cua nguoi khac).
+ */
+async function requireStatusManageableSurvey(
+    actorUser: IUser,
+    id: string,
+): Promise<ISurvey> {
+    const survey = await Survey.findById(id);
+    if (!survey) throw new HttpError("Không tìm thấy khảo sát", 404);
+    if (isSurveyOwnerOrCoEditor(actorUser, survey)) return survey;
+    if (await hasUnlimitedScope(actorUser)) return survey;
+    throw new HttpError(
+        "Bạn không phải người tạo hoặc đồng chủ biên của khảo sát này",
+        403,
+    );
+}
+
+/**
+ * Bao cho nguoi tao + dong chu bien khi khao sat CUA HO bi mo/dong boi mot
+ * nguoi khac (vd admin/nguoi quan ly khong gioi han pham vi) - khong gui cho
+ * chinh nguoi vua thao tac.
+ */
+async function notifySurveyOwnersOfStatusChange(
+    actorUser: IUser,
+    survey: ISurvey,
+    action: "open" | "close",
+): Promise<void> {
+    if (isSurveyCreatorOrCoEditor(actorUser, survey)) return;
+    const actorId = String(actorUser._id);
+    const recipientIds = [
+        ...new Set(
+            [survey.createdBy, ...survey.coEditorUserIds]
+                .filter(Boolean)
+                .map(String),
+        ),
+    ].filter(id => id !== actorId);
+    if (recipientIds.length === 0) return;
+    const verb = action === "open" ? "mở" : "đóng";
+    await createNotification({
+        title: action === "open" ? "Khảo sát đã được mở" : "Khảo sát đã được đóng",
+        body: `${actorUser.displayName || "Một cán bộ quản lý"} đã ${verb} khảo sát "${survey.title}".`,
+        type: action === "open" ? "survey.opened_by_other" : "survey.closed_by_other",
+        targetUserIds: recipientIds,
+        relatedModel: "Survey",
+        relatedId: survey._id,
+        createdBy: actorUser._id,
+    });
 }
 
 /**
@@ -154,7 +224,7 @@ export async function openSurvey(
     actorUser: IUser,
     id: string,
 ): Promise<ISurvey> {
-    const survey = await requireOwnedSurvey(actorUser, id);
+    const survey = await requireStatusManageableSurvey(actorUser, id);
 
     survey.status = "dang_mo";
     if (!survey.openDate) survey.openDate = new Date();
@@ -187,6 +257,8 @@ export async function openSurvey(
         targetId: survey._id,
     });
 
+    await notifySurveyOwnersOfStatusChange(actorUser, survey, "open");
+
     return survey;
 }
 
@@ -194,7 +266,7 @@ export async function closeSurvey(
     actorUser: IUser,
     id: string,
 ): Promise<ISurvey> {
-    const survey = await requireOwnedSurvey(actorUser, id);
+    const survey = await requireStatusManageableSurvey(actorUser, id);
 
     survey.status = "da_dong";
     survey.closeDate = new Date();
@@ -207,6 +279,8 @@ export async function closeSurvey(
         targetModel: "Survey",
         targetId: survey._id,
     });
+
+    await notifySurveyOwnersOfStatusChange(actorUser, survey, "close");
 
     return survey;
 }
@@ -237,12 +311,49 @@ function isSurveyVisibleTo(
     survey: ISurvey,
     viewerUser: IUser | null,
     context: UserEligibilityContext | null,
+    unlimitedScope = false,
 ): boolean {
+    // Nguoi quan ly khong gioi han pham vi thay MOI khao sat (ke ca nhap) de
+    // theo doi ai tao/gui cho ai - xem hasUnlimitedScope.
+    if (unlimitedScope) return true;
     if (isSurveyOwnerOrCoEditor(viewerUser, survey)) return true;
     if (survey.status === "nhap") return false;
     if (survey.eligibleAll) return true;
     if (viewerUser && context) return isSurveyEligible(survey, viewerUser, context);
     return false;
+}
+
+/**
+ * true neu viewer thuoc doi tuong duoc TRA LOI khao sat (bat ke trang thai) -
+ * frontend dung de an nut "Trả lời" voi nguoi chi xem/quan ly ma khong phai
+ * doi tuong khao sat.
+ */
+function isViewerEligible(
+    survey: ISurvey,
+    viewerUser: IUser | null,
+    context: UserEligibilityContext | null,
+): boolean {
+    if (!viewerUser || !context) return false;
+    return isSurveyEligible(survey, viewerUser, context);
+}
+
+const SURVEY_PARTY_POPULATE = [
+    { path: "createdBy", select: "displayName phone" },
+    { path: "coEditorUserIds", select: "displayName phone" },
+    { path: "eligibleStreetIds", select: "name" },
+    { path: "eligibleNeighborhoodIds", select: "name code" },
+    { path: "eligibleBusinessTypeIds", select: "name" },
+];
+
+// Ten hien thi cua eligibleRoles (key -> Role.name) de frontend khong phai tu
+// tra danh sach vai tro (co the khong co quyen roles.read).
+async function resolveRoleNames(
+    surveys: ISurvey[],
+): Promise<Map<string, string>> {
+    const keys = [...new Set(surveys.flatMap(s => s.eligibleRoles || []))];
+    if (keys.length === 0) return new Map();
+    const roles = await Role.find({ key: { $in: keys } }).select("key name");
+    return new Map(roles.map(r => [r.key, r.name]));
 }
 
 /**
@@ -266,9 +377,12 @@ export async function listSurveys(params: {
     const context = params.viewerUser
         ? await resolveUserEligibilityContext(params.viewerUser)
         : null;
+    const canViewAll = params.viewerUser
+        ? await hasUnlimitedScope(params.viewerUser)
+        : false;
 
     const visible = candidates.filter(s =>
-        isSurveyVisibleTo(s, params.viewerUser, context),
+        isSurveyVisibleTo(s, params.viewerUser, context, canViewAll),
     );
 
     const total = visible.length;
@@ -289,9 +403,23 @@ export async function listSurveys(params: {
         respondedIds = new Set(responses.map(r => String(r.surveyId)));
     }
 
+    // Tinh dieu kien tra loi TRUOC khi populate (isSurveyEligible so sanh id
+    // dang chuoi, populate se bien eligible*Ids thanh object).
+    const eligibleIds = new Set(
+        pagedSurveys
+            .filter(s => isViewerEligible(s, params.viewerUser, context))
+            .map(s => String(s._id)),
+    );
+    const roleNames = await resolveRoleNames(pagedSurveys);
+    await Survey.populate(pagedSurveys, SURVEY_PARTY_POPULATE);
+
     const items = pagedSurveys.map(s => ({
         ...s.toObject(),
+        eligibleRoleNames: (s.eligibleRoles || []).map(
+            key => roleNames.get(key) || key,
+        ),
         hasResponded: respondedIds.has(String(s._id)),
+        isEligible: eligibleIds.has(String(s._id)),
     }));
 
     return {
@@ -300,6 +428,7 @@ export async function listSurveys(params: {
         page: params.page,
         limit: params.limit,
         totalPages: Math.max(1, Math.ceil(total / params.limit)),
+        canViewAll,
     };
 }
 
@@ -313,11 +442,54 @@ export async function getSurveyById(id: string, viewerUser: IUser | null) {
         viewerUser && !isSurveyOwnerOrCoEditor(viewerUser, survey)
             ? await resolveUserEligibilityContext(viewerUser)
             : null;
-    if (!isSurveyVisibleTo(survey, viewerUser, context)) {
+    const unlimitedScope = viewerUser
+        ? await hasUnlimitedScope(viewerUser)
+        : false;
+    if (!isSurveyVisibleTo(survey, viewerUser, context, unlimitedScope)) {
         throw new HttpError("Không tìm thấy khảo sát", 404);
     }
 
     return survey;
+}
+
+/**
+ * Chi tiet khao sat cho trang /surveys/:id (chi xem) o admin-web-app - them
+ * nguoi tao/dong chu bien/doi tuong (da populate), ten vai tro doi tuong, va
+ * trang thai cua CHINH viewer (co thuoc doi tuong tra loi, da tra loi chua,
+ * co phai nguoi tao/dong chu bien). Giu nguyen getSurveyById (dung cho form
+ * sua va Mini App) de khong doi dang du lieu cua cac noi do.
+ */
+export async function getSurveyOverview(id: string, viewerUser: IUser) {
+    const raw = await Survey.findById(id);
+    if (!raw) throw new HttpError("Không tìm thấy khảo sát", 404);
+    const context = await resolveUserEligibilityContext(viewerUser);
+    const unlimitedScope = await hasUnlimitedScope(viewerUser);
+    if (!isSurveyVisibleTo(raw, viewerUser, context, unlimitedScope)) {
+        throw new HttpError("Không tìm thấy khảo sát", 404);
+    }
+
+    const isEligible = isViewerEligible(raw, viewerUser, context);
+    const isCreatorOrCoEditor = isSurveyCreatorOrCoEditor(viewerUser, raw);
+    const canEdit = isSurveyOwnerOrCoEditor(viewerUser, raw);
+    const [hasResponded, roleNames, responseCount] = await Promise.all([
+        SurveyResponse.exists({ surveyId: id, userId: viewerUser._id }),
+        resolveRoleNames([raw]),
+        SurveyResponse.countDocuments({ surveyId: id }),
+    ]);
+    await Survey.populate(raw, SURVEY_PARTY_POPULATE);
+
+    return {
+        ...raw.toObject(),
+        eligibleRoleNames: (raw.eligibleRoles || []).map(
+            key => roleNames.get(key) || key,
+        ),
+        hasResponded: !!hasResponded,
+        isEligible,
+        isCreatorOrCoEditor,
+        canEdit,
+        canManageStatus: canEdit || unlimitedScope,
+        responseCount,
+    };
 }
 
 export async function respondToSurvey(

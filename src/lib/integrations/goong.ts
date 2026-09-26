@@ -28,6 +28,11 @@ export function getGoongServerApiKey(): string {
 export interface PlaceAutocompletePrediction {
     placeId: string;
     text: string;
+    // Tach rieng ten dia diem (in dam) va dia chi day du (mau xam) de UI hien
+    // thi giong Goong Maps/Google Maps that - fallback ve description neu
+    // Goong khong tra ve structured_formatting cho ket qua nao do.
+    mainText: string;
+    secondaryText: string;
 }
 
 /**
@@ -40,23 +45,48 @@ export interface PlaceAutocompletePrediction {
 export async function autocompletePlaces(
     input: string,
     sessionToken: string,
+    // Uu tien ket qua gan toa do nay (vd tam Phuong) - Goong chi dung de XEP
+    // HANG ket qua gan hon len truoc, KHONG loc cung theo ban kinh cu the nhu
+    // Google Places Nearby Search (Goong khong co API dang do, xem
+    // searchPlacesByCategory ben duoi).
+    location?: { lat: number; lng: number },
 ): Promise<PlaceAutocompletePrediction[]> {
     const apiKey = getGoongServerApiKey();
     const url = new URL("https://rsapi.goong.io/place/autocomplete");
     url.searchParams.set("input", input);
     url.searchParams.set("api_key", apiKey);
     url.searchParams.set("sessiontoken", sessionToken);
+    if (location) {
+        url.searchParams.set("location", `${location.lat},${location.lng}`);
+    }
     const res = await fetch(url);
     if (!res.ok) {
         throw new HttpError("Khong the tra cuu dia chi luc nay", 502);
     }
     const data = (await res.json()) as {
-        predictions?: Array<{ place_id: string; description?: string }>;
+        predictions?: Array<{
+            place_id: string;
+            description?: string;
+            structured_formatting?: {
+                main_text?: string;
+                secondary_text?: string;
+            };
+        }>;
     };
-    return (data.predictions || []).map(p => ({
-        placeId: p.place_id,
-        text: p.description || "",
-    }));
+    return (data.predictions || []).map(p => {
+        const description = p.description || "";
+        const commaIndex = description.indexOf(",");
+        return {
+            placeId: p.place_id,
+            text: description,
+            mainText:
+                p.structured_formatting?.main_text ||
+                (commaIndex >= 0 ? description.slice(0, commaIndex) : description),
+            secondaryText:
+                p.structured_formatting?.secondary_text ||
+                (commaIndex >= 0 ? description.slice(commaIndex + 1).trim() : ""),
+        };
+    });
 }
 
 export interface PlaceDetailsResult {
@@ -93,6 +123,74 @@ export async function getPlaceDetails(
         lng: data.result.geometry.location.lng,
         formattedAddress: data.result.formatted_address || "",
     };
+}
+
+export interface CategoryPlaceResult {
+    placeId: string;
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+}
+
+export interface LatLngBoundsInput {
+    minLat: number;
+    minLng: number;
+    maxLat: number;
+    maxLng: number;
+}
+
+/**
+ * XAP XI mot "tim theo danh muc" (vd "Chung cư", "Trạm y tế" quanh mot khu
+ * vuc) - Goong KHONG co API rieng cho viec nay (khac Google Places Nearby
+ * Search co tham so "type"), nen chi con cach goi Autocomplete voi tu khoa dai
+ * dien cho danh muc (vd "Trạm y tế Phường Dương Nội") uu tien theo `location`,
+ * roi goi Place Detail cho TUNG ket qua de lay toa do. Chat luong phu thuoc
+ * hoan toan vao Autocomplete cua Goong co "hieu" tu khoa hay khong - co the
+ * thieu/sai so voi tim dung theo danh muc that, va so luong ket qua bi gioi
+ * han theo so goi y Autocomplete tra ve (thuong ${"<="} 5).
+ *
+ * `location` cua Goong CHI dung de UU TIEN xep hang ket qua gan hon, KHONG
+ * phai bo loc ban kinh cung - neu tu khoa khop yeu trong khu vuc, Goong van co
+ * the tra ve ket qua o rat xa (vd "cây xăng" khop mot cay xang khac tinh).
+ * Truyen them `bounds` (bbox Phuong, dung chung voi maxBounds cua ban do) de
+ * loai bo cung cac ket qua nam ngoai khu vuc quan ly truoc khi tra ve.
+ */
+export async function searchPlacesByCategory(
+    keyword: string,
+    location: { lat: number; lng: number },
+    bounds?: LatLngBoundsInput,
+): Promise<CategoryPlaceResult[]> {
+    const sessionToken = `category-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const predictions = await autocompletePlaces(keyword, sessionToken, location);
+
+    const details = await Promise.all(
+        predictions.map(async prediction => {
+            try {
+                const detail = await getPlaceDetails(prediction.placeId, sessionToken);
+                if (
+                    bounds &&
+                    (detail.lat < bounds.minLat ||
+                        detail.lat > bounds.maxLat ||
+                        detail.lng < bounds.minLng ||
+                        detail.lng > bounds.maxLng)
+                ) {
+                    return null;
+                }
+                return {
+                    placeId: prediction.placeId,
+                    name: prediction.mainText,
+                    address: detail.formattedAddress || prediction.secondaryText,
+                    lat: detail.lat,
+                    lng: detail.lng,
+                };
+            } catch {
+                return null;
+            }
+        }),
+    );
+
+    return details.filter((item): item is CategoryPlaceResult => item !== null);
 }
 
 /**

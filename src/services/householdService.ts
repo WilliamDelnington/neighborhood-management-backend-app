@@ -250,22 +250,20 @@ export async function createHousehold(
     return household;
 }
 
-export async function listHouseholds(params: {
-    page: number;
-    limit: number;
-    search?: string;
+/**
+ * Xay dung dieu kien pham vi (scope) cho truy van Household - tach rieng tu
+ * listHouseholds de dung chung boi getHouseholdGisOverview (ban do trang thai
+ * ho dan o Dashboard), tranh copy lai logic phan quyen nhay cam (rui ro lech
+ * pham vi giua 2 noi neu sua mot cho ma quen cho kia).
+ */
+async function buildHouseholdScopeFilter(params: {
     cluster?: string;
     streetId?: string;
     houseId?: string;
     neighborhoodId?: string;
     unassigned?: boolean;
-    status?: VerificationStatus;
-    // Da duoc whitelist o route (xem HOUSEHOLD_STATE_KEYS trong
-    // app/api/households/route.ts) truoc khi truyen xuong day - chi la ten
-    // truong boolean tren Household, dung lam key ${key}: true trong $or.
-    states?: HouseholdStateKey[];
     actorUser: IUser;
-}) {
+}): Promise<Record<string, unknown>> {
     const isAdminUser = params.actorUser.roles.includes("admin");
     const isHouseOwnerUser = params.actorUser.roles.includes("house_owner");
     const filter: Record<string, unknown> = {};
@@ -341,6 +339,27 @@ export async function listHouseholds(params: {
         }
     }
 
+    return filter;
+}
+
+export async function listHouseholds(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    cluster?: string;
+    streetId?: string;
+    houseId?: string;
+    neighborhoodId?: string;
+    unassigned?: boolean;
+    status?: VerificationStatus;
+    // Da duoc whitelist o route (xem HOUSEHOLD_STATE_KEYS trong
+    // app/api/households/route.ts) truoc khi truyen xuong day - chi la ten
+    // truong boolean tren Household, dung lam key ${key}: true trong $or.
+    states?: HouseholdStateKey[];
+    actorUser: IUser;
+}) {
+    const filter = await buildHouseholdScopeFilter(params);
+
     if (params.search) {
         filter.$or = [
             { code: { $regex: params.search, $options: "i" } },
@@ -381,6 +400,85 @@ export async function listHouseholds(params: {
         page: params.page,
         limit: params.limit,
         totalPages: Math.max(1, Math.ceil(total / params.limit)),
+    };
+}
+
+export interface HouseholdGisOverviewPoint {
+    householdId: string;
+    houseId: string;
+    code: string;
+    address: string;
+    headOfHousehold: string;
+    phone?: string;
+    latitude: number;
+    longitude: number;
+    needsSupport: boolean;
+    isNearPoor: boolean;
+    isMartyrFamilyHousehold: boolean;
+    isLonelyElderly: boolean;
+}
+
+/**
+ * Ban do trang thai Ho dan o Dashboard (khac GisOverviewMap.tsx - ve toa do
+ * Nha so, khong phan biet trang thai Ho dan). Dung chung dieu kien pham vi
+ * voi listHouseholds (buildHouseholdScopeFilter) - CHI khac o cho khong phan
+ * trang, lay toan bo ho dan trong pham vi de loc theo trang thai tren client.
+ * Toa do lay tu House (Household khong co truong GIS rieng) qua houseId - ho
+ * dan "mo coi" (khong co houseId) hoac nha chua co toa do se tu dong bi loai.
+ */
+export async function getHouseholdGisOverview(
+    actorUser: IUser,
+): Promise<{
+    totalHouseholds: number;
+    householdsWithCoordinates: number;
+    points: HouseholdGisOverviewPoint[];
+}> {
+    const filter = await buildHouseholdScopeFilter({ actorUser });
+
+    const [totalHouseholds, households] = await Promise.all([
+        Household.countDocuments(filter),
+        Household.find(filter)
+            .select(
+                "code address headOfHousehold phone needsSupport isNearPoor isMartyrFamilyHousehold isLonelyElderly houseId",
+            )
+            .populate("houseId", "gisLatitude gisLongitude"),
+    ]);
+
+    const points: HouseholdGisOverviewPoint[] = households
+        .map(household => {
+            const house = household.houseId as unknown as {
+                _id: unknown;
+                gisLatitude?: number;
+                gisLongitude?: number;
+            } | null;
+            if (
+                !house ||
+                typeof house.gisLatitude !== "number" ||
+                typeof house.gisLongitude !== "number"
+            ) {
+                return null;
+            }
+            return {
+                householdId: String(household._id),
+                houseId: String(house._id),
+                code: household.code,
+                address: household.address,
+                headOfHousehold: household.headOfHousehold,
+                ...(household.phone ? { phone: household.phone } : {}),
+                latitude: house.gisLatitude,
+                longitude: house.gisLongitude,
+                needsSupport: household.needsSupport,
+                isNearPoor: household.isNearPoor,
+                isMartyrFamilyHousehold: household.isMartyrFamilyHousehold,
+                isLonelyElderly: household.isLonelyElderly,
+            };
+        })
+        .filter((point): point is HouseholdGisOverviewPoint => point !== null);
+
+    return {
+        totalHouseholds,
+        householdsWithCoordinates: points.length,
+        points,
     };
 }
 

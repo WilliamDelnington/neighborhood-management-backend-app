@@ -34,6 +34,32 @@ import path from "path";
 import mongoose from "mongoose";
 import { EJSON } from "bson";
 
+// So ban sao luu cu giu lai (khong tinh ban vua tao). Cau hinh qua
+// BACKUP_RETENTION_COUNT, mac dinh 14 (~2 tuan neu chay cron hang ngay).
+const RETENTION_COUNT = parseInt(process.env.BACKUP_RETENTION_COUNT || "14", 10);
+
+/**
+ * Xoa cac thu muc sao luu cu nhat, chi giu lai RETENTION_COUNT ban gan day
+ * nhat (tinh ca ban vua tao). Chi duoc goi SAU KHI ban sao luu hien tai da
+ * ghi xong toan bo - neu qua trinh sao luu loi/crash giua chung, ham nay
+ * khong duoc goi nen khong co ban cu nao bi xoa.
+ */
+function pruneOldBackups(backupsRoot: string): void {
+    if (!Number.isFinite(RETENTION_COUNT) || RETENTION_COUNT <= 0) return;
+
+    const dirs = fs
+        .readdirSync(backupsRoot, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name)
+        .sort(); // ten thu muc la timestamp ISO nen sap xep chu = sap xep thoi gian
+
+    const toDelete = dirs.slice(0, Math.max(0, dirs.length - RETENTION_COUNT));
+    for (const name of toDelete) {
+        fs.rmSync(path.join(backupsRoot, name), { recursive: true, force: true });
+        console.log(`  Da xoa ban sao luu cu: ${name}`);
+    }
+}
+
 async function main() {
     const uri = process.env.MONGODB_URI;
     if (!uri) {
@@ -45,8 +71,9 @@ async function main() {
     const db = mongoose.connection.db;
     if (!db) throw new Error("Khong lay duoc ket noi database");
 
+    const backupsRoot = path.join(__dirname, "..", "backups");
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const outDir = path.join(__dirname, "..", "backups", timestamp);
+    const outDir = path.join(backupsRoot, timestamp);
     fs.mkdirSync(outDir, { recursive: true });
 
     const collections = await db.listCollections().toArray();
@@ -75,6 +102,8 @@ async function main() {
     console.log(
         `Phục hồi bằng: npm run restore -- ${timestamp}`,
     );
+
+    pruneOldBackups(backupsRoot);
 
     await mongoose.connection.close();
     process.exit(0);

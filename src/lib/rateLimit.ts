@@ -48,6 +48,15 @@ export const passwordResetRequestRateLimiter = createRateLimiter(
     60 * 60 * 1000,
 );
 
+// Gioi han so lan kiem tra trang thai/lay mat khau moi (cong khai, khong dang
+// nhap) theo tung so dien thoai - man "Quen mat khau" co the goi lai nhieu
+// lan de cho ket qua (chua co push/SMS bao khi xong) nen can nguong rong hon
+// passwordResetRequestRateLimiter, nhung van chan do brute-force so dien thoai.
+export const passwordResetCheckRateLimiter = createRateLimiter(
+    20,
+    15 * 60 * 1000,
+);
+
 // Gioi han so cau hoi gui cho chatbot AI (Gemini) theo tung user - moi request
 // deu ton phi goi Gemini API, khong gioi han se de bi lam dung/dội chi phi (xem
 // services/aiChatService.ts).

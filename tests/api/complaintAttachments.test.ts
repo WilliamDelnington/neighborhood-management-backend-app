@@ -294,4 +294,50 @@ describe("Dinh kem tai lieu cho phan anh (draft-scoped upload)", () => {
         expect(await FileAsset.findById(orphanFileId)).toBeNull();
         expect(await FileAsset.findById(realFileId)).not.toBeNull();
     });
+
+    it("chap nhan video ngan (.mp4) dinh kem cho phan anh, voi han dung luong rieng lon hon anh/tai lieu", async () => {
+        const owner = await createTestUser({ roles: ["house_owner"] });
+        const headers = await authHeaders(owner);
+        const draftId = await mintDraftId(headers);
+
+        const tokenRes = await createUploadTokenRoute(
+            makeRequest("/api/uploads/token", {
+                method: "POST",
+                headers,
+                body: { relatedModel: "Complaint", relatedId: draftId },
+            }),
+        );
+        const { token } = (await readJson(tokenRes)).data;
+
+        const okFormData = new FormData();
+        okFormData.append(
+            "file",
+            new File(["fake-mp4-bytes"], "clip.mp4", { type: "video/mp4" }),
+        );
+        const okRes = await uploadAttachmentRoute(
+            new Request(`http://localhost/api/uploads/attachments?token=${token}`, {
+                method: "POST",
+                body: okFormData,
+            }),
+        );
+        const okJson = await okRes.json();
+        expect(okJson.error).toBe(0);
+        uploadedFileUrls.push(new URL(okJson.data.urls[0]).pathname);
+
+        const oversizedBytes = new Uint8Array(51 * 1024 * 1024);
+        const oversizedFormData = new FormData();
+        oversizedFormData.append(
+            "file",
+            new File([oversizedBytes], "too-big.mp4", { type: "video/mp4" }),
+        );
+        const oversizedRes = await uploadAttachmentRoute(
+            new Request(`http://localhost/api/uploads/attachments?token=${token}`, {
+                method: "POST",
+                body: oversizedFormData,
+            }),
+        );
+        const oversizedJson = await oversizedRes.json();
+        expect(oversizedJson.error).not.toBe(0);
+        expect(oversizedJson.message).toMatch(/dung luong/i);
+    });
 });

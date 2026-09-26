@@ -782,25 +782,6 @@ export async function listRequestAttachments(requestId: string) {
         .populate("uploadedBy", "displayName");
 }
 
-/**
- * Cho phep nguoi quan ly (nguoi tao/admin/requests.update) HOAC bat ky nguoi
- * nhan nao cua yeu cau tai len file (vd. anh chung minh da khac phuc).
- */
-async function assertCanAttachToRequest(
-    actorUser: IUser,
-    request: IRequest,
-): Promise<void> {
-    if (actorUser.roles.includes("admin")) return;
-    if (String(request.createdBy) === String(actorUser._id)) return;
-    if (await userHasPermission(actorUser, "requests.update")) return;
-    const isRecipient = await RequestRecipient.exists({
-        requestId: request._id,
-        userId: actorUser._id,
-    });
-    if (isRecipient) return;
-    throw new HttpError("Bạn không có quyền tải file cho yêu cầu này", 403);
-}
-
 export async function uploadRequestAttachment(
     actorUser: IUser,
     requestId: string,
@@ -808,7 +789,14 @@ export async function uploadRequestAttachment(
 ) {
     const request = await RequestModel.findById(requestId);
     if (!request) throw new HttpError("Không tìm thấy yêu cầu", 404);
-    await assertCanAttachToRequest(actorUser, request);
+    // Chi nguoi quan ly (nguoi tao/admin/requests.update) duoc tai file len -
+    // nguoi NHAN yeu cau (recipient, khac creator) KHONG con duoc tai len nua
+    // (truoc day co mot nhanh rieng cho phep, da bo theo yeu cau: nguoi nhan
+    // chi la doi tuong xu ly/bao cao ket qua qua bieu mau dong (xem
+    // dataEntryMode o updateRequestFormData), khong phai nguoi quan ly ho so
+    // dinh kem cua yeu cau) - cung dieu kien voi assertCanManageRequest (xoa
+    // file dinh kem tu truoc da chi gioi han nhu vay, gio dong bo ca upload).
+    await assertCanManageRequest(actorUser, request);
 
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
         throw new HttpError(
@@ -961,6 +949,19 @@ export async function listMyRequests(
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+}
+
+/**
+ * So yeu cau cong viec dang duoc GIAO cho actor MA CHUA hoan thanh (status !=
+ * "resolved") - dung cho badge so luong canh muc "Yêu cầu công việc" tren menu
+ * (xem requestBadgeStore.ts o frontend), cung quy uoc voi
+ * getUnreadCountByRelatedModel (Van ban).
+ */
+export async function countMyPendingRequests(userId: string): Promise<number> {
+    return RequestRecipient.countDocuments({
+        userId,
+        status: { $ne: "resolved" },
+    });
 }
 
 export type DashboardRequestItem = {

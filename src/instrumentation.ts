@@ -9,9 +9,15 @@ export async function register() {
         validateZaloWebhookConfig();
         validatePublicOriginConfig();
 
-        const { startPcccDeadlineScheduler, startAppointmentScheduler } =
-            await import("@/lib/scheduler");
+        const {
+            startPcccDeadlineScheduler,
+            startAppointmentScheduler,
+            startComplaintOverdueScheduler,
+            startImportJobCleanupScheduler,
+        } = await import("@/lib/scheduler");
         startPcccDeadlineScheduler();
         startAppointmentScheduler();
+        startComplaintOverdueScheduler();
+        startImportJobCleanupScheduler();
     }
 }

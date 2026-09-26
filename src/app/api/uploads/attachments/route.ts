@@ -35,6 +35,13 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = [
     ".doc",
     ".docx",
 ];
+// Rieng cho dinh kem cua Complaint (phan anh) - cho phep them video ngan
+// (uoc luong toi da ~15 giay). KHONG kiem tra thoi luong thuc te (chua co
+// dependency doc metadata video nhu ffprobe trong du an) - dung dung luong
+// lam nguong xap xi thay the, da thong nhat voi nguoi dung. 50MB du cho video
+// dien thoai ~1080p dai 15 giay.
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".m4v"];
+const MAX_COMPLAINT_VIDEO_SIZE_BYTES = 50 * 1024 * 1024;
 
 /**
  * Server nay duoc goi TRUC TIEP boi client Zalo (tham so serverUploadUrl cua
@@ -201,13 +208,26 @@ export async function POST(req: Request) {
         if (!file || !(file instanceof File)) {
             return zaloError("Vui long chon file de tai len");
         }
-        if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-            return zaloError("File vuot qua dung luong cho phep (toi da 10MB)");
-        }
         const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-        if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(ext)) {
+        const isComplaintVideo =
+            payload.relatedModel === "Complaint" &&
+            VIDEO_EXTENSIONS.includes(ext);
+        const allowedExtensions =
+            payload.relatedModel === "Complaint"
+                ? [...ALLOWED_ATTACHMENT_EXTENSIONS, ...VIDEO_EXTENSIONS]
+                : ALLOWED_ATTACHMENT_EXTENSIONS;
+        const maxSizeBytes = isComplaintVideo
+            ? MAX_COMPLAINT_VIDEO_SIZE_BYTES
+            : MAX_ATTACHMENT_SIZE_BYTES;
+
+        if (file.size > maxSizeBytes) {
             return zaloError(
-                `Dinh dang file khong duoc ho tro (chi chap nhan ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")})`,
+                `File vuot qua dung luong cho phep (toi da ${Math.round(maxSizeBytes / (1024 * 1024))}MB)`,
+            );
+        }
+        if (!allowedExtensions.includes(ext)) {
+            return zaloError(
+                `Dinh dang file khong duoc ho tro (chi chap nhan ${allowedExtensions.join(", ")})`,
             );
         }
 

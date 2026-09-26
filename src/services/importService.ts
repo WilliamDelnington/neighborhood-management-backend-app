@@ -9,14 +9,21 @@ import {
     Company,
     CompanyType,
     ImportJob,
+    Neighborhood,
+    Poi,
+    Role,
+    ScopeAssignment,
+    User,
     type IImportJob,
     type IUser,
+    type PoiCategory,
 } from "@/models";
 import { HttpError } from "@/lib/response";
 import { generateSequentialCode } from "@/lib/utils";
 import { generateStreetCode, isSummaryRowLabel } from "@/lib/streetSync";
 import { isValidVnPhone } from "@/lib/phone";
 import { hashForLookup, normalizeCccd } from "@/lib/encryption";
+import { POI_CATEGORY_META } from "@/lib/poiCategories";
 import { addTableSheet, type TableColumn } from "@/lib/excelResponse";
 import { writeAuditLog } from "@/services/auditService";
 import { recomputeHouseholdFlags } from "@/services/citizenService";
@@ -27,6 +34,12 @@ import {
 } from "@/services/houseRecordService";
 import { createBusiness } from "@/services/businessService";
 import { createCompany } from "@/services/companyService";
+import {
+    assignNeighborhoodLeader,
+    assignNeighborhoodColeader,
+    assignNeighborhoodCollaborator,
+} from "@/services/neighborhoodService";
+import { assignScope } from "@/services/scopeAssignmentService";
 import {
     GIOI_TINH,
     LOAI_CU_TRU,
@@ -1414,6 +1427,302 @@ async function processHouseholdImportRows(
         targetModel: "ImportJob",
         targetId: jobId,
         metadata: { type: "household", count: committedCount, createdCount, skippedCount },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Import diem tien ich (POI)
+//
+// Giong Import ho dan - CHUA co buoc "chon cot", ten cot trong file phai khop
+// CHINH XAC voi POI_COLUMNS (khong phan biet hoa/thuong/dau). Danh muc
+// "Hộ dân" KHONG duoc ho tro qua luong nay - loai POI nay bat buoc gan voi 1
+// Household cu the (householdId), chi tao duoc qua cong cu "Gắn hộ dân lên
+// bản đồ" o /map-boundary (xem POI_CATEGORY_META, poiService.createPoi).
+// ---------------------------------------------------------------------------
+
+const POI_COLUMNS = {
+    name: "Tên",
+    category: "Danh mục",
+    lat: "Vĩ độ",
+    lng: "Kinh độ",
+    address: "Địa chỉ",
+    verified: "Đã duyệt",
+} as const;
+
+// Nhan (khong dau, thuong) -> key danh muc - bo qua "household" (xem ghi chu
+// tren). Dung normalizeEnumInput de doi chieu khong phan biet hoa/thuong/dau,
+// giong cach doi chieu "Loại sở hữu"/"Loại hình kinh doanh" o cac import khac.
+const POI_CATEGORY_LABEL_TO_KEY = new Map(
+    Object.entries(POI_CATEGORY_META)
+        .filter(([category]) => category !== "household")
+        .map(([category, meta]) => [
+            normalizeEnumInput(meta.label),
+            category as PoiCategory,
+        ]),
+);
+
+// Bien vi tri Viet Nam gan dung - chan cac gia tri lat/lng ro rang sai (vd
+// nham lan hai cot, go nham don vi) truoc khi tao ban ghi that.
+const VN_LAT_RANGE: [number, number] = [8, 24];
+const VN_LNG_RANGE: [number, number] = [100, 110];
+
+/** Rong = coi la da duyet (giong mac dinh verified=true khi nhap tay qua form
+ * - xem createPoiSchema o backend) - chi tra ve false khi gia tri ro rang the
+ * hien "chưa duyệt"/"không", giong tinh than cua parseStreetActiveCell. */
+function parsePoiVerifiedCell(raw: unknown): boolean {
+    const str = cellToString(raw).trim();
+    if (!str) return true;
+    return parseBoolean(str);
+}
+
+export function buildPoiImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Điểm tiện ích");
+    worksheet.columns = [
+        { header: POI_COLUMNS.name, key: "name", width: 32 },
+        { header: POI_COLUMNS.category, key: "category", width: 18 },
+        { header: POI_COLUMNS.lat, key: "lat", width: 14 },
+        { header: POI_COLUMNS.lng, key: "lng", width: 14 },
+        { header: POI_COLUMNS.address, key: "address", width: 32 },
+        { header: POI_COLUMNS.verified, key: "verified", width: 12 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({
+        name: "Trường Tiểu học Kim Đồng",
+        category: "Trường học",
+        lat: 20.9748024,
+        lng: 105.7459295,
+        address: "Dương Nội, Hà Đông",
+        verified: "Có",
+    });
+    worksheet.addRow({
+        name: "UBND Phường Dương Nội",
+        category: "UBND",
+        lat: 20.98,
+        lng: 105.745,
+        address: "",
+        verified: "",
+    });
+    return workbook;
+}
+
+export async function previewPoiImport(
+    actorId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    sheetName?: string,
+): Promise<IImportJob> {
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
+    const errors: { row: number; message: string }[] = [];
+    const skipped: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    // Doi chieu voi Poi da co trong DB de tranh tao trung (cung danh muc + toa
+    // do gan giong nhau) - cung nguong 0.0003 do voi poiService.scanPois.
+    const existing = await Poi.find({}).select("category lat lng");
+    const isNearExisting = (
+        category: PoiCategory,
+        lat: number,
+        lng: number,
+    ) =>
+        existing.some(
+            p =>
+                p.category === category &&
+                Math.abs(p.lat - lat) < 0.0003 &&
+                Math.abs(p.lng - lng) < 0.0003,
+        );
+    const seenInFile = new Set<string>();
+
+    for (const row of rows) {
+        const v = row.values;
+        const name = cellToString(v[POI_COLUMNS.name]).trim();
+        const categoryRaw = cellToString(v[POI_COLUMNS.category]).trim();
+        const latRaw = cellToString(v[POI_COLUMNS.lat]).trim();
+        const lngRaw = cellToString(v[POI_COLUMNS.lng]).trim();
+        const address = cellToString(v[POI_COLUMNS.address]).trim();
+
+        const rowErrors: string[] = [];
+        if (!name) rowErrors.push("Thiếu 'Tên'");
+
+        let category: PoiCategory | undefined;
+        if (!categoryRaw) {
+            rowErrors.push("Thiếu 'Danh mục'");
+        } else {
+            category = POI_CATEGORY_LABEL_TO_KEY.get(
+                normalizeEnumInput(categoryRaw),
+            );
+            if (!category) {
+                rowErrors.push(
+                    `Giá trị 'Danh mục' không hợp lệ: "${categoryRaw}" (không hỗ trợ nhập "Hộ dân" qua Excel - dùng công cụ "Gắn hộ dân lên bản đồ")`,
+                );
+            }
+        }
+
+        // Chap nhan ca dau phay lam dau thap phan (dinh dang so kieu Viet Nam
+        // trong Excel) truoc khi parse.
+        const lat = Number(latRaw.replace(",", "."));
+        const lng = Number(lngRaw.replace(",", "."));
+        if (!latRaw || Number.isNaN(lat)) {
+            rowErrors.push("Thiếu hoặc sai định dạng 'Vĩ độ'");
+        } else if (lat < VN_LAT_RANGE[0] || lat > VN_LAT_RANGE[1]) {
+            rowErrors.push(`'Vĩ độ' có vẻ ngoài phạm vi Việt Nam: ${latRaw}`);
+        }
+        if (!lngRaw || Number.isNaN(lng)) {
+            rowErrors.push("Thiếu hoặc sai định dạng 'Kinh độ'");
+        } else if (lng < VN_LNG_RANGE[0] || lng > VN_LNG_RANGE[1]) {
+            rowErrors.push(`'Kinh độ' có vẻ ngoài phạm vi Việt Nam: ${lngRaw}`);
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        const dedupeKey = `${category}|${lat.toFixed(5)}|${lng.toFixed(5)}`;
+        if (
+            isNearExisting(category as PoiCategory, lat, lng) ||
+            seenInFile.has(dedupeKey)
+        ) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Điểm tiện ích tại tọa độ này (${lat}, ${lng}) đã tồn tại`,
+            });
+            continue;
+        }
+        seenInFile.add(dedupeKey);
+
+        previewData.push({
+            rowNumber: row.rowNumber,
+            name,
+            category,
+            lat,
+            lng,
+            address: address || undefined,
+            verified: parsePoiVerifiedCell(v[POI_COLUMNS.verified]),
+        });
+    }
+
+    const job = await ImportJob.create({
+        type: "poi",
+        status: errors.length === 0 ? "validated" : "previewing",
+        fileName,
+        totalRows: rows.length,
+        validRows: previewData.length,
+        headers,
+        rawRows: rows,
+        availableSheetNames,
+        sourceSheetName,
+        rowErrors: errors,
+        skippedRows: skipped,
+        previewData,
+        committedCount: 0,
+        createdBy: actorId,
+    });
+
+    return job;
+}
+
+export async function commitPoiImport(
+    actorId: string,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "poi") {
+        throw new HttpError(
+            "Import job này không phải loại điểm tiện ích",
+            400,
+        );
+    }
+    if (job.status === "committed" || job.status === "committing") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
+    }
+
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processPoiImportRows(String(job._id), actorId).catch(async err => {
+        await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+        // eslint-disable-next-line no-console
+        console.error(`[import] POI job ${job._id} thất bại:`, err);
+    });
+
+    return job;
+}
+
+async function processPoiImportRows(
+    jobId: string,
+    actorId: string,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job) return;
+
+    let committedCount = 0;
+    let createdCount = 0;
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
+
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await Poi.create({
+                name: row.name as string,
+                category: row.category as PoiCategory,
+                lat: row.lat as number,
+                lng: row.lng as number,
+                address: row.address as string | undefined,
+                verified: row.verified as boolean,
+                source: "manual",
+                createdBy: actorId,
+                updatedBy: actorId,
+            });
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
+        committedCount += 1;
+
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne(
+                { _id: jobId },
+                {
+                    committedCount,
+                    createdCount,
+                    skippedCount,
+                    rowErrors: commitErrors,
+                },
+            );
+        }
+    }
+
+    await ImportJob.updateOne(
+        { _id: jobId },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
+    );
+
+    await writeAuditLog({
+        actorId,
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: jobId,
+        metadata: { type: "poi", count: committedCount, createdCount },
     });
 }
 
@@ -3459,6 +3768,417 @@ async function processCompanyImportRows(
         targetModel: "ImportJob",
         targetId: jobId,
         metadata: { type: "company", count: committedCount, createdCount, skippedCount },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Import thanh vien To dan pho (gan vai tro NEIGHBORHOOD-scope cho tai khoan
+// da co san - Tổ trưởng/Tổ phó/Cộng tác viên hoac vai tro NEIGHBORHOOD khac -
+// xem NeighborhoodMembersPanel.tsx o frontend). Import KHONG tao tai khoan
+// moi (giong Company doi voi Nha so) - so dien thoai phai khop mot User dang
+// active co san, va nguoi do phai DA co vai tro tuong ung (dung roles cua
+// User lam nguon "that", import chi la gan pham vi, khong gan vai tro).
+// ---------------------------------------------------------------------------
+
+const NEIGHBORHOOD_MEMBER_COLUMNS = {
+    phone: "Số điện thoại",
+    roleName: "Vai trò",
+    note: "Ghi chú",
+} as const;
+
+export function buildNeighborhoodMemberImportTemplateWorkbook(): ExcelJS.Workbook {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Thành viên Tổ");
+    worksheet.columns = [
+        { header: NEIGHBORHOOD_MEMBER_COLUMNS.phone, key: "phone", width: 18 },
+        { header: NEIGHBORHOOD_MEMBER_COLUMNS.roleName, key: "roleName", width: 26 },
+        { header: NEIGHBORHOOD_MEMBER_COLUMNS.note, key: "note", width: 30 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.addRow({ phone: "0912345678", roleName: "Tổ phó", note: "" });
+    worksheet.addRow({
+        phone: "0987654321",
+        roleName: "Cộng tác viên Tổ dân phố",
+        note: "Phụ trách chung",
+    });
+    return workbook;
+}
+
+export type NeighborhoodMemberColumnMapping = {
+    phone: string;
+    roleName: string;
+    note?: string;
+};
+
+/**
+ * Buoc 1 (upload): giong uploadCompanyImportFile, nhung gan them relatedModel/
+ * relatedId ngay tu dau - job nay danh RIENG cho MOT To dan pho cu the (chon
+ * truoc luc upload tren UI cua chinh To do), KHONG phai mot cot trong file.
+ */
+export async function uploadNeighborhoodMemberImportFile(
+    actorId: string,
+    neighborhoodId: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    sheetName?: string,
+): Promise<IImportJob> {
+    const neighborhoodExists = await Neighborhood.exists({ _id: neighborhoodId });
+    if (!neighborhoodExists) throw new HttpError("Không tìm thấy tổ dân phố", 404);
+
+    const { headers, rows, availableSheetNames, sourceSheetName } =
+        await readWorksheetRows(fileBuffer, sheetName);
+
+    const rawRows = rows.map(row => {
+        const values: Record<string, string> = {};
+        for (const header of headers) {
+            if (header in row.values) {
+                values[header] = cellToString(row.values[header]).trim();
+            }
+        }
+        return { rowNumber: row.rowNumber, values };
+    });
+
+    const suggestedMapping: Record<string, string> = {};
+    for (const [field, expectedLabel] of Object.entries(
+        NEIGHBORHOOD_MEMBER_COLUMNS,
+    )) {
+        const match = headers.find(
+            h => normalizeEnumInput(h) === normalizeEnumInput(expectedLabel),
+        );
+        if (match) suggestedMapping[field] = match;
+    }
+
+    const job = await ImportJob.create({
+        type: "neighborhood_member",
+        status: "awaiting_mapping",
+        fileName,
+        totalRows: rows.length,
+        validRows: 0,
+        headers,
+        rawRows,
+        availableSheetNames,
+        sourceSheetName,
+        suggestedMapping,
+        columnMapping: {},
+        rowErrors: [],
+        previewData: [],
+        committedCount: 0,
+        createdBy: actorId,
+        relatedModel: "Neighborhood",
+        relatedId: neighborhoodId,
+    });
+
+    return job;
+}
+
+/**
+ * Buoc 2 (chon cot): "Số điện thoại"/"Vai trò" bat buoc, phai khop mot User
+ * dang active (theo so dien thoai) da CO SAN vai tro do (import khong tu gan
+ * vai tro moi cho User.roles, chi gan PHAM VI - xem ghi chu dau file). Trung
+ * (cung so dien thoai + vai tro, ca trong file lan da active tren he thong)
+ * bi bo qua (skippedRows) chu khong bi coi la loi, giong quy uoc Company.
+ */
+export async function applyNeighborhoodMemberImportMapping(
+    importJobId: string,
+    mapping: NeighborhoodMemberColumnMapping,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "neighborhood_member") {
+        throw new HttpError(
+            "Import job này không phải loại thành viên tổ dân phố",
+            400,
+        );
+    }
+    if (job.status === "committed") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (!job.relatedId) {
+        throw new HttpError("Import job này thiếu thông tin tổ dân phố", 400);
+    }
+
+    const headers = job.headers;
+    if (!mapping.phone || !headers.includes(mapping.phone)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Số điện thoại'",
+            422,
+        );
+    }
+    if (!mapping.roleName || !headers.includes(mapping.roleName)) {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu tương ứng với 'Vai trò'",
+            422,
+        );
+    }
+    if (mapping.note && !headers.includes(mapping.note)) {
+        throw new HttpError("Cột đã chọn cho 'Ghi chú' không hợp lệ", 422);
+    }
+    const mappedColumns = [mapping.phone, mapping.roleName, mapping.note].filter(
+        Boolean,
+    ) as string[];
+    if (new Set(mappedColumns).size !== mappedColumns.length) {
+        throw new HttpError(
+            "Không thể chọn cùng một cột cho nhiều trường dữ liệu khác nhau",
+            422,
+        );
+    }
+
+    const rows = job.rawRows;
+    const neighborhoodId = String(job.relatedId);
+
+    const phonesInFile = new Set<string>();
+    for (const row of rows) {
+        const phone = (row.values[mapping.phone] || "").trim();
+        if (phone) phonesInFile.add(phone);
+    }
+    const users = await User.find({
+        phone: { $in: Array.from(phonesInFile) },
+    }).select("phone displayName status roles");
+    const userByPhone = new Map(users.map(u => [u.phone as string, u]));
+
+    const roles = await Role.find({
+        scopeType: "NEIGHBORHOOD",
+        active: true,
+    }).select("key name");
+    const roleByName = new Map(
+        roles.map(r => [normalizeEnumInput(r.name), r]),
+    );
+    const roleByKey = new Map(roles.map(r => [r.key, r]));
+
+    const existingAssignments = await ScopeAssignment.find({
+        scopeType: "NEIGHBORHOOD",
+        scopeId: neighborhoodId,
+        unassignedAt: { $exists: false },
+    }).select("userId roleKey");
+    const existingKeySet = new Set(
+        existingAssignments.map(a => `${a.roleKey}:${String(a.userId)}`),
+    );
+
+    const seen = new Set<string>();
+    const errors: { row: number; message: string }[] = [];
+    const skipped: { row: number; message: string }[] = [];
+    const previewData: Record<string, unknown>[] = [];
+
+    for (const row of rows) {
+        const phone = (row.values[mapping.phone] || "").trim();
+        const roleNameRaw = (row.values[mapping.roleName] || "").trim();
+        const note = mapping.note ? (row.values[mapping.note] || "").trim() : "";
+
+        const rowErrors: string[] = [];
+        const user = phone ? userByPhone.get(phone) : undefined;
+        if (!phone) {
+            rowErrors.push("Thiếu 'Số điện thoại'");
+        } else if (!user) {
+            rowErrors.push(`Không tìm thấy tài khoản có số điện thoại "${phone}"`);
+        } else if (user.status !== "active") {
+            rowErrors.push(`Tài khoản "${phone}" không ở trạng thái hoạt động`);
+        }
+
+        const role = roleNameRaw
+            ? roleByName.get(normalizeEnumInput(roleNameRaw)) ||
+              roleByKey.get(roleNameRaw)
+            : undefined;
+        if (!roleNameRaw) {
+            rowErrors.push("Thiếu 'Vai trò'");
+        } else if (!role) {
+            rowErrors.push(
+                `Không tìm thấy vai trò "${roleNameRaw}" thuộc phạm vi tổ dân phố`,
+            );
+        } else if (user && !user.roles.includes(role.key)) {
+            rowErrors.push(
+                `Tài khoản "${phone}" chưa có vai trò "${role.name}"`,
+            );
+        }
+
+        if (rowErrors.length > 0) {
+            errors.push({ row: row.rowNumber, message: rowErrors.join("; ") });
+            continue;
+        }
+
+        const dedupeKey = `${role!.key}:${String(user!._id)}`;
+        if (seen.has(dedupeKey)) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `Dòng trùng lặp trong file (${phone} - ${role!.name})`,
+            });
+            continue;
+        }
+        if (existingKeySet.has(dedupeKey)) {
+            skipped.push({
+                row: row.rowNumber,
+                message: `"${user!.displayName}" đã đang giữ vai trò "${role!.name}" tại Tổ này`,
+            });
+            continue;
+        }
+        seen.add(dedupeKey);
+
+        previewData.push({
+            rowNumber: row.rowNumber,
+            phone,
+            userId: String(user!._id),
+            userDisplayName: user!.displayName,
+            roleKey: role!.key,
+            roleName: role!.name,
+            note: note || undefined,
+        });
+    }
+
+    job.columnMapping = mapping;
+    job.rowErrors = errors;
+    job.skippedRows = skipped;
+    job.previewData = previewData;
+    job.validRows = previewData.length;
+    job.status = errors.length === 0 ? "validated" : "previewing";
+    await job.save();
+
+    return job;
+}
+
+async function assignImportedNeighborhoodMember(
+    actorId: string,
+    neighborhoodId: string,
+    roleKey: string,
+    userId: string,
+    note?: string,
+): Promise<void> {
+    if (roleKey === "neighborhood_leader") {
+        await assignNeighborhoodLeader(actorId, neighborhoodId, userId, note);
+    } else if (roleKey === "neighborhood_coleader") {
+        await assignNeighborhoodColeader(actorId, neighborhoodId, userId, note);
+    } else if (roleKey === "neighborhood_collaborator") {
+        await assignNeighborhoodCollaborator(actorId, neighborhoodId, {
+            collaboratorUserId: userId,
+            scopeType: "WHOLE_NEIGHBORHOOD",
+            houseIds: [],
+            note,
+        });
+    } else {
+        await assignScope(actorId, {
+            userId,
+            roleKey,
+            scopeType: "NEIGHBORHOOD",
+            scopeId: neighborhoodId,
+            note,
+        });
+    }
+}
+
+export async function commitNeighborhoodMemberImport(
+    actorUser: IUser,
+    importJobId: string,
+): Promise<IImportJob> {
+    const job = await ImportJob.findById(importJobId);
+    if (!job) throw new HttpError("Không tìm thấy import job", 404);
+    if (job.type !== "neighborhood_member") {
+        throw new HttpError(
+            "Import job này không phải loại thành viên tổ dân phố",
+            400,
+        );
+    }
+    if (job.status === "committed" || job.status === "committing") {
+        throw new HttpError("Import job này đã được commit trước đó", 400);
+    }
+    if (job.status === "awaiting_mapping") {
+        throw new HttpError(
+            "Vui lòng chọn cột dữ liệu (mapping) trước khi commit",
+            400,
+        );
+    }
+    if (job.previewData.length === 0 && job.skippedRows.length === 0) {
+        throw new HttpError("Không có dòng dữ liệu hợp lệ nào để nhập", 400);
+    }
+    if (!job.relatedId) {
+        throw new HttpError("Import job này thiếu thông tin tổ dân phố", 400);
+    }
+
+    job.status = "committing";
+    job.committedCount = 0;
+    await job.save();
+
+    processNeighborhoodMemberImportRows(String(job._id), actorUser).catch(
+        async err => {
+            await ImportJob.updateOne({ _id: job._id }, { status: "failed" });
+            // eslint-disable-next-line no-console
+            console.error(
+                `[import] Neighborhood member job ${job._id} thất bại:`,
+                err,
+            );
+        },
+    );
+
+    return job;
+}
+
+async function processNeighborhoodMemberImportRows(
+    jobId: string,
+    actorUser: IUser,
+): Promise<void> {
+    const job = await ImportJob.findById(jobId);
+    if (!job || !job.relatedId) return;
+    const neighborhoodId = String(job.relatedId);
+    const actorId = String(actorUser._id);
+
+    let committedCount = 0;
+    let createdCount = 0;
+    const skippedCount = job.skippedRows.length;
+    const commitErrors: { row: number; message: string }[] = [
+        ...job.rowErrors,
+    ];
+
+    for (const row of job.previewData as Record<string, unknown>[]) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await assignImportedNeighborhoodMember(
+                actorId,
+                neighborhoodId,
+                row.roleKey as string,
+                row.userId as string,
+                row.note as string | undefined,
+            );
+            createdCount += 1;
+        } catch (err) {
+            commitErrors.push({
+                row: row.rowNumber as number,
+                message: (err as Error).message,
+            });
+        }
+        committedCount += 1;
+        if (committedCount % IMPORT_PROGRESS_BATCH === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            await ImportJob.updateOne(
+                { _id: jobId },
+                {
+                    committedCount,
+                    createdCount,
+                    skippedCount,
+                    rowErrors: commitErrors,
+                },
+            );
+        }
+    }
+
+    await ImportJob.updateOne(
+        { _id: jobId },
+        {
+            status: "committed",
+            committedCount,
+            createdCount,
+            skippedCount,
+            rowErrors: commitErrors,
+        },
+    );
+
+    await writeAuditLog({
+        actorId,
+        action: "import.commit",
+        targetModel: "ImportJob",
+        targetId: jobId,
+        metadata: {
+            type: "neighborhood_member",
+            count: committedCount,
+            createdCount,
+            skippedCount,
+        },
     });
 }
 

@@ -6,6 +6,7 @@ import {
     Citizen,
     HouseRecord,
     Neighborhood,
+    Notification,
     Request as RequestModel,
     RequestRecipient,
     ScopeAssignment,
@@ -17,6 +18,7 @@ import {
 import { HttpError } from "@/lib/response";
 import { generateYearlyCode } from "@/lib/utils";
 import { createNotification } from "@/services/notificationService";
+import { emailAdapter } from "@/lib/notificationAdapters";
 import { writeAuditLog } from "@/services/auditService";
 import { areaScopeFilter } from "@/lib/rbac";
 import { getHouseIdsForActingOwner } from "@/services/houseOwnershipService";
@@ -24,6 +26,8 @@ import { getSetting } from "@/services/settingsService";
 import {
     getComplaintTypeByKey,
     getStaffOnlyComplaintCategoryKeys,
+    getReceivableComplaintCategoryKeysForRoles,
+    listComplaintTypeDefinitions,
 } from "@/services/complaintTypeDefinitionService";
 import { getNeighborhoodLeadershipUserIds } from "@/services/neighborhoodService";
 import {
@@ -347,6 +351,12 @@ const HOUSE_SCOPED_COMPLAINT_ROLES = new Set([
     "cooperator",
 ]);
 
+// Danh muc phan anh duoc coi la khan cap - gui THEM email (ngoai in-app) ngay
+// khi tao, xem "NGOAI LE" trong lib/integrations/gmail.ts. Hardcode (khong
+// dua vao ComplaintTypeDefinition) vi day la quyet dinh nghiep vu it thay
+// doi, khong can quan tri qua UI.
+const EMERGENCY_COMPLAINT_CATEGORIES = new Set(["an_ninh_trat_tu", "pccc"]);
+
 /**
  * Dieu huong nguoi nhan/nguoi phu trach chinh cho mot phan anh, dua tren
  * ComplaintTypeDefinition.allowedReceiverRoles (thu tu trong mang la thu tu
@@ -506,6 +516,37 @@ export async function createComplaint(
         recipientIds = routed.recipientIds;
     }
 
+    // Chuan hoa toa do GPS nguoi gui gui kem (tuy chon) - cung quy uoc voi
+    // normalizeHouseGis trong houseRecordService.ts: null/undefined/0 nghia
+    // la chua co du lieu, khong luu [0, 0].
+    const hasGisCoords =
+        input.gisLatitude !== undefined &&
+        input.gisLatitude !== null &&
+        input.gisLatitude !== 0 &&
+        input.gisLongitude !== undefined &&
+        input.gisLongitude !== null &&
+        input.gisLongitude !== 0;
+    const gis = hasGisCoords
+        ? {
+              gisLatitude: input.gisLatitude,
+              gisLongitude: input.gisLongitude,
+              gisAccuracyMeters: input.gisAccuracyMeters ?? null,
+              gisSource:
+                  input.gisSource && input.gisSource !== "unavailable"
+                      ? input.gisSource
+                      : ("manual" as const),
+              gisCapturedAt: input.gisCapturedAt
+                  ? new Date(input.gisCapturedAt)
+                  : new Date(),
+          }
+        : {
+              gisLatitude: null,
+              gisLongitude: null,
+              gisAccuracyMeters: null,
+              gisSource: "unavailable" as const,
+              gisCapturedAt: null,
+          };
+
     const complaint = await Complaint.create({
         // Neu co draftId (xin truoc qua POST /api/complaints/draft), dung lam
         // _id de cac tai lieu da dinh kem tu form tao (FileAsset.relatedId =
@@ -517,6 +558,7 @@ export async function createComplaint(
         title: input.title,
         content: input.content,
         area: input.area,
+        ...gis,
         status: "moi_tiep_nhan",
         cluster,
         neighborhoodId,
@@ -560,7 +602,7 @@ export async function createComplaint(
     }
 
     if (recipientIds.size > 0) {
-        await createNotification({
+        const notification = await createNotification({
             title: "Phản ánh mới cần xử lý",
             body: `Mã ${code}: ${input.title}`,
             type: "complaint.created",
@@ -569,6 +611,18 @@ export async function createComplaint(
             relatedId: complaint._id,
             createdBy: userId,
         });
+
+        // Danh muc khan cap: gui THEM email ngay lap tuc toi cung nhom nguoi
+        // nhan da xac dinh o tren (khong tao thong bao rieng) - xem "NGOAI LE"
+        // trong lib/integrations/gmail.ts.
+        if (EMERGENCY_COMPLAINT_CATEGORIES.has(input.category)) {
+            await emailAdapter.deliver(
+                [...recipientIds].map(recipientId => ({
+                    notificationId: notification._id,
+                    userId: recipientId,
+                })),
+            );
+        }
     }
     // Rieng, KHONG chung mot lan goi voi targetUserIds o tren - createNotification
     // chi xet targetRoles khi targetUserIds rong (xem notificationService.ts),
@@ -587,15 +641,16 @@ export async function createComplaint(
     return complaint;
 }
 
-export async function listComplaints(params: {
-    page: number;
-    limit: number;
-    status?: string;
-    category?: string;
+// Rut trich tu listComplaints de dung chung boi getEmergencyComplaintGisOverview
+// (ban do "khan cap" tren Ban do) - CUNG mot bo quy tac pham vi/vai tro, chi
+// khac o cho category/status co the truyen mang ($in) thay vi 1 gia tri, va
+// khong phan trang (goi cho ca hai dau vao qua $and, khong ghi de len nhau).
+async function buildComplaintFilterClauses(params: {
+    status?: string | string[];
+    category?: string | string[];
     search?: string;
     relatedAssetId?: string;
     neighborhoodId?: string;
-    allowedCategories?: string[] | null;
     actorUser: IUser;
     canReadEscalated: boolean;
     // Chi co y nghia voi To truong/To pho (xem duoi) - "received" (mac dinh)
@@ -603,22 +658,27 @@ export async function listComplaints(params: {
     // nghiep da gui len Phuong), "sent" = chi cac de xuat HO da gui len
     // Phuong. Vai tro khac bo qua tham so nay.
     view?: "received" | "sent";
-}) {
+}): Promise<Record<string, unknown>[]> {
     const clauses: Record<string, unknown>[] = [];
-    if (params.status) clauses.push({ status: params.status });
+    if (params.status) {
+        clauses.push(
+            Array.isArray(params.status)
+                ? { status: { $in: params.status } }
+                : { status: params.status },
+        );
+    }
     if (params.relatedAssetId) {
         clauses.push({ relatedAssetId: params.relatedAssetId });
     }
     if (params.neighborhoodId) {
         clauses.push({ neighborhoodId: params.neighborhoodId });
     }
-    if (params.allowedCategories) {
-        const categories = params.category
-            ? params.allowedCategories.filter(c => c === params.category)
-            : params.allowedCategories;
-        clauses.push({ category: { $in: categories } });
-    } else if (params.category) {
-        clauses.push({ category: params.category });
+    if (params.category) {
+        clauses.push(
+            Array.isArray(params.category)
+                ? { category: { $in: params.category } }
+                : { category: params.category },
+        );
     }
     if (params.search) {
         clauses.push({
@@ -639,26 +699,53 @@ export async function listComplaints(params: {
     // vai tro nao, xem ghi chu o complaintScopeFilter).
     const isWardTier = !isAdmin && !!params.actorUser.wardCode;
 
-    if (!isAdmin && (isNeighborhoodTier || isWardTier)) {
-        const staffOnlyKeys = await getStaffOnlyComplaintCategoryKeys();
-        if (isWardTier) {
-            // "Chi thay phan anh To truong/To pho GUI LEN" - thay the hoan
-            // toan cach xem "moi phan anh trong Phuong" truoc day (areaScopeFilter
-            // qua nhanh khong canReadEscalated cua complaintScopeFilter).
-            clauses.push({
-                category: staffOnlyKeys.length ? { $in: staffOnlyKeys } : { $in: [] },
-            });
-        } else if (params.view === "sent") {
+    if (!isAdmin && isWardTier) {
+        // Loc THEO DUNG danh muc vai tro nay la nguoi nhan (allowedReceiverRoles) -
+        // vd regional_police chi thay an_ninh_trat_tu/pccc, environment_officer
+        // chi thay ve_sinh_moi_truong, secretary/people_committee_official chi
+        // thay to_de_xuat_len_phuong. TRUOC DAY dung chung mot bo loc
+        // "staffOnlyKeys" (chi danh muc KHONG cho cu dan gui) cho MOI vai tro cap
+        // Phuong - vo tinh gop ca cac vai tro "phong ban" chuyen mon (police/moi
+        // truong) vao nhanh do, khien ho khong con thay duoc phan anh CU DAN gui
+        // truc tiep cho minh sau khi duoc gan Phuong/Xa (bug that: "cong an
+        // khong nhan duoc phan anh an ninh trat tu tu cu dan").
+        const receivableKeys = await getReceivableComplaintCategoryKeysForRoles(
+            params.actorUser.roles,
+        );
+        clauses.push({
+            category: receivableKeys.length ? { $in: receivableKeys } : { $in: [] },
+        });
+    } else if (!isAdmin && isNeighborhoodTier) {
+        if (params.view === "sent") {
             clauses.push({ createdByUserId: params.actorUser._id });
-        } else if (staffOnlyKeys.length) {
-            // "received" (mac dinh) - khong gom cac de xuat To truong/To pho
-            // (chinh minh hoac dong nghiep) da gui len Phuong.
-            clauses.push({ category: { $nin: staffOnlyKeys } });
+        } else {
+            const staffOnlyKeys = await getStaffOnlyComplaintCategoryKeys();
+            if (staffOnlyKeys.length) {
+                // "received" (mac dinh) - khong gom cac de xuat To truong/To pho
+                // (chinh minh hoac dong nghiep) da gui len Phuong.
+                clauses.push({ category: { $nin: staffOnlyKeys } });
+            }
         }
     }
 
     const scope = await complaintScopeFilter(params.actorUser, params.canReadEscalated);
     if (Object.keys(scope).length > 0) clauses.push(scope);
+    return clauses;
+}
+
+export async function listComplaints(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    category?: string;
+    search?: string;
+    relatedAssetId?: string;
+    neighborhoodId?: string;
+    actorUser: IUser;
+    canReadEscalated: boolean;
+    view?: "received" | "sent";
+}) {
+    const clauses = await buildComplaintFilterClauses(params);
     const filter: Record<string, unknown> =
         clauses.length > 0 ? { $and: clauses } : {};
     const [items, total] = await Promise.all([
@@ -681,12 +768,141 @@ export async function listComplaints(params: {
     };
 }
 
+// Cac trang thai con "song" (chua dong/xong) - marker khan cap tren Ban do
+// CHI hien trong khoang nay, bien mat ngay khi chuyen sang 1 trong 4 trang
+// thai con lai (da_xu_ly/hoan_thanh/dong/can_bo_sung). KHONG co "da_tiep_nhan"
+// rieng - receiveComplaint() chuyen thang moi_tiep_nhan -> dang_xu_ly (xem
+// TRANG_THAI_PHAN_ANH o types/index.ts, chi co 6 gia tri thuc su).
+const EMERGENCY_MAP_STATUSES: TrangThaiPhanAnh[] = [
+    "moi_tiep_nhan",
+    "dang_xu_ly",
+];
+
+// Trang thai con CAN CHU Y/xu ly (chua ket thuc) - dung cho badge so luong
+// canh muc "Phản ánh" tren menu (xem countPendingComplaints ben duoi). Loai bo
+// da_xu_ly/hoan_thanh (da xong) va dong (da dong, du huong nao) - can_bo_sung
+// van tinh la "cho xu ly" vi ban than no la mot buoc trong quy trinh (cho cu
+// dan bo sung), khong phai diem ket thuc.
+const PENDING_COMPLAINT_STATUSES: TrangThaiPhanAnh[] = [
+    "moi_tiep_nhan",
+    "dang_xu_ly",
+    "can_bo_sung",
+];
+
+/**
+ * So phan anh dang CHO XU LY (chua hoan_thanh/da_xu_ly/dong) trong pham vi
+ * "Nhận từ cư dân" (view mac dinh - khong truyen view) cua actor - dung cho
+ * badge so luong canh muc "Phản ánh" tren menu, cung quy uoc voi
+ * countMyPendingRequests (Yêu cầu công việc).
+ */
+export async function countPendingComplaints(
+    actorUser: IUser,
+    canReadEscalated: boolean,
+): Promise<number> {
+    const clauses = await buildComplaintFilterClauses({
+        status: PENDING_COMPLAINT_STATUSES,
+        actorUser,
+        canReadEscalated,
+    });
+    const filter: Record<string, unknown> =
+        clauses.length > 0 ? { $and: clauses } : {};
+    return Complaint.countDocuments(filter);
+}
+
+export interface EmergencyComplaintGisPoint {
+    _id: string;
+    code: string;
+    title: string;
+    category: string;
+    categoryLabel: string;
+    status: TrangThaiPhanAnh;
+    area?: string;
+    gisLatitude: number;
+    gisLongitude: number;
+    gisAccuracyMeters?: number | null;
+    createdAt: string;
+    neighborhoodName?: string;
+}
+
+/**
+ * Ban do "Khan cap" o trang Ban do (khac listComplaints - khong phan trang,
+ * chi tra ve phan anh thuoc danh muc isUrgent, dang o 1 trong 3 trang thai
+ * con "song", VA da co toa do GPS). Dung chung buildComplaintFilterClauses
+ * de giu DUNG pham vi/vai tro nhu danh sach phan anh thuong (khong duoc lo
+ * phan anh ngoai pham vi phu trach cua actor qua kenh nay).
+ */
+export async function getEmergencyComplaintGisOverview(
+    actorUser: IUser,
+    canReadEscalated: boolean,
+): Promise<{ points: EmergencyComplaintGisPoint[] }> {
+    const urgentTypesResult = await listComplaintTypeDefinitions({
+        actorUser,
+        active: true,
+        limit: 200,
+    });
+    const urgentTypes = urgentTypesResult.items.filter(t => t.isUrgent);
+    if (!urgentTypes.length) return { points: [] };
+    const urgentKeys = urgentTypes.map(t => t.key);
+    const categoryLabelByKey = new Map(urgentTypes.map(t => [t.key, t.name]));
+
+    const clauses = await buildComplaintFilterClauses({
+        status: EMERGENCY_MAP_STATUSES,
+        category: urgentKeys,
+        actorUser,
+        canReadEscalated,
+    });
+    clauses.push({ gisLatitude: { $ne: null } }, { gisLongitude: { $ne: null } });
+
+    const complaints = await Complaint.find({ $and: clauses })
+        .select(
+            "code title category status area gisLatitude gisLongitude gisAccuracyMeters createdAt neighborhoodId",
+        )
+        .populate("neighborhoodId", "name")
+        .lean();
+
+    const points: EmergencyComplaintGisPoint[] = complaints
+        .filter(
+            (c): c is typeof c & { gisLatitude: number; gisLongitude: number } =>
+                typeof c.gisLatitude === "number" &&
+                typeof c.gisLongitude === "number",
+        )
+        .map(c => ({
+            _id: String(c._id),
+            code: c.code,
+            title: c.title,
+            category: c.category,
+            categoryLabel: categoryLabelByKey.get(c.category) || c.category,
+            status: c.status,
+            ...(c.area ? { area: c.area } : {}),
+            gisLatitude: c.gisLatitude,
+            gisLongitude: c.gisLongitude,
+            gisAccuracyMeters: c.gisAccuracyMeters ?? null,
+            createdAt: (c.createdAt as unknown as Date).toISOString(),
+            ...((c.neighborhoodId as unknown as { name?: string } | null)?.name
+                ? {
+                      neighborhoodName: (
+                          c.neighborhoodId as unknown as { name?: string }
+                      ).name,
+                  }
+                : {}),
+        }));
+
+    return { points };
+}
+
 export async function listMyComplaints(
     userId: string,
     page: number,
     limit: number,
+    search?: string,
 ) {
-    const filter = { createdByUserId: userId };
+    const filter: Record<string, unknown> = { createdByUserId: userId };
+    if (search) {
+        filter.$or = [
+            { code: { $regex: search, $options: "i" } },
+            { title: { $regex: search, $options: "i" } },
+        ];
+    }
     const [items, total] = await Promise.all([
         Complaint.find(filter)
             .sort({ createdAt: -1 })
@@ -735,6 +951,73 @@ export async function getMyAssignedComplaintCounts(
     return { inProgress: rows.length, overdue };
 }
 
+const OVERDUE_ALERT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Quet cac phan anh CHUA xu ly xong (status khong nam trong
+ * COMPLAINT_TERMINAL_STATUSES) da qua 24h ke tu luc tao (createdAt) va CHUA
+ * tung duoc canh bao (overdueAlertSentAt rong), gui thong bao + email khan
+ * cap mot lan duy nhat cho moi phan anh (dat overdueAlertSentAt ngay sau khi
+ * gui de lan chay tiep theo cua job bo qua). Goi tu scheduler dinh ky (xem
+ * src/lib/scheduler.ts), khong lien quan request cua nguoi dung.
+ *
+ * Nguoi nhan: assigneeId/secondaryAssigneeIds neu da co nguoi phu trach; neu
+ * CHUA co ai nhan xu ly sau 24h (truong hop dang lo ngai nhat), roi ve dung
+ * lai danh sach targetUserIds cua thong bao "complaint.created" ban dau (xem
+ * createComplaint) thay vi tu dinh tuyen lai tu dau.
+ */
+export async function checkOverdueComplaintsAndNotify(): Promise<number> {
+    const threshold = new Date(Date.now() - OVERDUE_ALERT_THRESHOLD_MS);
+    const overdue = await Complaint.find({
+        status: { $nin: COMPLAINT_TERMINAL_STATUSES },
+        createdAt: { $lte: threshold },
+        overdueAlertSentAt: { $exists: false },
+    });
+
+    for (const complaint of overdue) {
+        const recipientIds = new Set<string>();
+        if (complaint.assigneeId) recipientIds.add(String(complaint.assigneeId));
+        complaint.secondaryAssigneeIds.forEach(id => recipientIds.add(String(id)));
+
+        if (recipientIds.size === 0) {
+            // eslint-disable-next-line no-await-in-loop
+            const originalNotification = await Notification.findOne({
+                type: "complaint.created",
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+            }).select("targetUserIds");
+            originalNotification?.targetUserIds.forEach(id =>
+                recipientIds.add(String(id)),
+            );
+        }
+
+        if (recipientIds.size > 0) {
+            // eslint-disable-next-line no-await-in-loop
+            const notification = await createNotification({
+                title: "Phản ánh quá hạn xử lý",
+                body: `Mã ${complaint.code}: "${complaint.title}" đã quá 24 giờ chưa xử lý xong.`,
+                type: "complaint.overdue",
+                targetUserIds: [...recipientIds],
+                relatedModel: "Complaint",
+                relatedId: complaint._id,
+            });
+            // eslint-disable-next-line no-await-in-loop
+            await emailAdapter.deliver(
+                [...recipientIds].map(recipientId => ({
+                    notificationId: notification._id,
+                    userId: recipientId,
+                })),
+            );
+        }
+
+        complaint.overdueAlertSentAt = new Date();
+        // eslint-disable-next-line no-await-in-loop
+        await complaint.save();
+    }
+
+    return overdue.length;
+}
+
 async function getTimelineFor(complaintId: string, publicOnly: boolean) {
     const filter: Record<string, unknown> = { complaintId };
     if (publicOnly) filter.isPublic = true;
@@ -744,17 +1027,16 @@ async function getTimelineFor(complaintId: string, publicOnly: boolean) {
 export interface ComplaintReadRequester {
     userId: string;
     isStaff: boolean;
-    allowedCategories?: string[] | null;
     actorUser?: IUser;
     canReadEscalated?: boolean;
 }
 
 /**
  * Nem HttpError neu requester khong duoc xem phan anh nay - chu phan anh luon
- * duoc xem; nhan vien phai co complaints.read (isStaff), dung nhom
- * (allowedCategories) va trong pham vi phu trach (assertComplaintInScope).
- * Dung chung cho getComplaintDetailForOwnerOrStaff va route liet ke tai lieu
- * dinh kem cua phan anh (xem /api/complaints/[id]/attachments).
+ * duoc xem; nhan vien phai co complaints.read (isStaff) va trong pham vi phu
+ * trach (assertComplaintInScope). Dung chung cho getComplaintDetailForOwnerOrStaff
+ * va route liet ke tai lieu dinh kem cua phan anh (xem
+ * /api/complaints/[id]/attachments).
  */
 export function assertComplaintReadable(
     complaint: IComplaint,
@@ -765,14 +1047,6 @@ export function assertComplaintReadable(
         requester.userId;
     if (!requester.isStaff && !isOwner) {
         throw new HttpError("Bạn không có quyền xem phản ánh này", 403);
-    }
-    if (
-        requester.isStaff &&
-        !isOwner &&
-        requester.allowedCategories &&
-        !requester.allowedCategories.includes(complaint.category)
-    ) {
-        throw new HttpError("Bạn không có quyền xem nhóm phản ánh này", 403);
     }
     if (requester.isStaff && !isOwner && requester.actorUser) {
         assertComplaintInScope(
@@ -799,11 +1073,15 @@ export async function getComplaintDetailForOwnerOrStaff(
     const timeline = await getTimelineFor(complaintId, !requester.isStaff);
     const plain = complaint.toObject();
     if (!requester.isStaff) delete (plain as any).internalNotes;
-    // Chi tinh cho staff - resident khong dung toi flag nay (khong thay nut
-    // Tiep nhan/Chon nguoi phu trach), tranh 1 query thua cho request cua ho.
+    // Chi tinh cho staff - resident khong dung toi 2 truong nay (khong thay
+    // nut Tiep nhan/Chon nguoi phu trach, cung khong co "Yeu cau cong viec"
+    // rieng), tranh query thua cho request cua ho.
     (plain as any).canReceiveOrChooseAssignee = requester.isStaff
         ? await canReceiveOrChooseAssignee(complaint)
         : false;
+    (plain as any).linkedRequestId = requester.isStaff
+        ? await getLatestLinkedRequestId(complaint._id)
+        : null;
 
     return { complaint: plain, timeline };
 }
@@ -975,6 +1253,63 @@ export async function updateComplaint(
     return complaint;
 }
 
+/**
+ * Dong (status="resolved") MOI RequestRecipient con "hoat dong" (status !=
+ * "resolved") cua (cac) Request lien ket toi Complaint nay (cung quy uoc
+ * "hoat dong" voi hasActiveLinkedRequest o tren). Dung o HAI noi:
+ *   - confirmComplaintResolution (nguoi gui XAC NHAN phan anh da hoan
+ *     thanh): truoc day chi co dong bo MOT CHIEU Request -> Complaint
+ *     (syncComplaintStatusFromRequest), khong co chieu nguoc lai, nen mot
+ *     Request/Cong viec noi bo van "Chờ xác nhận" (hoac trang thai khac)
+ *     vinh vien sau khi phan anh da hoan_thanh - dac biet khi nhan vien dat
+ *     truc tiep "da_xu_ly" qua updateComplaintStatus (bo qua hoan toan
+ *     nhanh dong bo tu Request).
+ *   - requestComplaintReevaluation (nguoi gui DE NGHI XEM XET LAI): dong
+ *     vong xu ly CU de hasActiveLinkedRequest tro ve false, mo lai
+ *     canReceiveOrChooseAssignee cho vong xu ly MOI - thieu buoc nay khien
+ *     phan anh quay lai "dang_xu_ly" nhung khong con nut "Tiep nhan"/"Chon
+ *     nguoi phu trach" nao de tiep tuc (Request cu con "hoat dong" nhung
+ *     khong con ai duoc nhac xac nhan no).
+ * Khong throw/chan neu khong tim thay Request - hoan toan la hieu ung phu,
+ * khong phai dieu kien tien quyet cua ham goi no.
+ */
+export async function autoResolveLinkedRequestRecipients(
+    complaint: IComplaint,
+    actorUser: IUser,
+): Promise<void> {
+    const requestIds = await RequestModel.find({
+        relatedModel: "Complaint",
+        relatedId: complaint._id,
+    }).distinct("_id");
+    if (requestIds.length === 0) return;
+
+    const recipients = await RequestRecipient.find({
+        requestId: { $in: requestIds },
+        status: { $ne: "resolved" },
+    });
+    if (recipients.length === 0) return;
+
+    const now = new Date();
+    for (const recipient of recipients) {
+        recipient.status = "resolved";
+        recipient.resolvedAt = now;
+        // eslint-disable-next-line no-await-in-loop
+        await recipient.save();
+        // eslint-disable-next-line no-await-in-loop
+        await writeAuditLog({
+            actorId: String(actorUser._id),
+            action: "request.confirm_completion",
+            targetModel: "Request",
+            targetId: recipient.requestId,
+            metadata: {
+                userId: String(recipient.userId),
+                decision: "resolved",
+                reason: "complaint.confirm_resolution",
+            },
+        });
+    }
+}
+
 export async function confirmComplaintResolution(
     actorUser: IUser,
     complaintId: string,
@@ -1000,6 +1335,7 @@ export async function confirmComplaintResolution(
     if (input?.rating !== undefined) complaint.rating = input.rating;
     if (input?.ratingNote !== undefined) complaint.ratingNote = input.ratingNote;
     await complaint.save();
+    await autoResolveLinkedRequestRecipients(complaint, actorUser);
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
@@ -1052,6 +1388,15 @@ export async function requestComplaintReevaluation(
 
     complaint.status = "dang_xu_ly";
     await complaint.save();
+    // Dong (resolved) Request/vong xu ly CU (neu con hoat dong) - de
+    // hasActiveLinkedRequest tro ve false, mo lai nut "Tiep nhan"/"Chon nguoi
+    // phu trach" (canReceiveOrChooseAssignee) cho vong xu ly MOI, giong dung
+    // thiet ke da ghi trong docstring cua hasActiveLinkedRequest ("sau khi
+    // Request do da resolved ... co the tao THEM mot Request moi"). Thieu
+    // buoc nay khien phan anh quay lai "dang_xu_ly" nhung khong ai tiep tuc
+    // xu ly duoc (Request/RequestRecipient cu con "hoat dong" nhung khong
+    // con ai duoc nhac de xac nhan no).
+    await autoResolveLinkedRequestRecipients(complaint, actorUser);
 
     await ComplaintTimeline.create({
         complaintId: complaint._id,
@@ -1186,6 +1531,26 @@ async function hasActiveLinkedRequest(
         status: { $ne: "resolved" },
     });
     return activeCount > 0;
+}
+
+/**
+ * Tra ve _id cua Request lien ket GAN NHAT (moi tao nhat) toi complaintId nay,
+ * hoac null neu chua tung co Request nao. Mot Complaint co the co nhieu
+ * Request qua tung vong xu ly (xem hasActiveLinkedRequest o tren) - Request
+ * moi nhat luon la ban dang hoat dong (neu con dang xu ly) hoac ban gan nhat
+ * (neu phan anh da hoan_thanh/dong), nen dung lam dich cho nut "Xem yêu cầu
+ * công việc" o FE (ComplaintDetailPage.tsx) dieu huong toi.
+ */
+async function getLatestLinkedRequestId(
+    complaintId: mongoose.Types.ObjectId | string,
+): Promise<mongoose.Types.ObjectId | null> {
+    const request = await RequestModel.findOne({
+        relatedModel: "Complaint",
+        relatedId: complaintId,
+    })
+        .sort({ createdAt: -1 })
+        .select("_id");
+    return request?._id ?? null;
 }
 
 /**

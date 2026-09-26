@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
-import { Household, Citizen, Complaint } from "@/models";
+import { Household, Citizen, Complaint, Poi } from "@/models";
+import { POI_CATEGORY_META } from "@/lib/poiCategories";
 import {
     LOAI_SO_HUU_LABEL,
     GIOI_TINH_LABEL,
@@ -188,6 +189,44 @@ export async function exportComplaintsToExcel(params: {
             status: TRANG_THAI_PHAN_ANH_LABEL[c.status],
             createdAt: formatDate(c.createdAt),
             actualCompletionDate: formatDate(c.actualCompletionDate),
+        });
+    }
+
+    return workbook;
+}
+
+// ---------------------------------------------------------------------------
+// Export diem tien ich (POI) - cot khop voi dinh dang Import POI trong
+// importService.ts (Tên | Danh mục | Vĩ độ | Kinh độ | Địa chỉ | Đã duyệt), co
+// them cot "Trạng thái"/"Nguồn" vi day la du lieu da co san (khong phai file
+// mau de nhap lai). Danh muc "Hộ dân" van duoc xuat binh thuong (chi khong
+// nhap lai qua Excel duoc, xem ghi chu POI_CATEGORY_LABEL_TO_KEY).
+// ---------------------------------------------------------------------------
+export async function exportPoisToExcel(): Promise<ExcelJS.Workbook> {
+    const pois = await Poi.find().sort({ category: 1, name: 1 });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Điểm tiện ích");
+    worksheet.columns = [
+        { header: "Tên", key: "name", width: 32 },
+        { header: "Danh mục", key: "category", width: 18 },
+        { header: "Vĩ độ", key: "lat", width: 14 },
+        { header: "Kinh độ", key: "lng", width: 14 },
+        { header: "Địa chỉ", key: "address", width: 32 },
+        { header: "Đã duyệt", key: "verified", width: 12 },
+        { header: "Nguồn", key: "source", width: 14 },
+    ];
+    worksheet.getRow(1).font = { bold: true };
+
+    for (const p of pois) {
+        worksheet.addRow({
+            name: p.name,
+            category: POI_CATEGORY_META[p.category]?.label ?? p.category,
+            lat: p.lat,
+            lng: p.lng,
+            address: p.address || "",
+            verified: yesNo(p.verified),
+            source: p.source === "manual" ? "Nhập tay" : "Quét tự động",
         });
     }
 

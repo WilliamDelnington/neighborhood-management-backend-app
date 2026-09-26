@@ -40,6 +40,7 @@ export const ROLE_LABEL: Record<string, string> = {
     neighborhood_collaborator: "Cộng tác viên Tổ dân phố",
     secretary: "Bí thư",
     regional_police: "Công an khu vực",
+    environment_officer: "Cán bộ môi trường",
     people_committee_official: "Cán bộ UBND",
     social_affairs_official: "Cán bộ Văn hóa – Xã hội",
     health_official: "Cán bộ Y tế",
@@ -861,7 +862,7 @@ export const TRANG_THAI_GIAO_DICH_LABEL: Record<TrangThaiGiaoDich, string> = {
 // ---------------------------------------------------------------------------
 // Thong bao he thong / Notification
 // ---------------------------------------------------------------------------
-export const NOTIFICATION_CHANNEL = ["in_app", "zalo_oa_future"] as const;
+export const NOTIFICATION_CHANNEL = ["in_app", "zalo_oa_future", "email"] as const;
 export type NotificationChannel = typeof NOTIFICATION_CHANNEL[number];
 
 export const NOTIFICATION_STATUS = [
@@ -883,6 +884,8 @@ export const IMPORT_JOB_TYPE = [
     "street",
     "business",
     "company",
+    "neighborhood_member",
+    "poi",
 ] as const;
 export type ImportJobType = typeof IMPORT_JOB_TYPE[number];
 

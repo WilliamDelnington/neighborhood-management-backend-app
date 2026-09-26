@@ -60,6 +60,23 @@
  *   - THEM 12 Request loai "pccc"/"security" (dot 1 chi dung "task"/"other")
  *     tu admin gui toi Cong an dia ban, da dang hoa priority/dueDate.
  *
+<<<<<<< HEAD
+=======
+ * DOT 3 (bo sung THEM MOI mot bo nha/ho dan/ho KD/cong ty rieng cho MOI to dan
+ * pho, quy mo lon hon dot 1 - khong thay the dot 1/2 o tren):
+ *   - THEM 8 nha so (5 chu ca nhan co tai khoan, 1 chu ca nhan KHONG tao tai
+ *     khoan - chi luu Person, 2 chu to chuc), du ca 8 gia tri
+ *     HouseRecord.physicalStatus (truoc day khong dat truong nay) va usageTypes
+ *     "company"/"business"+"company" (truoc day chi dung "household"/"business").
+ *   - THEM 10 ho dan, moi ho 2-3 nhan khau (ke ca chu ho) - du ca 5 gia tri
+ *     Household.status (unverified/pending/verified/denied/locked) qua
+ *     transitionHouseholdStatus (truoc day Household luon giu nguyen
+ *     "unverified" mac dinh, chua tung duoc chuyen trang thai).
+ *   - Nhan khau moi: du them gender="khac" (truoc day chi nam/nu), va rai
+ *     RESIDENT_PERSONAS tren nhieu nhan khau/ho hon (2-3 nguoi/ho).
+ *   - THEM 3 ho kinh doanh + 2 cong ty rieng cho dot nay.
+ *
+>>>>>>> dev
  * Chay: npm run seed:duong-noi-demo   (hoac: tsx scripts/seed-duong-noi-demo.ts)
  *
  * LUU Y DNS/IMPORT: xem giai thich chi tiet trong scripts/create-proposal-accounts.ts
@@ -96,6 +113,21 @@ const TOTAL_REQUESTS = 25;
 const TOTAL_PCCC_WAVE2 = 10;
 const TOTAL_SECURITY_WAVE2 = 10;
 const TOTAL_REQUESTS_WAVE2 = 12;
+<<<<<<< HEAD
+=======
+
+// DOT 3: mot bo House/Household/Citizen/Business/Company rieng, THEM MOI cho
+// MOI to dan pho (dia chi/ten deu mang hau to "dot 3" nen khong trung voi dot
+// 1) - quy mo lon hon dot 1, tap trung da dang hoa toi da cac "trang thai" san
+// co ma dot 1/2 chua khai thac het (xem muc 3b trong vong lap to dan pho).
+const HOUSES_PER_NEIGHBORHOOD_WAVE3 = 8;
+const HOUSEHOLDS_PER_NEIGHBORHOOD_WAVE3 = 10;
+const BUSINESSES_PER_NEIGHBORHOOD_WAVE3 = 3;
+const COMPANIES_PER_NEIGHBORHOOD_WAVE3 = 2;
+// 8 nha dot 3 = 5 chu ca nhan co tai khoan + 1 chu ca nhan KHONG tai khoan
+// (Person) + 2 chu to chuc.
+const INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3 = 5;
+>>>>>>> dev
 
 // So dien thoai duoc sinh TU NOI DUNG (to dan pho + vai tro + so thu tu),
 // KHONG phai tu mot bo dem vi tri tang dan - bai hoc rut ra tu lan chay dau:
@@ -142,6 +174,18 @@ const PHONE_KIND = {
     // (xem RESIDENT_PERSONAS/TOTAL_*_WAVE2 ben duoi) de lam nguoi nhan Request
     // loai "pccc"/"security" va inspectorId cho PCCC dot 2.
     regionalPolice: 8,
+<<<<<<< HEAD
+=======
+    // DOT 3 - them 8 nha/10 ho dan/3 ho KD/2 cong ty MOI moi to dan pho (xem
+    // muc 3b ben duoi) - can cac kind rieng, khac dot 1, de khong trung so
+    // dien thoai voi cac tai khoan dot 1 (owner/householdHeadDedicated/...).
+    individualOwnerW3: 9,
+    personOwnerW3: 10, // chu nha KHONG tao tai khoan dang nhap (Person)
+    dedicatedHouseholdHeadW3: 11,
+    businessRepDedicatedW3: 12,
+    companyRepDedicatedW3: 13,
+    orgRepresentativeW3: 14,
+>>>>>>> dev
 } as const;
 function phoneFor(slot: number, kind: number, seq: number): string {
     return `08${slot}${kind}${String(seq).padStart(6, "0")}`;
@@ -169,11 +213,12 @@ async function main() {
         PcccCheck,
         SecurityRecord,
         Request: RequestModel,
+        RequestTypeDefinition,
     } = await import("@/models");
+    const { getRoleKeysWithPermission } = await import("@/lib/rbac");
     const { createHouseRecord } = await import("@/services/houseRecordService");
-    const { createHousehold, updateHousehold } = await import(
-        "@/services/householdService"
-    );
+    const { createHousehold, updateHousehold, transitionHouseholdStatus } =
+        await import("@/services/householdService");
     const { createCitizen, updateCitizen } = await import(
         "@/services/citizenService"
     );
@@ -232,6 +277,65 @@ async function main() {
         });
         console.log(`  [TAO MOI] ${opts.displayName} (${opts.roles.join(",")}) -> ${opts.phone}`);
         return created;
+    }
+
+    // -------------------------------------------------------------------
+    // 0) Dam bao RequestTypeDefinition cho ca 4 loai REQUEST_TYPES (pccc/
+    //    security/other/task) da ton tai VA active - createRequest (qua
+    //    requestTypeDefinitionService.findRequestTypeForActor) NEM LOI 422
+    //    "Loại nhiệm vụ không tồn tại/đã khóa" neu thieu, BAT KE type co phai
+    //    "he thong" hay khong. Phat hien khi chay script tren mot DB dev CHUA
+    //    TUNG chay `npm run seed:request-types`: "task"/"other" da co san (vd
+    //    tao qua man quan ly RequestTypeListPage) nhung "pccc"/"security"
+    //    (dung o Request dot 2 ben duoi) thi chua, gay loi giua chung khi tao
+    //    Request dot 2. Logic idempotent giong het scripts/seed-request-types.ts
+    //    (khong dong toi ban ghi da co, chi dam bao isBuiltIn/active=true) -
+    //    nhung lap lai o day de script nay TU DAY DU, khong bat buoc phai chay
+    //    script kia truoc.
+    // -------------------------------------------------------------------
+    console.log("\n== RequestTypeDefinition (pccc/security/other/task) ==");
+    const REQUEST_TYPE_KEYS = ["pccc", "security", "other", "task"] as const;
+    const REQUEST_TYPE_NAME: Record<(typeof REQUEST_TYPE_KEYS)[number], string> = {
+        pccc: "PCCC",
+        security: "An ninh",
+        other: "Khác",
+        task: "Nhiệm vụ",
+    };
+    const requestTypeSenderRoles = await getRoleKeysWithPermission(
+        "requests.create",
+    );
+    for (const key of REQUEST_TYPE_KEYS) {
+        // eslint-disable-next-line no-await-in-loop
+        const existingDefinition = await RequestTypeDefinition.findOne({ key });
+        if (existingDefinition) {
+            if (!existingDefinition.isBuiltIn || !existingDefinition.active) {
+                // eslint-disable-next-line no-await-in-loop
+                await RequestTypeDefinition.updateOne(
+                    { _id: existingDefinition._id },
+                    { $set: { isBuiltIn: true, active: true } },
+                );
+            }
+            continue;
+        }
+        const allowedReceiverRoles =
+            key === "task"
+                ? ["neighborhood_leader", "neighborhood_coleader"]
+                : // eslint-disable-next-line no-await-in-loop
+                  await getRoleKeysWithPermission(`${key}.assign`);
+        // eslint-disable-next-line no-await-in-loop
+        await RequestTypeDefinition.create({
+            key,
+            name: REQUEST_TYPE_NAME[key],
+            fields: [],
+            allowedSenderRoles: requestTypeSenderRoles,
+            allowedReceiverRoles,
+            dataEntryMode: "sender",
+            isBuiltIn: true,
+            active: true,
+            createdBy: adminUser._id,
+            updatedBy: adminUser._id,
+        });
+        console.log(`  [TAO MOI] RequestTypeDefinition "${key}"`);
     }
 
     // -------------------------------------------------------------------
@@ -399,6 +503,33 @@ async function main() {
         },
         { birthYearsAgo: 45, flags: { isMartyrFamily: true } },
     ];
+<<<<<<< HEAD
+=======
+    // DOT 3: du ca 8 gia tri HouseRecord.physicalStatus (moi nha 1 gia tri
+    // khac nhau, xem "8 nha so dot 3" ben duoi) va ca 5 gia tri
+    // Household.status (VERIFICATION_STATUS, gan qua transitionHouseholdStatus
+    // - actor la admin nen duoc bo qua state machine binh thuong, xem
+    // householdService.transitionHouseholdStatus).
+    const HOUSE_PHYSICAL_STATUS_CYCLE = [
+        "not_handed_over",
+        "not_renovated",
+        "under_construction",
+        "under_renovation",
+        "completed",
+        "in_use",
+        "vacant",
+        "damaged",
+    ] as const;
+    const HOUSEHOLD_STATUS_CYCLE = [
+        "unverified",
+        "pending",
+        "verified",
+        "denied",
+        "locked",
+    ] as const;
+    // DOT 3: gioi tinh du ca 3 gia tri (dot 1 chi xen ke nam/nu).
+    const GENDER_CYCLE_WAVE3 = ["nam", "nu", "khac"] as const;
+>>>>>>> dev
 
     for (const neighborhood of neighborhoods) {
         console.log(`\n== ${neighborhood.code} - ${neighborhood.name} ==`);
@@ -700,12 +831,332 @@ async function main() {
         }
         console.log(`  Cong ty: ${COMPANIES_PER_NEIGHBORHOOD}`);
 
+        // -------------------------------------------------------------------
+        // 3b) DOT 3: THEM 8 nha so + 10 ho dan (2-3 nhan khau/ho) + 3 ho kinh
+        //     doanh + 2 cong ty MOI cho to dan pho nay (dia chi/ten mang hau
+        //     to "dot 3" nen khong trung voi dot 1) - da dang hoa toi da cac
+        //     "trang thai" san co ma dot 1/2 CHUA khai thac (xem doc dau file).
+        // -------------------------------------------------------------------
+        const wave3IndividualOwners: IUserDoc[] = [];
+        for (let i = 1; i <= INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3; i += 1) {
+            // eslint-disable-next-line no-await-in-loop
+            const owner = await findOrCreateUser({
+                displayName: `${neighborhood.name} - Chủ nhà đợt 3 số ${i}`,
+                phone: phoneFor(slot, PHONE_KIND.individualOwnerW3, i),
+                roles: ["house_owner"],
+                address: `${cluster}, phường Dương Nội`,
+            });
+            wave3IndividualOwners.push(owner);
+        }
+
+        // Chu ho rieng (khong so huu nha) cho cac ho dan con lai.
+        const wave3DedicatedHouseholdHeads: IUserDoc[] = [];
+        for (
+            let i = 1;
+            i <=
+            HOUSEHOLDS_PER_NEIGHBORHOOD_WAVE3 -
+                INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3;
+            i += 1
+        ) {
+            // eslint-disable-next-line no-await-in-loop
+            const head = await findOrCreateUser({
+                displayName: `${neighborhood.name} - Chủ hộ riêng đợt 3 số ${i}`,
+                phone: phoneFor(slot, PHONE_KIND.dedicatedHouseholdHeadW3, i),
+                roles: ["house_owner"],
+                address: `${cluster}, phường Dương Nội`,
+            });
+            wave3DedicatedHouseholdHeads.push(head);
+        }
+
+        // Dai dien ho kinh doanh rieng (phan con lai sau khi tai su dung chu nha).
+        const wave3BusinessHalfPoint = Math.ceil(
+            BUSINESSES_PER_NEIGHBORHOOD_WAVE3 / 2,
+        );
+        const wave3DedicatedBusinessReps: IUserDoc[] = [];
+        for (
+            let i = 1;
+            i <= BUSINESSES_PER_NEIGHBORHOOD_WAVE3 - wave3BusinessHalfPoint;
+            i += 1
+        ) {
+            // eslint-disable-next-line no-await-in-loop
+            const rep = await findOrCreateUser({
+                displayName: `${neighborhood.name} - Đại diện hộ KD riêng đợt 3 số ${i}`,
+                phone: phoneFor(slot, PHONE_KIND.businessRepDedicatedW3, i),
+                roles: ["house_owner"],
+                address: `${cluster}, phường Dương Nội`,
+            });
+            wave3DedicatedBusinessReps.push(rep);
+        }
+
+        const wave3DedicatedCompanyRep = await findOrCreateUser({
+            displayName: `${neighborhood.name} - Đại diện công ty riêng đợt 3`,
+            phone: phoneFor(slot, PHONE_KIND.companyRepDedicatedW3, 1),
+            roles: ["house_owner"],
+            address: `${cluster}, phường Dương Nội`,
+        });
+
+        // --- 8 nha so dot 3: 5 chu ca nhan co tai khoan (du ca 5 physicalStatus
+        // dau) + 1 chu ca nhan KHONG tao tai khoan dang nhap (chi luu Person -
+        // ownerKind van la "individual", chi khac createOwnerAccount=false,
+        // truoc day script chua tung dung nhanh nay) + 2 chu to chuc (mot nha
+        // dung usageTypes=["company"], mot nha dung ca ["business","company"] -
+        // truoc day script chi tung dung ["household"]/["business"]).
+        const wave3HouseIds: string[] = [];
+        for (let i = 0; i < INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3; i += 1) {
+            const owner = wave3IndividualOwners[i];
+            const address = `Số ${30 + i}, ${cluster}, phường Dương Nội`;
+            // eslint-disable-next-line no-await-in-loop
+            const houseId = await findOrCreateHouseByAddress(address, () => ({
+                cluster,
+                neighborhoodId: String(neighborhood._id),
+                address,
+                usageTypes: ["household"],
+                ownerKind: "individual",
+                owner: {
+                    displayName: owner.displayName,
+                    phone: owner.phone as string,
+                },
+                createOwnerAccount: true,
+                physicalStatus: HOUSE_PHYSICAL_STATUS_CYCLE[i],
+            }));
+            wave3HouseIds.push(houseId);
+        }
+        {
+            const i = INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3; // index 5
+            const address = `Số ${30 + i}, ${cluster}, phường Dương Nội`;
+            const personOwnerPhone = phoneFor(slot, PHONE_KIND.personOwnerW3, 1);
+            // eslint-disable-next-line no-await-in-loop
+            const houseId = await findOrCreateHouseByAddress(address, () => ({
+                cluster,
+                neighborhoodId: String(neighborhood._id),
+                address,
+                usageTypes: ["household"],
+                ownerKind: "individual",
+                owner: {
+                    displayName: `${neighborhood.name} - Chủ nhà đợt 3 (không tài khoản)`,
+                    phone: personOwnerPhone,
+                },
+                createOwnerAccount: false,
+                physicalStatus: HOUSE_PHYSICAL_STATUS_CYCLE[i],
+            }));
+            wave3HouseIds.push(houseId);
+        }
+        const WAVE3_ORG_USAGE_TYPES: string[][] = [
+            ["company"],
+            ["business", "company"],
+        ];
+        for (let i = 0; i < 2; i += 1) {
+            const orgIndex = i + 1;
+            const houseIdx = INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3 + 1 + i; // 6,7
+            const address = `Số ${30 + houseIdx}, ${cluster}, phường Dương Nội`;
+            const repPhone = phoneFor(slot, PHONE_KIND.orgRepresentativeW3, orgIndex);
+            // eslint-disable-next-line no-await-in-loop
+            const houseId = await findOrCreateHouseByAddress(address, () => ({
+                cluster,
+                neighborhoodId: String(neighborhood._id),
+                address,
+                usageTypes: WAVE3_ORG_USAGE_TYPES[i],
+                ownerKind: "organization",
+                organization: {
+                    name: `Công ty TNHH ${neighborhood.code} Đợt 3 Số ${orgIndex}`,
+                    taxCode: `DEMO-${neighborhood.code}-ORGW3-${orgIndex}`,
+                },
+                createRepresentativeAccount: true,
+                representative: {
+                    displayName: `${neighborhood.name} - Đại diện tổ chức đợt 3 ${orgIndex}`,
+                    phone: repPhone,
+                    password: DEFAULT_PASSWORD,
+                },
+                physicalStatus: HOUSE_PHYSICAL_STATUS_CYCLE[houseIdx],
+            }));
+            wave3HouseIds.push(houseId);
+        }
+        console.log(`  Nha so dot 3: ${wave3HouseIds.length}`);
+
+        // --- 10 ho dan dot 3: 5 dung chung chu nha ca nhan, 5 co chu ho rieng.
+        // Moi ho co 2 (i chan) hoac 3 (i le) nhan khau TONG CONG, ke ca chu ho
+        // tu dong tao boi createHousehold - nghia la 1 hoac 2 nhan khau phu
+        // THEM vao (truoc day dot 1 luon chi THEM dung 1 nguoi/ho). Du ca 5
+        // gia tri Household.status qua transitionHouseholdStatus (admin duoc
+        // bo qua state machine binh thuong nen chuyen thang duoc, xem
+        // householdService.ts) - truoc day Household luon giu "unverified"
+        // mac dinh tu luc tao, chua tung duoc chuyen trang thai.
+        let citizensCreatedW3 = 0;
+        let citizensUpdatedW3 = 0;
+        for (let i = 0; i < HOUSEHOLDS_PER_NEIGHBORHOOD_WAVE3; i += 1) {
+            const houseId = wave3HouseIds[i % wave3HouseIds.length];
+            const headUser =
+                i < INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3
+                    ? wave3IndividualOwners[i]
+                    : wave3DedicatedHouseholdHeads[
+                          i - INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3
+                      ];
+            const address = `Hộ dân đợt 3 số ${i + 1}, ${cluster}`;
+            const disease = DISEASE_STATUS_CYCLE[i % DISEASE_STATUS_CYCLE.length];
+            const hasDisease = i < DISEASE_STATUS_CYCLE.length;
+            const targetHouseholdStatus =
+                HOUSEHOLD_STATUS_CYCLE[i % HOUSEHOLD_STATUS_CYCLE.length];
+            const householdPatchW3 = {
+                cluster,
+                address,
+                headOfHousehold: headUser.displayName,
+                headOfHouseholdUserId: String(headUser._id),
+                houseId,
+                contactIsHead: true,
+                ownershipType: i % 3 === 0 ? "cho_thue" : "chinh_chu",
+                needsSupport: i % 3 === 1,
+                // Giu nguyen tong so 4 ho ngheo CO DINH da khai bao o dot 1
+                // (TDP-01) - khong danh dau them isNearPoor o dot 3.
+                isNearPoor: false,
+                isMartyrFamilyHousehold: i === 4,
+                isLonelyElderly: i === 5,
+                diseaseStatus: hasDisease ? disease.status : "none",
+                diseaseName: hasDisease ? disease.name : undefined,
+            };
+            // eslint-disable-next-line no-await-in-loop
+            let householdW3: any = await Household.findOne({ address, houseId });
+            if (!householdW3) {
+                // eslint-disable-next-line no-await-in-loop
+                householdW3 = await createHousehold(
+                    adminUser,
+                    householdPatchW3 as any,
+                );
+            } else {
+                // eslint-disable-next-line no-await-in-loop
+                householdW3 = await updateHousehold(
+                    adminUser,
+                    String(householdW3._id),
+                    householdPatchW3 as any,
+                );
+            }
+            // eslint-disable-next-line no-await-in-loop
+            await transitionHouseholdStatus(
+                adminUser,
+                String(householdW3._id),
+                targetHouseholdStatus,
+                targetHouseholdStatus === "denied"
+                    ? "Thiếu giấy tờ chứng minh cư trú (demo đợt 3)."
+                    : targetHouseholdStatus === "verified"
+                      ? "Đã xác thực (demo đợt 3)."
+                      : undefined,
+            );
+
+            // 1 nhan khau phu (i chan - tong 2 nguoi/ho) hoac 2 nhan khau phu
+            // (i le - tong 3 nguoi/ho).
+            const extraCitizenCount = i % 2 === 0 ? 1 : 2;
+            for (let k = 0; k < extraCitizenCount; k += 1) {
+                const seq = i * 2 + k;
+                const persona = RESIDENT_PERSONAS[seq % RESIDENT_PERSONAS.length];
+                const birthDate = new Date(
+                    Date.UTC(2026 - persona.birthYearsAgo, 0, 1 + seq),
+                );
+                const citizenName = `Nhân khẩu đợt 3 số ${i + 1}.${k + 1}, ${cluster}`;
+                const isTamTruW3 = seq % 3 === 0;
+                const isUnemployedW3 = seq % 4 === 1;
+                const residentPatchW3 = {
+                    fullName: citizenName,
+                    gender: GENDER_CYCLE_WAVE3[seq % GENDER_CYCLE_WAVE3.length],
+                    relationToHead: "Thành viên hộ",
+                    occupation: isUnemployedW3
+                        ? undefined
+                        : RESIDENT_OCCUPATIONS[seq % RESIDENT_OCCUPATIONS.length],
+                    isUnemployed: isUnemployedW3,
+                    birthDate: birthDate.toISOString(),
+                    ...persona.flags,
+                    householdId: String(householdW3._id),
+                    residenceType: isTamTruW3 ? "tam_tru" : "thuong_tru",
+                    temporaryResidenceStartsAt: isTamTruW3
+                        ? new Date(Date.UTC(2026, 0, 1 + seq)).toISOString()
+                        : undefined,
+                    temporaryResidenceExpiresAt: isTamTruW3
+                        ? new Date(Date.UTC(2026, 6, 1 + seq)).toISOString()
+                        : undefined,
+                    isResidencyDeclared: seq % 2 === 0,
+                };
+                // eslint-disable-next-line no-await-in-loop
+                const existingCitizenW3 = await Citizen.findOne({
+                    householdId: householdW3._id,
+                    fullName: citizenName,
+                });
+                if (!existingCitizenW3) {
+                    // eslint-disable-next-line no-await-in-loop
+                    await createCitizen(adminUser, residentPatchW3 as any);
+                    citizensCreatedW3 += 1;
+                } else {
+                    // eslint-disable-next-line no-await-in-loop
+                    await updateCitizen(
+                        adminUser,
+                        String(existingCitizenW3._id),
+                        residentPatchW3 as any,
+                    );
+                    citizensUpdatedW3 += 1;
+                }
+            }
+        }
+        console.log(
+            `  Ho dan dot 3: ${HOUSEHOLDS_PER_NEIGHBORHOOD_WAVE3} (2-3 nhan khau/ho - nhan khau phu moi tao: ${citizensCreatedW3}, da cap nhat: ${citizensUpdatedW3})`,
+        );
+
+        // --- 3 ho kinh doanh dot 3.
+        for (let i = 0; i < BUSINESSES_PER_NEIGHBORHOOD_WAVE3; i += 1) {
+            const houseId = wave3HouseIds[i % wave3HouseIds.length];
+            const repUser =
+                i < wave3BusinessHalfPoint
+                    ? wave3IndividualOwners[i % wave3IndividualOwners.length]
+                    : wave3DedicatedBusinessReps[i - wave3BusinessHalfPoint];
+            const name = `Hộ kinh doanh đợt 3 ${neighborhood.code} số ${i + 1}`;
+            // eslint-disable-next-line no-await-in-loop
+            const existingBusinessW3 = await Business.findOne({ name, houseId });
+            if (!existingBusinessW3) {
+                // eslint-disable-next-line no-await-in-loop
+                await createBusiness(adminUser, {
+                    name,
+                    houseId,
+                    ownerName: repUser.displayName,
+                    representativeUserId: String(repUser._id),
+                    active: true,
+                } as any);
+            }
+        }
+        console.log(`  Ho kinh doanh dot 3: ${BUSINESSES_PER_NEIGHBORHOOD_WAVE3}`);
+
+        // --- 2 cong ty dot 3, gan voi 2 nha to chuc dot 3 ben tren.
+        const wave3OrgOwnedHouseIds = wave3HouseIds.slice(
+            INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3 + 1,
+            INDIVIDUAL_OWNERS_PER_NEIGHBORHOOD_WAVE3 + 1 + 2,
+        );
+        for (let i = 0; i < COMPANIES_PER_NEIGHBORHOOD_WAVE3; i += 1) {
+            const houseId = wave3OrgOwnedHouseIds[i] || wave3HouseIds[i];
+            const repUser =
+                i === 0 ? wave3IndividualOwners[0] : wave3DedicatedCompanyRep;
+            const name = `Công ty đợt 3 ${neighborhood.code} số ${i + 1}`;
+            // eslint-disable-next-line no-await-in-loop
+            const existingCompanyW3 = await Company.findOne({ name, houseId });
+            if (!existingCompanyW3) {
+                // eslint-disable-next-line no-await-in-loop
+                await createCompany(adminUser, {
+                    name,
+                    houseId,
+                    ownerName: repUser.displayName,
+                    representativeUserId: String(repUser._id),
+                    active: true,
+                } as any);
+            }
+        }
+        console.log(`  Cong ty dot 3: ${COMPANIES_PER_NEIGHBORHOOD_WAVE3}`);
+
+        houseIds.push(...wave3HouseIds);
+
         allHouseIds.push(...houseIds);
         const residentIds = [
             ...individualOwners.map(u => String(u._id)),
             ...dedicatedHouseholdHeads.map(u => String(u._id)),
             ...dedicatedBusinessReps.map(u => String(u._id)),
             String(dedicatedCompanyRep._id),
+            ...wave3IndividualOwners.map(u => String(u._id)),
+            ...wave3DedicatedHouseholdHeads.map(u => String(u._id)),
+            ...wave3DedicatedBusinessReps.map(u => String(u._id)),
+            String(wave3DedicatedCompanyRep._id),
         ];
         allResidentUserIds.push(...residentIds);
         perNeighborhoodData.push({
